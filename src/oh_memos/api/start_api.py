@@ -505,6 +505,39 @@ async def startup_auto_register():
         logger.warning("Startup: Qdrant not ready, skipping cube auto-registration")
         return
 
+    # Check Neo4j readiness if tree_text mode is enabled
+    neo4j_ready = False
+    mem_type = os.environ.get("MOS_TEXT_MEM_TYPE", "general_text")
+    if mem_type == "tree_text":
+        neo4j_uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+        # Extract host:port from bolt URI
+        import re as _re
+        _m = _re.search(r"://([^/]+)", neo4j_uri)
+        neo4j_addr = _m.group(1) if _m else "localhost:7687"
+        neo4j_host, _, neo4j_port = neo4j_addr.partition(":")
+        neo4j_port = neo4j_port or "7687"
+
+        import socket as _socket
+        for attempt in range(15):  # up to 15s
+            try:
+                with _socket.create_connection((neo4j_host, int(neo4j_port)), timeout=2):
+                    neo4j_ready = True
+                    logger.info(f"Startup: Neo4j ready at {neo4j_addr} after {attempt + 1}s")
+                    break
+            except OSError:
+                if attempt == 0:
+                    logger.info(f"Startup: Waiting for Neo4j at {neo4j_addr}...")
+                await asyncio.sleep(1)
+
+        if not neo4j_ready:
+            logger.warning(
+                f"Startup: Neo4j not available at {neo4j_addr}. "
+                "Cubes will be registered without graph indexes. "
+                "Start Neo4j for full knowledge-graph functionality."
+            )
+    else:
+        neo4j_ready = True  # Not needed for general_text mode
+
     mos_instance = get_mos_instance()
     default_user = mos_instance.user_id  # Use the same user as MOS instance
 

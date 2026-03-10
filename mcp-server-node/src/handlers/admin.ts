@@ -19,6 +19,7 @@ import {
 } from "../config.js";
 import { fetchWithTimeout } from "../api-client.js";
 import {
+  ensureCubeDirectory,
   ensureCubeRegistered,
   getCubePath,
   getCubesBaseDir,
@@ -99,14 +100,23 @@ export async function handleMemosRegisterCube(arguments_: Record<string, unknown
   }
 
   if (!cubePath) {
-    // Try to find cube path (returns Windows/original path for API)
-    const localPath = getCubePath(cubeId);
+    // Try to find cube path, or auto-create if not found
+    let localPath = getCubePath(cubeId);
     if (!localPath) {
-      const available = listAvailableCubes();
-      const hint = available.length > 0
-        ? `\n\n**Available cubes:**\n${available.map((c) => `- \`${c.id}\``).join("\n")}`
-        : "";
-      return [{ type: "text", text: `❌ Cube \`${cubeId}\` not found in cubes directory.\n\nCubes directory: \`${getCubesBaseDir()}\`${hint}` }];
+      // Auto-create cube directory with config
+      const [newDir, createErr] = ensureCubeDirectory(cubeId);
+      if (!newDir) {
+        const available = listAvailableCubes();
+        const hint = available.length > 0
+          ? `\n\n**Available cubes:**\n${available.map((c) => `- \`${c.id}\``).join("\n")}`
+          : "";
+        return errorResponse(
+          `Cube \`${cubeId}\` not found and auto-creation failed: ${createErr}`,
+          ERR_CUBE_NOT_FOUND,
+          [`Cubes directory: \`${getCubesBaseDir()}\`${hint}`]
+        );
+      }
+      localPath = newDir;
     }
     // Convert back to Windows path if needed
     const cubesDir = MEMOS_CUBES_DIR;

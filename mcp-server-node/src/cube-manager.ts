@@ -333,18 +333,8 @@ export async function ensureCubeRegistered(
     // Get or create cube path
     let cubePath = getCubeApiPath(cubeId);
     if (!cubePath) {
-      // Try to auto-create
+      // Try to auto-create (ensureCubeDirectory handles both template-clone and fallback)
       logger.debug(`Cube '${cubeId}' not found, attempting auto-creation...`);
-
-      const templatePath = getCubePath(MEMOS_DEFAULT_CUBE);
-      if (!templatePath) {
-        const available = listAvailableCubes();
-        const availableIds = available.map((c) => c.id);
-        if (availableIds.length > 0) {
-          return [false, `Cube '${cubeId}' not found. Available cubes: ${availableIds.join(", ")}`];
-        }
-        return [false, `Cube '${cubeId}' not found and no cubes available.`];
-      }
 
       const [newDir, createErr] = ensureCubeDirectory(cubeId);
       if (!newDir) {

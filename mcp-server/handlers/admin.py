@@ -23,6 +23,7 @@ from config import (
     _registered_cubes,
 )
 from cube_manager import (
+    ensure_cube_directory,
     ensure_cube_registered,
     get_cube_path,
     get_cubes_base_dir,
@@ -101,20 +102,25 @@ async def handle_memos_register_cube(
             ],
         )
 
-    # If path not provided, try to find it
+    # If path not provided, try to find or auto-create it
     if not cube_path:
         cube_path = get_cube_path(cube_id)
         if not cube_path:
-            # List available cubes as helpful hint
-            available = list_available_cubes()
-            hint = ""
-            if available:
-                hint = "\n\n**Available cubes:**\n" + "\n".join([f"- `{c['id']}`" for c in available])
-            return [TextContent(
-                type="text",
-                text=f"[ERROR] Cube `{cube_id}` not found in cubes directory.\n\n"
-                     f"Cubes directory: `{get_cubes_base_dir()}`{hint}"
-            )]
+            # Auto-create cube directory with config
+            cube_path, create_error = ensure_cube_directory(cube_id)
+            if not cube_path:
+                available = list_available_cubes()
+                hint = ""
+                if available:
+                    hint = "\n\n**Available cubes:**\n" + "\n".join([f"- `{c['id']}`" for c in available])
+                return error_response(
+                    f"Cube `{cube_id}` not found and auto-creation failed: {create_error}",
+                    error_code=ERR_CUBE_NOT_FOUND,
+                    suggestions=[
+                        f"Cubes directory: `{get_cubes_base_dir()}`",
+                        "Check .env has all required config vars (LLM, Neo4j, etc.)",
+                    ],
+                )
 
     try:
         response = await client.post(

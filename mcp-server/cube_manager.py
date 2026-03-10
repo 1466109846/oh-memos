@@ -444,34 +444,9 @@ async def ensure_cube_registered(
         # Check if the cube path exists before trying to register
         cube_path = get_cube_path(cube_id)
         if cube_path is None:
-            # Cube doesn't exist - try to auto-create it
+            # Cube doesn't exist on disk - auto-create it
+            # ensure_cube_directory handles both template-clone and env-fallback
             logger.debug(f"Cube '{cube_id}' not found, attempting auto-creation...")
-
-            # Check if we have a template cube to clone from
-            template_path = get_cube_path(MEMOS_DEFAULT_CUBE)
-            if template_path is None:
-                # No template available - cannot auto-create
-                available = list_available_cubes()
-                available_ids = [c["id"] for c in available]
-
-                if available_ids:
-                    error_msg = (
-                        f"Cube '{cube_id}' not found and no template cube available for auto-creation. "
-                        f"Available cubes: {available_ids}. "
-                        f"Use memos_list_cubes to see all available cubes, or check the cube ID."
-                    )
-                else:
-                    cubes_dir = MEMOS_CUBES_DIR
-                    if cubes_dir.endswith(MEMOS_DEFAULT_CUBE):
-                        cubes_dir = os.path.dirname(cubes_dir)
-                    error_msg = (
-                        f"Cube '{cube_id}' not found and no cubes available in '{cubes_dir}'. "
-                        f"Please create a cube first using the MemOS web interface or CLI."
-                    )
-                logger.warning(error_msg)
-                return False, error_msg
-
-            # Auto-create the cube directory with config cloned from template
             cube_path, create_error = ensure_cube_directory(cube_id)
             if cube_path is None:
                 error_msg = f"Failed to auto-create cube '{cube_id}': {create_error}"

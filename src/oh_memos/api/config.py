@@ -204,7 +204,7 @@ class NacosConfigManager:
         sk = os.getenv("SK")
 
         if not (server_addr and data_id and ak and sk):
-            logger.warning("missing NACOS_SERVER_ADDR / AK / SK / DATA_ID")
+            logger.debug("Nacos not configured (missing NACOS_SERVER_ADDR / AK / SK / DATA_ID), skipping")
             return
 
         base_url = f"http://{server_addr}/nacos/v1/cs/configs"

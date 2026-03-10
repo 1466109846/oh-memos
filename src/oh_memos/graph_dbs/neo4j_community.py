@@ -1042,7 +1042,13 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
                     )
                 logger.debug("Index 'memory_user_name_index' ensured.")
         except Exception as e:
-            logger.warning(f"Failed to create basic property indexes: {e}")
+            # Connection errors are expected when Neo4j is not running;
+            # startup_auto_register already reports this once at WARNING level
+            err_msg = str(e)
+            if "Couldn't connect" in err_msg or "ConnectionRefusedError" in err_msg:
+                logger.debug(f"Neo4j not available, skipping property indexes: {e}")
+            else:
+                logger.warning(f"Failed to create basic property indexes: {e}")
 
         # Step 2: VectorDB indexes
         try:
