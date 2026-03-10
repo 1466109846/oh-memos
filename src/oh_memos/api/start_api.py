@@ -453,7 +453,12 @@ async def restore_archived_memory(memory_id: str):
 # Auto-register default cube on startup
 @app.on_event("startup")
 async def startup_auto_register():
-    """Auto-register the default memory cube on API startup."""
+    """Auto-register the default memory cube on API startup.
+
+    Only registers the default cube (and any listed in MEMOS_STARTUP_CUBES)
+    to keep startup fast. Other cubes are registered on-demand via the
+    /mem_cubes API when the MCP server needs them.
+    """
     default_cube_id = os.environ.get("MEMOS_DEFAULT_CUBE", "dev_cube")
     cubes_dir = os.environ.get(
         "MEMOS_CUBES_DIR",
@@ -466,8 +471,6 @@ async def startup_auto_register():
 
     # Convert relative path to absolute if needed
     if not os.path.isabs(cubes_dir):
-        # Assume relative to project root or current work dir
-        # start.bat runs from src/, so ./data/memos_cubes is ../data/memos_cubes
         cubes_dir = os.path.abspath(os.path.join(os.getcwd(), "..", cubes_dir))
         logger.info(f"Startup: Converted relative cubes_dir to absolute: {cubes_dir}")
 
@@ -475,7 +478,35 @@ async def startup_auto_register():
         logger.warning(f"Startup: Cubes directory not found at {cubes_dir}")
         return
 
-    # Wait for Qdrant to be ready before registering cubes
+    # Determine which cubes to register at startup
+    # Default: only the default cube. Set MEMOS_STARTUP_CUBES=all to register all,
+    # or MEMOS_STARTUP_CUBES=cube1,cube2 for specific cubes.
+    startup_cubes_env = os.environ.get("MEMOS_STARTUP_CUBES", "").strip()
+    if startup_cubes_env.lower() == "all":
+        # Legacy behavior: register everything
+        startup_cube_ids = [
+            item for item in os.listdir(cubes_dir)
+            if os.path.isdir(os.path.join(cubes_dir, item))
+            and os.path.isfile(os.path.join(cubes_dir, item, "config.json"))
+        ]
+        logger.info(f"Startup: MEMOS_STARTUP_CUBES=all, will register {len(startup_cube_ids)} cubes")
+    elif startup_cubes_env:
+        startup_cube_ids = [c.strip() for c in startup_cubes_env.split(",") if c.strip()]
+    else:
+        startup_cube_ids = [default_cube_id]
+
+    # Count available cubes for info log
+    all_cubes = [
+        item for item in os.listdir(cubes_dir)
+        if os.path.isdir(os.path.join(cubes_dir, item))
+        and os.path.isfile(os.path.join(cubes_dir, item, "config.json"))
+    ]
+    logger.info(
+        f"Startup: {len(all_cubes)} cubes available, "
+        f"registering {len(startup_cube_ids)} at startup: {startup_cube_ids}"
+    )
+
+    # Wait for Qdrant to be ready
     qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
     qdrant_port = os.environ.get("QDRANT_PORT", "6333")
     qdrant_health_url = f"http://{qdrant_host}:{qdrant_port}/"
@@ -489,12 +520,10 @@ async def startup_auto_register():
                     qdrant_ready = True
                     logger.info(f"Startup: Qdrant ready after {attempt + 1}s")
                     break
-                # 502 = starting up, keep waiting
         except _httpx.ConnectError:
-            # Connection refused = Qdrant not running at all, no point waiting
             logger.warning(
                 f"Startup: Qdrant not running at {qdrant_host}:{qdrant_port}. "
-                "Start Qdrant first (run scripts/local/start.bat) for cube auto-registration."
+                "Start Qdrant first for cube auto-registration."
             )
             break
         except Exception:
@@ -510,7 +539,6 @@ async def startup_auto_register():
     mem_type = os.environ.get("MOS_TEXT_MEM_TYPE", "general_text")
     if mem_type == "tree_text":
         neo4j_uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
-        # Extract host:port from bolt URI
         import re as _re
         _m = _re.search(r"://([^/]+)", neo4j_uri)
         neo4j_addr = _m.group(1) if _m else "localhost:7687"
@@ -518,7 +546,7 @@ async def startup_auto_register():
         neo4j_port = neo4j_port or "7687"
 
         import socket as _socket
-        for attempt in range(15):  # up to 15s
+        for attempt in range(15):
             try:
                 with _socket.create_connection((neo4j_host, int(neo4j_port)), timeout=2):
                     neo4j_ready = True
@@ -532,44 +560,45 @@ async def startup_auto_register():
         if not neo4j_ready:
             logger.warning(
                 f"Startup: Neo4j not available at {neo4j_addr}. "
-                "Cubes will be registered without graph indexes. "
-                "Start Neo4j for full knowledge-graph functionality."
+                "Cubes will be registered without graph indexes."
             )
     else:
-        neo4j_ready = True  # Not needed for general_text mode
+        neo4j_ready = True
 
     mos_instance = get_mos_instance()
-    default_user = mos_instance.user_id  # Use the same user as MOS instance
+    default_user = mos_instance.user_id
 
-    # Register all cubes found in the directory
+    # Register only the selected startup cubes
     registered_count = 0
-    for item in os.listdir(cubes_dir):
-        cube_path = os.path.join(cubes_dir, item)
-        if os.path.isdir(cube_path):
-            config_path = os.path.join(cube_path, "config.json")
-            if os.path.isfile(config_path):
-                # Retry up to 3 times for transient Qdrant errors
-                for retry in range(3):
-                    try:
-                        mos_instance.register_mem_cube(
-                            mem_cube_name_or_path=cube_path,
-                            mem_cube_id=item,
-                            user_id=default_user,
-                        )
-                        logger.info(f"Startup: Auto-registered cube '{item}' from {cube_path}")
-                        registered_count += 1
-                        break
-                    except Exception as e:
-                        err_str = str(e)
-                        if "502" in err_str and retry < 2:
-                            logger.debug(f"Startup: Cube '{item}' retry {retry + 1}/3: {e}")
-                            await asyncio.sleep(3)
-                        else:
-                            logger.warning(f"Startup: Failed to auto-register cube '{item}': {e}")
-                            break
+    for cube_id in startup_cube_ids:
+        cube_path = os.path.join(cubes_dir, cube_id)
+        config_path = os.path.join(cube_path, "config.json")
+        if not os.path.isdir(cube_path) or not os.path.isfile(config_path):
+            logger.warning(f"Startup: Cube '{cube_id}' not found at {cube_path}, skipping")
+            continue
 
-    if registered_count == 0:
-        logger.warning(f"Startup: No valid cubes found in {cubes_dir}")
+        t0 = time.time()
+        for retry in range(3):
+            try:
+                mos_instance.register_mem_cube(
+                    mem_cube_name_or_path=cube_path,
+                    mem_cube_id=cube_id,
+                    user_id=default_user,
+                )
+                elapsed = time.time() - t0
+                logger.info(f"Startup: Registered cube '{cube_id}' in {elapsed:.1f}s")
+                registered_count += 1
+                break
+            except Exception as e:
+                err_str = str(e)
+                if "502" in err_str and retry < 2:
+                    logger.debug(f"Startup: Cube '{cube_id}' retry {retry + 1}/3: {e}")
+                    await asyncio.sleep(3)
+                else:
+                    logger.warning(f"Startup: Failed to register cube '{cube_id}': {e}")
+                    break
+
+    logger.info(f"Startup: {registered_count}/{len(startup_cube_ids)} cubes registered")
 
 
 
