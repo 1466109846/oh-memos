@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -450,6 +451,105 @@ async def restore_archived_memory(memory_id: str):
         return {"code": 500, "message": str(e), "data": None}
 
 
+def _get_cubes_dir() -> str | None:
+    """Get the cubes base directory from environment."""
+    cubes_dir = os.environ.get(
+        "MEMOS_CUBES_DIR",
+        os.environ.get("MOS_CUBES_DIR", os.environ.get("MOS_CUBE_PATH", ""))
+    )
+    if not cubes_dir:
+        return None
+    if not os.path.isabs(cubes_dir):
+        cubes_dir = os.path.abspath(os.path.join(os.getcwd(), "..", cubes_dir))
+    return cubes_dir
+
+
+def _ensure_cube_directory(cubes_dir: str, cube_id: str) -> str | None:
+    """Create cube directory with config cloned from default cube.
+
+    Returns cube_path on success, None on failure.
+    """
+    cube_path = os.path.join(cubes_dir, cube_id)
+    config_path = os.path.join(cube_path, "config.json")
+
+    if os.path.isdir(cube_path) and os.path.isfile(config_path):
+        return cube_path
+
+    # Find default cube config as template
+    default_cube_id = os.environ.get("MEMOS_DEFAULT_CUBE", "dev_cube")
+    template_config_path = os.path.join(cubes_dir, default_cube_id, "config.json")
+
+    if not os.path.isfile(template_config_path):
+        logger.warning(f"No template config at {template_config_path}, cannot auto-create cube")
+        return None
+
+    try:
+        with open(template_config_path, encoding="utf-8") as f:
+            config = json.load(f)
+
+        # Deep clone and update for new cube_id
+        config = json.loads(json.dumps(config))
+        config["cube_id"] = cube_id
+
+        text_mem = config.get("text_mem", {})
+        text_cfg = text_mem.get("config", {}) if isinstance(text_mem, dict) else {}
+        if isinstance(text_cfg, dict):
+            if "cube_id" in text_cfg:
+                text_cfg["cube_id"] = cube_id
+
+            graph_db = text_cfg.get("graph_db", {})
+            graph_cfg = graph_db.get("config", {}) if isinstance(graph_db, dict) else {}
+            if isinstance(graph_cfg, dict):
+                if graph_cfg.get("use_multi_db") is False or "user_name" in graph_cfg:
+                    graph_cfg["user_name"] = cube_id
+                vec_cfg = graph_cfg.get("vec_config", {}).get("config")
+                if isinstance(vec_cfg, dict) and "collection_name" in vec_cfg:
+                    vec_cfg["collection_name"] = f"{cube_id}_graph"
+
+            vector_db = text_cfg.get("vector_db", {})
+            vector_cfg = vector_db.get("config") if isinstance(vector_db, dict) else {}
+            if isinstance(vector_cfg, dict) and "collection_name" in vector_cfg:
+                vector_cfg["collection_name"] = f"{cube_id}_collection"
+
+        os.makedirs(cube_path, exist_ok=True)
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"Auto-created cube directory: {cube_path}")
+        return cube_path
+    except Exception as e:
+        logger.warning(f"Failed to auto-create cube directory {cube_id}: {e}")
+        return None
+
+
+def _try_auto_register_cube(mos_instance, mem_cube_id: str, user_id: str) -> bool:
+    """Try to auto-register a cube on-demand. Returns True on success."""
+    # Check if already loaded
+    _, existing = mos_instance._find_mem_cube(mem_cube_id)
+    if existing is not None:
+        return True
+
+    cubes_dir = _get_cubes_dir()
+    if not cubes_dir:
+        return False
+
+    cube_path = os.path.join(cubes_dir, mem_cube_id)
+
+    # Auto-create directory if missing
+    if not os.path.exists(cube_path):
+        cube_path = _ensure_cube_directory(cubes_dir, mem_cube_id)
+        if cube_path is None:
+            return False
+
+    try:
+        mos_instance.register_mem_cube(cube_path, mem_cube_id=mem_cube_id, user_id=user_id)
+        logger.info(f"Auto-registered cube on-demand: {mem_cube_id}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to auto-register cube {mem_cube_id}: {e}")
+        return False
+
+
 # Auto-register default cube on startup
 @app.on_event("startup")
 async def startup_auto_register():
@@ -846,6 +946,12 @@ async def add_memory(memory_create: MemoryCreate):
     if not any([memory_create.messages, memory_create.memory_content, memory_create.doc_path]):
         raise ValueError("Either messages, memory_content, or doc_path must be provided")
     mos_instance = get_mos_instance()
+
+    # Auto-register cube if needed
+    if memory_create.mem_cube_id:
+        target_user_id = memory_create.user_id or mos_instance.user_id
+        _try_auto_register_cube(mos_instance, memory_create.mem_cube_id, target_user_id)
+
     if memory_create.messages:
         messages = [m.model_dump() for m in memory_create.messages]
         mos_instance.add(
@@ -875,6 +981,12 @@ async def get_all_memories(
 ):
     """Retrieve all memories from a MemCube."""
     mos_instance = get_mos_instance()
+
+    # Auto-register cube if needed (when mem_cube_id is provided)
+    if mem_cube_id is not None:
+        target_user_id = user_id if user_id is not None else mos_instance.user_id
+        _try_auto_register_cube(mos_instance, mem_cube_id, target_user_id)
+
     result = mos_instance.get_all(mem_cube_id=mem_cube_id, user_id=user_id)
     return MemoryResponse(message="Memories retrieved successfully", data=result)
 
@@ -885,6 +997,8 @@ async def get_all_memories(
 async def get_memory(mem_cube_id: str, memory_id: str, user_id: str | None = None):
     """Retrieve a specific memory by ID from a MemCube."""
     mos_instance = get_mos_instance()
+    target_user_id = user_id if user_id is not None else mos_instance.user_id
+    _try_auto_register_cube(mos_instance, mem_cube_id, target_user_id)
     result = mos_instance.get(mem_cube_id=mem_cube_id, memory_id=memory_id, user_id=user_id)
     # Convert Pydantic model to dict for JSON serialization
     if result is not None and hasattr(result, "model_dump"):
@@ -896,6 +1010,13 @@ async def get_memory(mem_cube_id: str, memory_id: str, user_id: str | None = Non
 async def search_memories(search_req: SearchRequest):
     """Search for memories across MemCubes."""
     mos_instance = get_mos_instance()
+
+    # Auto-register cubes if needed
+    if search_req.install_cube_ids:
+        target_user_id = search_req.user_id or mos_instance.user_id
+        for cube_id in search_req.install_cube_ids:
+            _try_auto_register_cube(mos_instance, cube_id, target_user_id)
+
     result = mos_instance.search(
         query=search_req.query,
         user_id=search_req.user_id,
@@ -912,6 +1033,8 @@ async def update_memory(
 ):
     """Update an existing memory in a MemCube."""
     mos_instance = get_mos_instance()
+    target_user_id = user_id if user_id is not None else mos_instance.user_id
+    _try_auto_register_cube(mos_instance, mem_cube_id, target_user_id)
     mos_instance.update(
         mem_cube_id=mem_cube_id,
         memory_id=memory_id,
@@ -927,6 +1050,8 @@ async def update_memory(
 async def delete_memory(mem_cube_id: str, memory_id: str, user_id: str | None = None):
     """Delete a specific memory from a MemCube."""
     mos_instance = get_mos_instance()
+    target_user_id = user_id if user_id is not None else mos_instance.user_id
+    _try_auto_register_cube(mos_instance, mem_cube_id, target_user_id)
     mos_instance.delete(mem_cube_id=mem_cube_id, memory_id=memory_id, user_id=user_id)
     return SimpleResponse(message="Memory deleted successfully")
 
@@ -935,6 +1060,8 @@ async def delete_memory(mem_cube_id: str, memory_id: str, user_id: str | None = 
 async def delete_all_memories(mem_cube_id: str, user_id: str | None = None):
     """Delete all memories from a MemCube."""
     mos_instance = get_mos_instance()
+    target_user_id = user_id if user_id is not None else mos_instance.user_id
+    _try_auto_register_cube(mos_instance, mem_cube_id, target_user_id)
     mos_instance.delete_all(mem_cube_id=mem_cube_id, user_id=user_id)
     return SimpleResponse(message="All memories deleted successfully")
 
@@ -1237,6 +1364,15 @@ async def chat(chat_req: ChatRequest):
 async def home():
     """Redirect to the OpenAPI documentation."""
     return RedirectResponse(url="/docs", status_code=307)
+
+
+@app.exception_handler(KeyError)
+async def key_error_handler(request: Request, exc: KeyError):
+    """Handle KeyError (cube not found) as 404."""
+    return JSONResponse(
+        status_code=404,
+        content={"code": 404, "message": str(exc), "data": None},
+    )
 
 
 @app.exception_handler(ValueError)
