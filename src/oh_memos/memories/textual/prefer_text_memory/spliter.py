@@ -16,7 +16,7 @@ class Splitter:
         chunk_size: int = 256,
         chunk_overlap: int = 128,
         min_sentences_per_chunk: int = 1,
-        tokenizer: str = "gpt2",
+        tokenizer: str = "character",
         parser_backend: str = "markitdown",
         chunker_backend: str = "sentence",
     ):

@@ -82,7 +82,7 @@ def get_default_config(
                 "chunker": {
                     "backend": "sentence",
                     "config": {
-                        "tokenizer_or_token_counter": "gpt2",
+                        "tokenizer_or_token_counter": "character",
                         "chunk_size": kwargs.get("chunk_size", 512),
                         "chunk_overlap": kwargs.get("chunk_overlap", 128),
                         "min_sentences_per_chunk": 1,

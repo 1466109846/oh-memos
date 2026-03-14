@@ -9,7 +9,7 @@ class BaseChunkerConfig(BaseConfig):
     """Base configuration class for chunkers."""
 
     tokenizer_or_token_counter: str = Field(
-        default="gpt2", description="Tokenizer model name or a token counting function"
+        default="character", description="Tokenizer model name or a token counting function"
     )
     chunk_size: int = Field(default=512, description="Maximum tokens per chunk")
     chunk_overlap: int = Field(default=128, description="Overlap between chunks")

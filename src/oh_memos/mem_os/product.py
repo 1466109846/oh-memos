@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from transformers import AutoTokenizer
 
 from oh_memos.configs.mem_cube import GeneralMemCubeConfig
 from oh_memos.configs.mem_os import MOSConfig
@@ -159,14 +158,14 @@ class MOSProduct(MOSCore):
         # Note: self.user_manager is now the persistent user manager from parent class
         # No need for separate global_user_manager as they are the same instance
 
-        # Initialize tiktoken for streaming
+        # Initialize tiktoken for streaming (no HuggingFace download needed)
         try:
-            # Use gpt2 encoding which is more stable and widely compatible
-            self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-            logger.info("tokenizer initialized successfully for streaming")
+            import tiktoken
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")
+            logger.info("tiktoken initialized successfully for streaming")
         except Exception as e:
             logger.warning(
-                f"Failed to initialize tokenizer, will use character-based chunking: {e}"
+                f"Failed to initialize tiktoken, will use character-based chunking: {e}"
             )
             self.tokenizer = None
 
