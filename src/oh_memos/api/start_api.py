@@ -941,7 +941,7 @@ async def get_graph_schema(req: APISchemaRequest):
 
 
 @app.post("/memories", summary="Create memories", response_model=SimpleResponse)
-async def add_memory(memory_create: MemoryCreate):
+def add_memory(memory_create: MemoryCreate):
     """Store new memories in a MemCube."""
     if not any([memory_create.messages, memory_create.memory_content, memory_create.doc_path]):
         raise ValueError("Either messages, memory_content, or doc_path must be provided")
@@ -975,7 +975,7 @@ async def add_memory(memory_create: MemoryCreate):
 
 
 @app.get("/memories", summary="Get all memories", response_model=MemoryResponse)
-async def get_all_memories(
+def get_all_memories(
     mem_cube_id: str | None = None,
     user_id: str | None = None,
 ):
@@ -994,7 +994,7 @@ async def get_all_memories(
 @app.get(
     "/memories/{mem_cube_id}/{memory_id}", summary="Get a memory", response_model=MemoryResponse
 )
-async def get_memory(mem_cube_id: str, memory_id: str, user_id: str | None = None):
+def get_memory(mem_cube_id: str, memory_id: str, user_id: str | None = None):
     """Retrieve a specific memory by ID from a MemCube."""
     mos_instance = get_mos_instance()
     target_user_id = user_id if user_id is not None else mos_instance.user_id
@@ -1007,7 +1007,7 @@ async def get_memory(mem_cube_id: str, memory_id: str, user_id: str | None = Non
 
 
 @app.post("/search", summary="Search memories", response_model=SearchResponse)
-async def search_memories(search_req: SearchRequest):
+def search_memories(search_req: SearchRequest):
     """Search for memories across MemCubes."""
     mos_instance = get_mos_instance()
 
@@ -1028,7 +1028,7 @@ async def search_memories(search_req: SearchRequest):
 @app.put(
     "/memories/{mem_cube_id}/{memory_id}", summary="Update a memory", response_model=SimpleResponse
 )
-async def update_memory(
+def update_memory(
     mem_cube_id: str, memory_id: str, updated_memory: dict[str, Any], user_id: str | None = None
 ):
     """Update an existing memory in a MemCube."""
@@ -1047,7 +1047,7 @@ async def update_memory(
 @app.delete(
     "/memories/{mem_cube_id}/{memory_id}", summary="Delete a memory", response_model=SimpleResponse
 )
-async def delete_memory(mem_cube_id: str, memory_id: str, user_id: str | None = None):
+def delete_memory(mem_cube_id: str, memory_id: str, user_id: str | None = None):
     """Delete a specific memory from a MemCube."""
     mos_instance = get_mos_instance()
     target_user_id = user_id if user_id is not None else mos_instance.user_id
@@ -1057,7 +1057,7 @@ async def delete_memory(mem_cube_id: str, memory_id: str, user_id: str | None = 
 
 
 @app.delete("/memories/{mem_cube_id}", summary="Delete all memories", response_model=SimpleResponse)
-async def delete_all_memories(mem_cube_id: str, user_id: str | None = None):
+def delete_all_memories(mem_cube_id: str, user_id: str | None = None):
     """Delete all memories from a MemCube."""
     mos_instance = get_mos_instance()
     target_user_id = user_id if user_id is not None else mos_instance.user_id
