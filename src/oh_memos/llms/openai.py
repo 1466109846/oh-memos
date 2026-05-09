@@ -3,6 +3,7 @@ import time
 
 from collections.abc import Generator
 
+import httpx
 import openai
 
 from openai._types import NOT_GIVEN
@@ -19,13 +20,35 @@ from oh_memos.utils import timed_with_status
 logger = get_logger(__name__)
 
 
+def _build_resilient_http_client() -> httpx.Client:
+    """Build an httpx.Client tuned to avoid stale keep-alive TCP reuse.
+
+    Why: on Windows, reusing a keep-alive connection that was silently closed
+    by an upstream proxy / VPN / firewall raises WinError 10053
+    ("connection aborted by software"). Capping keepalive_expiry well below
+    typical proxy idle timeouts (30-60s) evicts idle sockets before reuse.
+    """
+    return httpx.Client(
+        timeout=httpx.Timeout(connect=10.0, read=120.0, write=60.0, pool=10.0),
+        limits=httpx.Limits(
+            max_connections=50,
+            max_keepalive_connections=10,
+            keepalive_expiry=10.0,
+        ),
+    )
+
+
 class OpenAILLM(BaseLLM):
     """OpenAI LLM class via openai.chat.completions.create."""
 
     def __init__(self, config: OpenAILLMConfig):
         self.config = config
         self.client = openai.Client(
-            api_key=config.api_key, base_url=config.api_base, default_headers=config.default_headers
+            api_key=config.api_key,
+            base_url=config.api_base,
+            default_headers=config.default_headers,
+            max_retries=3,
+            http_client=_build_resilient_http_client(),
         )
         logger.info("OpenAI LLM instance initialized")
 

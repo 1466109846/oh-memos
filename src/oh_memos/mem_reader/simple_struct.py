@@ -231,19 +231,38 @@ class SimpleStructMemReader(BaseMemReader, ABC):
         )
 
     def _safe_generate(self, messages: list[dict]) -> str | None:
-        max_retries = 2
+        # Lazy import to avoid hard dependency for non-OpenAI backends
+        try:
+            import openai as _openai
+
+            transient_exc_types: tuple[type[BaseException], ...] = (
+                _openai.APIConnectionError,   # incl. httpx.ConnectError → WinError 10053 (stale keep-alive)
+                _openai.APITimeoutError,      # subclass of APIConnectionError, listed for clarity
+                _openai.RateLimitError,       # 429
+                _openai.InternalServerError,  # 5xx
+            )
+        except Exception:
+            transient_exc_types = ()
+
+        max_retries = 3
         for attempt in range(max_retries + 1):
             try:
                 return self.llm.generate(messages)
             except Exception as e:
-                # Check if this is a transient proxy error (bad_response_status_code from upstream)
                 error_str = str(e)
-                is_transient = "bad_response_status_code" in error_str
+                is_transient = (
+                    isinstance(e, transient_exc_types)
+                    or "bad_response_status_code" in error_str   # upstream proxy 502/504
+                    or "WinError 10053" in error_str             # Windows: connection aborted by local software
+                    or "WinError 10054" in error_str             # Windows: connection reset by peer
+                    or "Connection aborted" in error_str
+                    or "Connection reset" in error_str
+                )
                 if is_transient and attempt < max_retries:
                     wait = 2 ** attempt
                     logger.warning(
-                        f"[LLM] Transient upstream error (attempt {attempt + 1}/{max_retries + 1}), "
-                        f"retrying in {wait}s: {e}"
+                        f"[LLM] Transient error (attempt {attempt + 1}/{max_retries + 1}), "
+                        f"retrying in {wait}s: {type(e).__name__}: {e}"
                     )
                     time.sleep(wait)
                     continue
