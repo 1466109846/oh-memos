@@ -1,0 +1,58 @@
+#!/bin/sh
+# Block secrets and runtime artifacts from ever being committed.
+#
+# .gitignore only prevents accidental `git add`; it does not stop `git add -f`
+# or catch newly-invented filenames. This hook inspects what is actually staged.
+#
+# Bypass (only when you are certain): git commit --no-verify
+
+fail=0
+
+# --- 1. Paths that must never be committed -------------------------------
+blocked=$(git diff --cached --name-only --diff-filter=ACMR | grep -nE \
+  '(^|/)\.env($|\.)|\.env\.bak|(^|/)data/.*_cubes/|memos_cubes/|/backups/|\.pem$|\.key$|id_rsa|credentials\.json' \
+  | grep -vE '\.env\.example|\.env\..*\.example|\.env\.template')
+
+if [ -n "$blocked" ]; then
+  echo "✗ Blocked: secrets or runtime artifacts are staged"
+  echo "$blocked" | sed 's/^/    /'
+  echo "  These are environment-specific or contain credentials — keep them out of git."
+  fail=1
+fi
+
+# --- 2. Credential-looking content inside staged files -------------------
+# Catches keys pasted into otherwise-innocent files (configs, docs, scripts).
+for f in $(git diff --cached --name-only --diff-filter=ACMR); do
+  case "$f" in
+    *.example|*.template|*.md|.gitignore|*/pre-commit) continue ;;
+  esac
+  [ -f "$f" ] || continue
+  hits=$(git show ":$f" 2>/dev/null | grep -nE \
+    'sk-[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|(API_KEY|SECRET|TOKEN|PASSWORD)[[:space:]]*=[[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{16,}' \
+    | head -3)
+  if [ -n "$hits" ]; then
+    echo "✗ Blocked: credential-like content in $f"
+    # Report line numbers and the variable name only — never echo the secret,
+    # or the block message itself leaks it into terminals, CI logs and scrollback.
+    echo "$hits" | sed -E \
+      -e 's/(sk-|github_pat_|ghp_|AKIA)[A-Za-z0-9_/+-]+/\1<redacted>/g' \
+      -e 's/((API_KEY|SECRET|TOKEN|PASSWORD)[[:space:]]*=[[:space:]]*)["'"'"']?[A-Za-z0-9/+_-]{8,}/\1<redacted>/gI' \
+      | sed 's/^/    /'
+    fail=1
+  fi
+done
+
+# --- 3. Remote URLs carrying an inline token -----------------------------
+if git config --get-regexp '^remote\..*\.url$' 2>/dev/null | grep -qE '://[^/]*:[^/]*@|://[^/]*_pat_'; then
+  echo "⚠ Warning: a git remote URL contains an inline credential."
+  echo "  Rotate that token and use a credential helper or SSH instead:"
+  echo "    git remote set-url origin https://github.com/<owner>/<repo>.git"
+fi
+
+[ "$fail" -eq 0 ] || {
+  echo ""
+  echo "Commit aborted. Unstage the files above (git restore --staged <file>),"
+  echo "or bypass with --no-verify if you are certain they are safe."
+  exit 1
+}
+exit 0
