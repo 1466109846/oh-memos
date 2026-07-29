@@ -399,7 +399,7 @@ def run_user_session(
                         "vector_dimension": 3072,
                         "distance_metric": "cosine",
                         "host": "localhost",
-                        "port": 6333,
+                        "port": 16333,
                     },
                 },
             },

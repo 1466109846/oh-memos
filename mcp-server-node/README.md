@@ -36,7 +36,7 @@ Add to your Claude Code `~/.claude/settings.json`:
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "G:/test/oh-memos/data/oh-memos_cubes"
       }
     }
   }

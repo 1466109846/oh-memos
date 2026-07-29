@@ -59,7 +59,7 @@ def generate_cube_config(
     neo4j_password: str,
     neo4j_uri: str = "bolt://localhost:7687",
     qdrant_host: str = "localhost",
-    qdrant_port: int = 6333,
+    qdrant_port: int = 16333,
     llm_backend: str = "ollama",
     llm_api_base: str = "http://localhost:11434/v1",
 ) -> dict[str, Any]:

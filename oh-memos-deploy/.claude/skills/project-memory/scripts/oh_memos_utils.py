@@ -416,7 +416,7 @@ def create_cube_config(project: str, cube_path: Path = None) -> dict:
                         "collection_name": project,
                         "vector_dimension": int(os.environ.get("EMBEDDING_DIMENSION", 768)),
                         "distance_metric": "cosine",
-                        "url": os.environ.get("QDRANT_URL", "http://localhost:6333"),
+                        "url": os.environ.get("QDRANT_URL", "http://localhost:16333"),
                         "api_key": os.environ.get("QDRANT_API_KEY", "")
                     }
                 },

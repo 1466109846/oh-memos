@@ -68,14 +68,20 @@ export function cubeRegistrationError(cubeId: string, detail: string | null): Te
 }
 
 export function apiErrorResponse(operation: string, statusOrMsg: string | number): TextContent[] {
-  return errorResponse(
-    `${operation} failed: ${statusOrMsg}`,
-    ERR_API_ERROR,
-    [
-      "Check API health: `curl http://localhost:18000/health/detail`",
-      "Check API logs for details",
-    ]
+  const msg = String(statusOrMsg).toLowerCase();
+  // Turn known API errors into actionable next steps on the hot paths
+  // (save/search/list hit these far more often than register_cube does).
+  const suggestions: string[] = [];
+  if (msg.includes("user") && (msg.includes("not exist") || msg.includes("not found"))) {
+    suggestions.push('User missing — run `memos_create_user(user_id="dev_user")`, then retry');
+  } else if (msg.includes("not loaded") || (msg.includes("cube") && msg.includes("not found"))) {
+    suggestions.push("Cube not registered — run `memos_register_cube(cube_id=\"...\")` (find ids via `memos_list_cubes()`), then retry");
+  }
+  suggestions.push(
+    "Check API health: `curl http://localhost:18000/health/detail`",
+    "Check API logs for details",
   );
+  return errorResponse(`${operation} failed: ${statusOrMsg}`, ERR_API_ERROR, suggestions);
 }
 
 // ============================================================================

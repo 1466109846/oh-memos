@@ -1,7 +1,7 @@
 /**
  * MemOS MCP Server - Tools Registry
  *
- * Defines all 20 memos_* tool schemas using Zod.
+ * Defines all 17 memos_* tool schemas using Zod.
  */
 
 import { z } from "zod";
@@ -24,7 +24,9 @@ const cubeIdParam = z
   .optional()
   .default(MEMOS_DEFAULT_CUBE)
   .describe(
-    "Memory cube ID. Only use if you know the exact cube_id. Otherwise, pass project_path and let the server derive it."
+    "Memory cube ID. Only use if you know the exact cube_id. PREFER passing project_path instead — " +
+    "if both project_path and cube_id are omitted, the server falls back to the default cube, " +
+    "which may NOT be your project's cube."
   );
 
 const memoryTypeEnum = z.enum([
@@ -103,7 +105,8 @@ Best used when:
         role: z.enum(["user", "assistant"]),
         content: z.string(),
       })).optional().describe("Recent conversation messages for context (last 5-10 turns)"),
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe("Memory cube ID. AUTO-DERIVE from project path."),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
     }),
   },
 
@@ -167,7 +170,8 @@ Retrieves complete memory content, metadata, background, and relations.
 Example: memos_get(memory_id="abc123-def456-...")`,
     inputSchema: z.object({
       memory_id: z.string().describe("The full memory ID to retrieve (from memos_search or memos_list_v2 results)"),
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe("Memory cube ID. AUTO-DERIVE from project path."),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
     }),
   },
 
@@ -204,7 +208,8 @@ Returns:
 
 Use this to see how many memories of each type (DECISION, ERROR_PATTERN, etc.) are stored.`,
     inputSchema: z.object({
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe("Memory cube ID (project name)"),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
     }),
   },
 
@@ -227,7 +232,8 @@ Example: Tracing from "Java not installed" to "API timeout error" might reveal:
       source_id: z.string().describe("ID of the source memory node to start from. Get this from memos_search or memos_get_graph."),
       target_id: z.string().describe("ID of the target memory node to find path to. Get this from memos_search or memos_get_graph."),
       max_depth: z.number().int().optional().default(3).describe("Maximum path length (hops). Default 3, max 10."),
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe("Memory cube ID. AUTO-DERIVE from project path."),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
     }),
   },
 
@@ -248,9 +254,8 @@ Example: If you search "Neo4j startup failure", you might see:
   [Java not installed] ──CAUSE──> [Neo4j failed to start]`,
     inputSchema: z.object({
       query: z.string().describe("Search query to find related memories and their relationships"),
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe(
-        "Memory cube ID. AUTO-DERIVE from project path: extract folder name, lowercase, replace -/./space with _, append '_cube'. Example: /mnt/g/test/MemOS → 'memos_cube', ~/my-app → 'my_app_cube'"
-      ),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
     }),
   },
 
@@ -273,7 +278,8 @@ Returns comprehensive statistics including:
 - Number of orphan (unconnected) nodes
 - Time range of data`,
     inputSchema: z.object({
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe("Memory cube ID. AUTO-DERIVE from project path."),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
       sample_size: z.number().int().optional().default(100).describe("Number of nodes to sample for analysis (10-1000). Default 100."),
     }),
   },
@@ -354,26 +360,27 @@ Returns:
   memos_calendar: {
     description: `View memories in calendar format. Supports two modes:
 
-PROJECT MODE (mode="project"):
+PROJECT MODE (mode="project", default):
 - Shows milestone timeline grouped by month
 - Filters MILESTONE, DECISION, FEATURE, BUGFIX, GOTCHA types
 - Perfect for: "Show project timeline", "What milestones this month?"
 
-STUDENT MODE (mode="student", default):
+STUDENT MODE (mode="student"):
 - View notes by semester (Spring/Fall/Summer)
 - Filter by specific course
 - Browse by week number
 
 Views (student mode): list, week, month`,
     inputSchema: z.object({
-      mode: z.enum(["project", "student"]).optional().default("student").describe(
+      mode: z.enum(["project", "student"]).optional().default("project").describe(
         "Mode: 'project' for milestone timeline, 'student' for learning notes calendar"
       ),
       semester: z.string().optional().default("current").describe("Semester to view (student mode). Format: 'YYYY-Season' or 'current'"),
       course: z.string().optional().describe("Optional: Filter by course name or tag (student mode)"),
       week: z.number().int().optional().describe("Optional: Specific week number in semester 1-18 (student mode)"),
       view: z.enum(["list", "week", "month"]).optional().default("list").describe("View format (student mode): 'list', 'week', 'month'"),
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe("Memory cube ID. AUTO-DERIVE from project path."),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
     }),
   },
 
@@ -398,9 +405,8 @@ Before deleting, always:
     inputSchema: z.object({
       memory_id: z.string().optional().describe("ID of the specific memory to delete. Get this from memos_search or memos_list."),
       memory_ids: z.array(z.string()).optional().describe("List of memory IDs to delete in batch."),
-      cube_id: z.string().optional().default(MEMOS_DEFAULT_CUBE).describe(
-        "Memory cube ID. AUTO-DERIVE from project path: extract folder name, lowercase, replace -/./space with _, append '_cube'"
-      ),
+      project_path: projectPathParam,
+      cube_id: cubeIdParam,
       delete_all: z.boolean().optional().default(false).describe("Set to true to delete ALL memories in the cube. DANGEROUS! Requires explicit user confirmation."),
     }),
   },

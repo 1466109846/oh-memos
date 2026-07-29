@@ -53,6 +53,19 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
         if not self.config.use_multi_db and (self.config.user_name or user_name):
             metadata["user_name"] = user_name
 
+        # Idempotency (B3): skip if an identical memory already exists for this user,
+        # stopping duplicate nodes from hook+manual saves or repeated calls. user_name
+        # narrows to one cube before the exact-memory match.
+        if user_name:
+            with self.driver.session(database=self.db_name) as _s:
+                _dup = _s.run(
+                    "MATCH (n:Memory) WHERE n.user_name = $u AND n.memory = $m RETURN n.id LIMIT 1",
+                    u=user_name, m=memory,
+                ).single()
+            if _dup:
+                logger.debug(f"[add_node] duplicate content for '{user_name}', skipping insert")
+                return
+
         # Safely process metadata
         metadata = _prepare_node_metadata(metadata)
 
@@ -98,23 +111,94 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
                 n.updated_at = datetime($updated_at),
                 n += $metadata
         """
-        with self.driver.session(database=self.db_name) as session:
-            session.run(
-                query,
-                id=id,
-                memory=memory,
-                created_at=created_at,
-                updated_at=updated_at,
-                metadata=metadata,
-            )
+        try:
+            with self.driver.session(database=self.db_name) as session:
+                session.run(
+                    query,
+                    id=id,
+                    memory=memory,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    metadata=metadata,
+                )
+        except Exception:
+            # Compensate: the vector was already written above. If the graph
+            # write fails we must roll it back, otherwise Qdrant keeps an orphan
+            # vector no graph node points to (invisible to graph queries, yet
+            # still consuming search top_k).
+            if vector_sync_status == "success":
+                try:
+                    self.vec_db.delete([id])
+                except Exception as del_err:
+                    logger.warning(f"[VecDB] rollback delete failed for node {id}: {del_err}")
+            raise
+
+    def remove_oldest_memory(
+        self, memory_type: str, keep_latest: int, user_name: str | None = None
+    ) -> None:
+        """Override to also delete evicted vectors from Qdrant.
+
+        The base class only runs a Cypher DETACH DELETE, which leaves the
+        corresponding vectors orphaned in Qdrant — they grow unbounded and still
+        occupy search top_k. Here we first collect the ids that will be evicted,
+        delete their vectors, then delegate the graph-side delete to the base class.
+        """
+        user_name = user_name if user_name else self.config.user_name
+        where = "n.memory_type = $memory_type"
+        params: dict[str, Any] = {"memory_type": memory_type, "keep_latest": int(keep_latest)}
+        if not self.config.use_multi_db and (self.config.user_name or user_name):
+            where += " AND n.user_name = $user_name"
+            params["user_name"] = user_name
+        select_query = f"""
+            MATCH (n:Memory)
+            WHERE {where}
+            WITH n ORDER BY n.updated_at DESC
+            SKIP $keep_latest
+            RETURN n.id AS id
+        """
+        try:
+            with self.driver.session(database=self.db_name) as session:
+                evicted_ids = [record["id"] for record in session.run(select_query, params)]
+        except Exception as e:
+            logger.warning(f"[remove_oldest_memory] could not list evicted ids: {e}")
+            evicted_ids = []
+        if evicted_ids:
+            try:
+                self.vec_db.delete(evicted_ids)
+            except Exception as e:
+                logger.warning(
+                    f"[remove_oldest_memory] vec_db delete failed for {len(evicted_ids)} ids: {e}"
+                )
+        super().remove_oldest_memory(memory_type, keep_latest, user_name=user_name)
 
     def add_nodes_batch(self, nodes: list[dict[str, Any]], user_name: str | None = None) -> None:
-        print("neo4j_community add_nodes_batch:")
         if not nodes:
             logger.warning("[add_nodes_batch] Empty nodes list, skipping")
             return
 
         effective_user_name = user_name if user_name else self.config.user_name
+
+        # Idempotency (B3): pre-fetch which memory contents already exist for this user
+        # (one query) so duplicates from hook+manual saves / repeated calls are skipped
+        # rather than inserted again; also dedupe within this batch.
+        existing_memories: set[str] = set()
+        if effective_user_name:
+            _mems = [nd.get("memory") for nd in nodes if nd.get("memory")]
+            if _mems:
+                try:
+                    with self.driver.session(database=self.db_name) as _s:
+                        existing_memories = {
+                            r["m"]
+                            for r in _s.run(
+                                "MATCH (n:Memory) WHERE n.user_name = $u AND n.memory IN $mems "
+                                "RETURN DISTINCT n.memory AS m",
+                                u=effective_user_name,
+                                mems=_mems,
+                            )
+                        }
+                except Exception as e:
+                    logger.warning(f"[add_nodes_batch] dedup pre-check failed: {e}")
+        _seen_in_batch: set[str] = set()
 
         vec_items: list[VecDBItem] = []
         prepared_nodes: list[dict[str, Any]] = []
@@ -128,6 +212,11 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
                 if node_id is None or memory is None:
                     logger.warning("[add_nodes_batch] Skip invalid node: missing id/memory")
                     continue
+
+                if memory in existing_memories or memory in _seen_in_batch:
+                    logger.debug("[add_nodes_batch] duplicate content, skipping")
+                    continue
+                _seen_in_batch.add(memory)
 
                 if not self.config.use_multi_db and (self.config.user_name or effective_user_name):
                     metadata["user_name"] = effective_user_name
@@ -567,9 +656,6 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
         logger.info(
             f"[get_all_memory_items] scope: {scope}, filter: {filter}, knowledgebase_ids: {knowledgebase_ids}"
         )
-        print(
-            f"[get_all_memory_items] scope: {scope}, filter: {filter}, knowledgebase_ids: {knowledgebase_ids}"
-        )
 
         user_name = kwargs.get("user_name") if kwargs.get("user_name") else self.config.user_name
         if scope not in {"WorkingMemory", "LongTermMemory", "UserMemory", "OuterMemory"}:
@@ -614,13 +700,24 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
             MATCH (n:Memory)
             {where_clause}
             RETURN n
+            ORDER BY coalesce(n.updated_at, n.created_at) DESC
             """
         logger.info(f"[get_all_memory_items] query: {query}, params: {params}")
-        print(f"[get_all_memory_items] query: {query}, params: {params}")
 
         with self.driver.session(database=self.db_name) as session:
             results = session.run(query, params)
-            return [self._parse_node(dict(record["n"])) for record in results]
+            raw_nodes = [dict(record["n"]) for record in results]
+
+        include_embedding = bool(kwargs.get("include_embedding", False))
+        lookup = (
+            self._batch_embedding_lookup([n["id"] for n in raw_nodes if n.get("id")])
+            if include_embedding
+            else None
+        )
+        return [
+            self._parse_node(n, include_embedding=include_embedding, embedding_lookup=lookup)
+            for n in raw_nodes
+        ]
 
     def get_by_metadata(
         self,
@@ -1059,8 +1156,23 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
         except Exception as e:
             logger.warning(f"Failed to create VecDB payload indexes: {e}")
 
-    def _parse_node(self, node_data: dict[str, Any]) -> dict[str, Any]:
-        """Parse Neo4j node and optionally fetch embedding from vector DB."""
+    def _parse_node(
+        self,
+        node_data: dict[str, Any],
+        include_embedding: bool = False,
+        embedding_lookup: dict[str, list[float]] | None = None,
+    ) -> dict[str, Any]:
+        """Parse a Neo4j node, attaching its embedding only when asked for.
+
+        Embeddings live in Qdrant, so fetching one costs a network round-trip.
+        This used to call vec_db.get_by_id() unconditionally for every node —
+        an N+1 that both slowed list/search down and exhausted sockets on Windows
+        (WinError 10022) on larger result sets, all to attach vectors that
+        callers with include_embedding=False immediately discard.
+
+        Pass embedding_lookup (id -> vector) to serve vectors from a single
+        batched fetch instead of one request per node.
+        """
         node = node_data.copy()
 
         # Convert Neo4j datetime to string
@@ -1079,6 +1191,11 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
                     break
                 node["sources"][idx] = json.loads(node["sources"][idx])
         new_node = {"id": node.pop("id"), "memory": node.pop("memory", ""), "metadata": node}
+        if not include_embedding:
+            return new_node
+        if embedding_lookup is not None:
+            new_node["metadata"]["embedding"] = embedding_lookup.get(new_node["id"])
+            return new_node
         try:
             vec_item = self.vec_db.get_by_id(new_node["id"])
             if vec_item and vec_item.vector:
@@ -1087,3 +1204,17 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
             logger.warning(f"Failed to fetch vector for node {new_node['id']}: {e}")
             new_node["metadata"]["embedding"] = None
         return new_node
+
+    def _batch_embedding_lookup(self, ids: list[str]) -> dict[str, list[float]]:
+        """Fetch many vectors in one Qdrant call (avoids per-node round-trips)."""
+        if not ids:
+            return {}
+        try:
+            return {
+                item.id: item.vector
+                for item in (self.vec_db.get_by_ids(ids) or [])
+                if getattr(item, "vector", None)
+            }
+        except Exception as e:
+            logger.warning(f"Batch vector fetch failed for {len(ids)} nodes: {e}")
+            return {}

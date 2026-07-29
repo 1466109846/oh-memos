@@ -427,7 +427,20 @@ class GraphStructureReorganizer:
 
         joined_scene = "\n".join(scene_lines)
         if len(joined_scene) > max_length:
-            logger.warning("Sub-cluster too long")
+            # Oversized cluster: the old behavior truncated the prompt to max_length,
+            # so the LLM never saw the tail nodes (silently dropped from every
+            # sub-cluster) — and these giant prompts are exactly the calls that time
+            # out and trip the LLM fallback chain. Chunk deterministically instead.
+            chunk = 20
+            logger.warning(
+                f"Sub-cluster too long ({len(joined_scene)} chars, {len(cluster_nodes)} nodes) "
+                f"— chunking into groups of {chunk} without LLM"
+            )
+            return [
+                cluster_nodes[i : i + chunk]
+                for i in range(0, len(cluster_nodes), chunk)
+                if len(cluster_nodes[i : i + chunk]) >= 2
+            ]
         prompt = LOCAL_SUBCLUSTER_PROMPT.replace("{joined_scene}", joined_scene[:max_length])
 
         messages = [{"role": "user", "content": prompt}]

@@ -68,9 +68,7 @@ if !errorlevel! EQU 0 (
         popd
     )
     :: Kill remaining Java processes with neo4j in command line
-    for /f "tokens=2" %%i in ('wmic process where "commandline like '%%neo4j%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
-        taskkill /F /PID %%i >nul 2>&1
-    )
+    powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter 'name=''java.exe''' | Where-Object { $_.CommandLine -like '*neo4j*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
     echo        [OK] Neo4j stopped
 ) else (
     echo        [SKIP] Neo4j not running

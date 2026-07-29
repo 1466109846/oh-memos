@@ -187,6 +187,120 @@ function updateConfigForCube(config: CubeConfig, cubeId: string): CubeConfig {
   return config;
 }
 
+// Fallback cube config built from environment variables — ported from the Python
+// server's _build_fallback_cube_config. Throws a descriptive error when a required
+// var is missing (caller surfaces it), instead of silently producing a broken cube.
+function requireEnv(key: string): string {
+  const v = process.env[key]?.trim();
+  if (!v) throw new Error(`${key} is required to build a fallback cube config (set ${key} in .env)`);
+  return v;
+}
+function envFloat(key: string): number {
+  const n = Number(requireEnv(key));
+  if (Number.isNaN(n)) throw new Error(`${key} must be a number`);
+  return n;
+}
+function envInt(key: string): number {
+  const n = parseInt(requireEnv(key), 10);
+  if (Number.isNaN(n)) throw new Error(`${key} must be an int`);
+  return n;
+}
+// Optional boolean switches — fall back to a sane default when unset, so a cube
+// can still be built in environments that don't define every strategy flag
+// (missing BM25_CALL/VEC_COT_CALL/NEO4J_* switches must not fail registration).
+function envBool(key: string, def: boolean): boolean {
+  const v = process.env[key]?.trim().toLowerCase();
+  if (v === undefined || v === "") return def;
+  return v === "true" || v === "1" || v === "yes";
+}
+
+function buildFallbackCubeConfig(cubeId: string): CubeConfig {
+  const openaiConfig = {
+    model_name_or_path: requireEnv("MOS_CHAT_MODEL"),
+    temperature: envFloat("MOS_CHAT_TEMPERATURE"),
+    max_tokens: envInt("MOS_MAX_TOKENS"),
+    top_p: envFloat("MOS_TOP_P"),
+    top_k: envInt("MOS_TOP_K"),
+    remove_think_prefix: true,
+    api_key: requireEnv("OPENAI_API_KEY"),
+    api_base: requireEnv("OPENAI_API_BASE"),
+  };
+
+  const embedderConfig = {
+    backend: requireEnv("MOS_EMBEDDER_BACKEND"),
+    config: {
+      provider: requireEnv("MOS_EMBEDDER_PROVIDER"),
+      api_key: requireEnv("OPENAI_API_KEY"),
+      model_name_or_path: requireEnv("MOS_EMBEDDER_MODEL"),
+      base_url: process.env.MOS_EMBEDDER_API_BASE?.trim() || requireEnv("OPENAI_API_BASE"),
+      embedding_dims: envInt("EMBEDDING_DIMENSION"),
+    },
+  };
+
+  const neo4jBackend = requireEnv("NEO4J_BACKEND").toLowerCase();
+  let graphConfig: Record<string, unknown>;
+  if (neo4jBackend === "neo4j") {
+    graphConfig = {
+      uri: requireEnv("NEO4J_URI"),
+      user: requireEnv("NEO4J_USER"),
+      db_name: requireEnv("NEO4J_DB_NAME"),
+      password: requireEnv("NEO4J_PASSWORD"),
+      auto_create: envBool("NEO4J_AUTO_CREATE", false),
+      use_multi_db: envBool("NEO4J_USE_MULTI_DB", false),
+      user_name: cubeId,
+      embedding_dimension: envInt("EMBEDDING_DIMENSION"),
+    };
+  } else {
+    const qdrantUrl = process.env.QDRANT_URL?.trim() || null;
+    graphConfig = {
+      uri: requireEnv("NEO4J_URI"),
+      user: requireEnv("NEO4J_USER"),
+      db_name: requireEnv("NEO4J_DB_NAME"),
+      password: requireEnv("NEO4J_PASSWORD"),
+      user_name: cubeId,
+      auto_create: false,
+      use_multi_db: false,
+      embedding_dimension: envInt("EMBEDDING_DIMENSION"),
+      vec_config: {
+        backend: "qdrant",
+        config: {
+          collection_name: `${cubeId}_graph`,
+          vector_dimension: envInt("EMBEDDING_DIMENSION"),
+          distance_metric: "cosine",
+          host: qdrantUrl ? null : requireEnv("QDRANT_HOST"),
+          port: qdrantUrl ? null : envInt("QDRANT_PORT"),
+          path: process.env.QDRANT_PATH?.trim() || null,
+          url: qdrantUrl,
+          api_key: process.env.QDRANT_API_KEY?.trim() || null,
+        },
+      },
+    };
+  }
+
+  return {
+    model_schema: "memos.configs.mem_cube.GeneralMemCubeConfig",
+    user_id: MEMOS_USER,
+    cube_id: cubeId,
+    config_filename: "config.json",
+    text_mem: {
+      backend: "tree_text",
+      config: {
+        extractor_llm: { backend: "openai", config: openaiConfig },
+        dispatcher_llm: { backend: "openai", config: openaiConfig },
+        embedder: embedderConfig,
+        graph_db: { backend: neo4jBackend, config: graphConfig },
+        reorganize: envBool("MOS_ENABLE_REORGANIZE", false),
+        search_strategy: {
+          bm25: envBool("BM25_CALL", false),
+          cot: envBool("VEC_COT_CALL", false),
+        },
+      },
+    },
+    act_mem: {},
+    para_mem: {},
+  } as CubeConfig;
+}
+
 function buildCubeConfig(cubeId: string): CubeConfig {
   const templatePath = getCubePath(MEMOS_DEFAULT_CUBE);
   if (templatePath !== null) {
@@ -199,15 +313,9 @@ function buildCubeConfig(cubeId: string): CubeConfig {
       logger.warning(`Failed to read template cube config: ${err}`);
     }
   }
-  // Minimal fallback config (will likely fail API registration without proper fields)
-  return {
-    user_id: MEMOS_USER,
-    cube_id: cubeId,
-    config_filename: "config.json",
-    text_mem: {},
-    act_mem: {},
-    para_mem: {},
-  };
+  // No usable template — build a complete config from env (throws with a clear
+  // message if required vars are missing; caller reports it as a registration error).
+  return buildFallbackCubeConfig(cubeId);
 }
 
 export function validateAndFixCubeConfig(cubeId: string, configPath: string): [boolean, string | null] {
@@ -292,7 +400,7 @@ export function ensureCubeDirectory(cubeId: string): [string | null, string | nu
 export async function verifyCubeLoaded(cubeId: string): Promise<boolean> {
   try {
     const response = await fetchWithTimeout(
-      `${MEMOS_URL}/memories?user_id=${encodeURIComponent(MEMOS_USER)}&mem_cube_id=${encodeURIComponent(cubeId)}`,
+      `${MEMOS_URL}/memories?user_id=${encodeURIComponent(MEMOS_USER)}&mem_cube_id=${encodeURIComponent(cubeId)}&limit=1`,
       { method: "GET", timeoutMs: 5 }
     );
     if (response.ok) {

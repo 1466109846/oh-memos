@@ -425,18 +425,33 @@ class GraphMemoryRetriever:
         if not all_hits:
             return []
 
-        # merge and deduplicate
-        unique_ids = {r["id"] for r in all_hits if r.get("id")}
+        # merge and deduplicate — keep the best score per id and preserve
+        # score-descending order. Previously this collapsed hits into a set,
+        # discarding retrieval scores AND their ordering; downstream rerankers
+        # (esp. RRF, which scores purely by input position) then had nothing
+        # meaningful to rank on. Keeping order restores ranking end-to-end.
+        id_to_score: dict[str, float] = {}
+        for r in all_hits:
+            rid = r.get("id")
+            if not rid:
+                continue
+            score = r.get("score") or 0.0
+            if rid not in id_to_score or score > id_to_score[rid]:
+                id_to_score[rid] = score
+        ordered_ids = sorted(id_to_score, key=lambda i: id_to_score[i], reverse=True)
         node_dicts = (
             self.graph_store.get_nodes(
-                list(unique_ids),
+                ordered_ids,
                 include_embedding=self.include_embedding,
                 cube_name=cube_name,
                 user_name=user_name,
             )
             or []
         )
-        return [TextualMemoryItem.from_dict(n) for n in node_dicts]
+        # get_nodes' "WHERE id IN [...]" does not preserve order; restore it.
+        items = [TextualMemoryItem.from_dict(n) for n in node_dicts]
+        items.sort(key=lambda it: id_to_score.get(it.id, 0.0), reverse=True)
+        return items
 
     def _bm25_recall(
         self,
@@ -518,18 +533,33 @@ class GraphMemoryRetriever:
         if not all_hits:
             return []
 
-        # merge and deduplicate
-        unique_ids = {r["id"] for r in all_hits if r.get("id")}
+        # merge and deduplicate — keep the best score per id and preserve
+        # score-descending order. Previously this collapsed hits into a set,
+        # discarding retrieval scores AND their ordering; downstream rerankers
+        # (esp. RRF, which scores purely by input position) then had nothing
+        # meaningful to rank on. Keeping order restores ranking end-to-end.
+        id_to_score: dict[str, float] = {}
+        for r in all_hits:
+            rid = r.get("id")
+            if not rid:
+                continue
+            score = r.get("score") or 0.0
+            if rid not in id_to_score or score > id_to_score[rid]:
+                id_to_score[rid] = score
+        ordered_ids = sorted(id_to_score, key=lambda i: id_to_score[i], reverse=True)
         node_dicts = (
             self.graph_store.get_nodes(
-                list(unique_ids),
+                ordered_ids,
                 include_embedding=self.include_embedding,
                 cube_name=cube_name,
                 user_name=user_name,
             )
             or []
         )
-        return [TextualMemoryItem.from_dict(n) for n in node_dicts]
+        # get_nodes' "WHERE id IN [...]" does not preserve order; restore it.
+        items = [TextualMemoryItem.from_dict(n) for n in node_dicts]
+        items.sort(key=lambda it: id_to_score.get(it.id, 0.0), reverse=True)
+        return items
 
     def _ppr_recall(
         self,

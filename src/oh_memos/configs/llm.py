@@ -118,6 +118,51 @@ class VLLMLLMConfig(BaseLLMConfig):
     )
 
 
+class LLMFallbackConfig(BaseConfig):
+    """Configuration for LLM fallback behavior.
+
+    Mirrors ``oh_memos.configs.embedder.FallbackConfig`` but targets chat/completion
+    LLMs. When the primary LLM is unavailable (timeout / quota exhausted / repeated
+    transient failure), calls are automatically degraded to a backup LLM.
+    """
+
+    enabled: bool = Field(default=False, description="Enable automatic fallback to backup LLM")
+    fallback_backend: str = Field(
+        default="openai", description="Backend to use for fallback (e.g., 'openai')"
+    )
+    fallback_model: str = Field(default="LongCat-2.0", description="Model name for fallback LLM")
+    fallback_api_key: str = Field(default="", description="API key for fallback LLM")
+    fallback_api_base: str = Field(
+        default="https://api.longcat.chat/openai/v1",
+        description="API base URL for fallback LLM (OpenAI-compatible)",
+    )
+    fallback_temperature: float = Field(
+        default=0.6, description="Sampling temperature for fallback LLM"
+    )
+    fallback_max_tokens: int = Field(
+        default=6000, description="Maximum tokens to generate for fallback LLM"
+    )
+    primary_timeout: float = Field(
+        default=60.0,
+        ge=1.0,
+        le=600.0,
+        description="Max seconds a single primary-LLM attempt may take before failing over to the backup",
+    )
+    max_retries: int = Field(
+        default=3, ge=1, le=10, description="Maximum retry attempts for transient errors"
+    )
+    initial_delay_ms: int = Field(
+        default=1000, ge=100, le=60000, description="Initial retry delay in milliseconds"
+    )
+    max_delay_ms: int = Field(
+        default=30000, ge=1000, le=300000, description="Maximum retry delay in milliseconds"
+    )
+    backoff_multiplier: float = Field(
+        default=2.0, ge=1.0, le=5.0, description="Exponential backoff multiplier"
+    )
+    jitter: bool = Field(default=True, description="Add random jitter to retry delays")
+
+
 class LLMConfigFactory(BaseConfig):
     """Factory class for creating LLM configurations."""
 

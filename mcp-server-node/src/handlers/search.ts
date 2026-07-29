@@ -74,7 +74,7 @@ async function getTemporalMemories(
         statements: [
           {
             statement: cypher,
-            parameters: { user_name: MEMOS_USER, top_k: topK },
+            parameters: { user_name: cubeId, top_k: topK },
           },
         ],
       }),
@@ -276,10 +276,6 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
-  const chatHistory = context.slice(-10)
-    .filter((m) => m.content)
-    .map((m) => ({ role: m.role, content: m.content }));
-
   try {
     const response = await fetchWithTimeout(`${MEMOS_URL}/search`, {
       method: "POST",
@@ -287,9 +283,7 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
       body: JSON.stringify({
         user_id: MEMOS_USER,
         query,
-        readable_cube_ids: [cubeId],
-        enable_context_analysis: true,
-        chat_history: chatHistory,
+        install_cube_ids: [cubeId],
         top_k: 15,
       }),
     });

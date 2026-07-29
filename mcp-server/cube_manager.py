@@ -165,6 +165,14 @@ def _build_fallback_cube_config(cube_id: str) -> dict[str, Any]:
         except ValueError as exc:
             raise RuntimeError(f"{key} must be an int, got: {raw}") from exc
 
+    def _get_bool(key: str, default: bool) -> bool:
+        # Optional switches: fall back to default when unset, so a cube can still be
+        # built in environments that don't define every strategy flag.
+        raw = os.getenv(key)
+        if raw is None or raw == "":
+            return default
+        return raw.strip().lower() in ("true", "1", "yes")
+
     openai_config = {
         "model_name_or_path": _require_env("MOS_CHAT_MODEL"),
         "temperature": _get_float("MOS_CHAT_TEMPERATURE"),
@@ -196,8 +204,8 @@ def _build_fallback_cube_config(cube_id: str) -> dict[str, Any]:
             "user": _require_env("NEO4J_USER"),
             "db_name": _require_env("NEO4J_DB_NAME"),
             "password": _require_env("NEO4J_PASSWORD"),
-            "auto_create": _require_env("NEO4J_AUTO_CREATE").lower() == "true",
-            "use_multi_db": _require_env("NEO4J_USE_MULTI_DB").lower() == "true",
+            "auto_create": _get_bool("NEO4J_AUTO_CREATE", False),
+            "use_multi_db": _get_bool("NEO4J_USE_MULTI_DB", False),
             "user_name": cube_id,
             "embedding_dimension": _get_int("EMBEDDING_DIMENSION"),
         }
@@ -244,10 +252,10 @@ def _build_fallback_cube_config(cube_id: str) -> dict[str, Any]:
                 "dispatcher_llm": {"backend": "openai", "config": openai_config},
                 "embedder": embedder_config,
                 "graph_db": {"backend": neo4j_backend, "config": graph_config},
-                "reorganize": _require_env("MOS_ENABLE_REORGANIZE").lower() == "true",
+                "reorganize": _get_bool("MOS_ENABLE_REORGANIZE", False),
                 "search_strategy": {
-                    "bm25": _require_env("BM25_CALL").lower() == "true",
-                    "cot": _require_env("VEC_COT_CALL").lower() == "true",
+                    "bm25": _get_bool("BM25_CALL", False),
+                    "cot": _get_bool("VEC_COT_CALL", False),
                 },
             },
         },
@@ -356,13 +364,14 @@ def ensure_cube_directory(cube_id: str) -> tuple[str | None, str | None]:
 
 def get_default_cube_id() -> str:
     """
-    Get the default cube ID based on project path derivation first, then env fallback.
+    Get the default cube ID, aligned with the Node server's priority:
 
-    Priority:
-    1. Derived from current working directory (if derived cube directory exists)
-    2. Derived from current working directory (even if cube doesn't exist yet)
+    1. If MEMOS_DEFAULT_CUBE was explicitly set (env/CLI) and that cube exists → use it
+    2. Otherwise derive from the current working directory
     3. Fallback to MEMOS_DEFAULT_CUBE constant
     """
+    if is_default_cube_from_env() and get_cube_path(MEMOS_DEFAULT_CUBE):
+        return MEMOS_DEFAULT_CUBE
     try:
         cwd = os.getcwd()
         # Use enhanced detection if available

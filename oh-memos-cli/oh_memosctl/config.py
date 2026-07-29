@@ -43,7 +43,7 @@ class MemosConfig:
 
     # Qdrant settings
     qdrant_host: str = "localhost"
-    qdrant_port: int = 6333
+    qdrant_port: int = 16333
 
     # Ollama settings (optional LLM backend)
     ollama_url: str = "http://localhost:11434"
@@ -100,7 +100,7 @@ class MemosConfig:
             neo4j_user=neo4j.get("user", "neo4j"),
             neo4j_password=neo4j.get("password", ""),
             qdrant_host=qdrant.get("host", "localhost"),
-            qdrant_port=qdrant.get("port", 6333),
+            qdrant_port=qdrant.get("port", 16333),
             ollama_url=ollama.get("url", "http://localhost:11434"),
             default_mode=modes.get("default", "coding"),
             active_modes=modes.get("active", ["coding"]),

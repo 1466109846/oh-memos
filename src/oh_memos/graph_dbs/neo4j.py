@@ -109,6 +109,12 @@ class Neo4jGraphDB(BaseGraphDB):
             connection_acquisition_timeout=30.0,  # 获取连接超时30秒，防止无限等待
             max_connection_lifetime=3600,         # 连接最大生命周期1小时
         )
+        # GraphDatabase.driver() above is lazy — it opens no socket until first use.
+        # Neo4j is a JVM service that may not have opened its Bolt port yet when the
+        # API boots first (a common race on the Windows one-click launcher). Block here
+        # until it is reachable so cube construction doesn't hard-fail with
+        # ServiceUnavailable / WinError 10061 ("connection refused") and 500 every request.
+        self._wait_for_connection()
         self.db_name = config.db_name
         self.user_name = config.user_name
 
@@ -118,6 +124,46 @@ class Neo4jGraphDB(BaseGraphDB):
 
         # Create only if not exists
         self.create_index(dimensions=config.embedding_dimension)
+
+    def _wait_for_connection(self, max_retries: int = 8, backoff_cap: float = 5.0) -> None:
+        """Block until Neo4j accepts Bolt connections, using capped exponential backoff.
+
+        Why: Neo4j can take tens of seconds to open its Bolt port after its process
+        starts. When the API wins that race (common on the Windows one-click launcher,
+        whose port wait is best-effort), the driver's first query raises
+        ServiceUnavailable / WinError 10061 ("connection refused"). Waiting here turns a
+        transient startup race into a short delay instead of crashing cube construction.
+
+        Only ServiceUnavailable is retried — AuthError / ConfigurationError are permanent
+        misconfigurations that waiting cannot fix, so they surface immediately.
+        """
+        from neo4j.exceptions import ServiceUnavailable
+
+        last_exc: ServiceUnavailable | None = None
+        for attempt in range(max_retries + 1):
+            try:
+                self.driver.verify_connectivity()
+                if attempt:
+                    logger.info(
+                        f"[Neo4j] Connection to {self.config.uri} established "
+                        f"after {attempt + 1} attempts"
+                    )
+                return
+            except ServiceUnavailable as e:
+                last_exc = e
+                if attempt >= max_retries:
+                    break
+                wait = min(2**attempt, backoff_cap)
+                logger.warning(
+                    f"[Neo4j] Not reachable at {self.config.uri} "
+                    f"(attempt {attempt + 1}/{max_retries + 1}), retrying in {wait:.0f}s: {e}"
+                )
+                time.sleep(wait)
+
+        raise ServiceUnavailable(
+            f"Neo4j at {self.config.uri} is not reachable after {max_retries + 1} attempts. "
+            "Ensure the database is running (e.g. scripts/local/start_db.bat) before starting the API."
+        ) from last_exc
 
     def create_index(
         self,

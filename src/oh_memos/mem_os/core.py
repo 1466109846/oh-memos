@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 
 from datetime import datetime, timezone
@@ -938,12 +939,35 @@ class MOSCore:
                     [{"role": "user", "content": memory_content}]
                 ]  # for only user-str input and convert message
 
-                memories = self.mem_reader.get_memory(
-                    messages_list,
-                    type="chat",
-                    info={"user_id": target_user_id, "session_id": target_session_id},
-                    mode="fast" if sync_mode == "async" else "fine",
+                # Fast path for typed content (e.g. "[BUGFIX] ..." from MCP memos_save):
+                # the text was already deliberately authored — LLM re-extraction only
+                # adds a full LLM round-trip (the dominant save latency, and the very
+                # call that times out and trips the fallback chain) and can distort
+                # the content. Store verbatim with a single embed call instead.
+                _typed = re.match(r"^\[([A-Z_]{3,24})\]\s", memory_content or "")
+                _fast_ok = (
+                    _typed
+                    and os.getenv("MOS_TYPED_SAVE_FAST", "true").lower() == "true"
+                    and hasattr(self.mem_reader, "_make_memory_item")
                 )
+                if _fast_ok:
+                    _first_line = memory_content.splitlines()[0].strip()
+                    _item = self.mem_reader._make_memory_item(
+                        value=memory_content,
+                        info={"user_id": target_user_id, "session_id": target_session_id},
+                        memory_type="LongTermMemory",
+                        tags=[_typed.group(1)],
+                        key=_first_line[:80],
+                    )
+                    memories = [[_item]]
+                    logger.info(f"[add] typed fast-path (no LLM) for [{_typed.group(1)}] content")
+                else:
+                    memories = self.mem_reader.get_memory(
+                        messages_list,
+                        type="chat",
+                        info={"user_id": target_user_id, "session_id": target_session_id},
+                        mode="fast" if sync_mode == "async" else "fine",
+                    )
 
                 mem_ids = []
                 for mem in memories:

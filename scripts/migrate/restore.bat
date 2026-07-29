@@ -69,7 +69,7 @@ if !errorlevel! EQU 0 (
 )
 
 :: 检�?Qdrant
-netstat -ano 2>nul | findstr ":6333 " | findstr "LISTENING" >nul 2>&1
+netstat -ano 2>nul | findstr ":16333 " | findstr "LISTENING" >nul 2>&1
 if !errorlevel! EQU 0 (
     echo        [ERROR] Qdrant is running! Please stop it first.
     echo        Stop Qdrant process before restoring.

@@ -7,9 +7,9 @@ storage:
 
 service:
   # gRPC 端口
-  grpc_port: 6334
+  grpc_port: 16334
   # REST API 端口
-  http_port: 6333
+  http_port: 16333
 
 # 日志配置
 log_level: INFO

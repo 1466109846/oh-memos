@@ -2,8 +2,8 @@
 
 cd /d "%~dp0"
 
-set PYTHON_EXE=%~dp0conda_venv\python.exe
-set PATH=%~dp0conda_venv;%~dp0conda_venv\Scripts;%~dp0conda_venv\Library\bin;%PATH%
+set PYTHON_EXE=%~dp0.venv\Scripts\python.exe
+set PATH=%~dp0.venv\Scripts;%PATH%
 
 echo ========================================
 echo    oh_memos Windows Launcher
@@ -13,7 +13,7 @@ echo.
 echo [1/4] Checking Python...
 if not exist "%PYTHON_EXE%" (
     echo [ERROR] Python not found: %PYTHON_EXE%
-    echo         Make sure conda_venv folder exists
+    echo         Make sure .venv folder exists
     pause
     exit /b 1
 )
@@ -50,6 +50,6 @@ echo ========================================
 echo.
 
 cd /d "%~dp0src"
-"%PYTHON_EXE%" -m uvicorn oh_memos.api.start_api:app --host 0.0.0.0 --port 18000 --reload
+"%PYTHON_EXE%" -m uvicorn oh_memos.api.start_api:app --host 0.0.0.0 --port 18000
 
 pause

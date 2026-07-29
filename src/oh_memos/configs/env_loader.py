@@ -181,7 +181,7 @@ class EnvConfig:
     # Qdrant Configuration
     # -------------------------------------------------------------------------
     qdrant_host: str | None = "localhost"
-    qdrant_port: int | None = 6333
+    qdrant_port: int | None = 16333
     qdrant_url: str | None = None  # Cloud URL (if set, host/port ignored)
     qdrant_api_key: str | None = None
     qdrant_path: str | None = None  # Local storage path
@@ -202,6 +202,21 @@ class EnvConfig:
     memreader_api_key: str = ""
     memreader_api_base: str = ""
     memreader_max_tokens: int = 6000
+
+    # LLM Fallback Configuration (degrade to backup LLM on timeout / quota exhaustion)
+    llm_fallback_enabled: bool = False
+    llm_fallback_backend: str = "openai"
+    llm_fallback_model: str = "LongCat-2.0"
+    llm_fallback_api_key: str = ""
+    llm_fallback_api_base: str = "https://api.longcat.chat/openai/v1"
+    llm_fallback_temperature: float = 0.6
+    llm_fallback_max_tokens: int = 6000
+    llm_fallback_primary_timeout: float = 60.0
+    llm_fallback_max_retries: int = 3
+    llm_fallback_initial_delay_ms: int = 1000
+    llm_fallback_max_delay_ms: int = 30000
+    llm_fallback_backoff_multiplier: float = 2.0
+    llm_fallback_jitter: bool = True
 
     # -------------------------------------------------------------------------
     # Embedder Configuration
@@ -323,7 +338,7 @@ def _load_config_from_env() -> EnvConfig:
 
         # Qdrant
         qdrant_host=_get_env("QDRANT_HOST", "localhost"),
-        qdrant_port=_get_env_int("QDRANT_PORT", 6333) if _get_env("QDRANT_PORT") else 6333,
+        qdrant_port=_get_env_int("QDRANT_PORT", 16333) if _get_env("QDRANT_PORT") else 16333,
         qdrant_url=_get_env("QDRANT_URL"),
         qdrant_api_key=_get_env("QDRANT_API_KEY"),
         qdrant_path=_get_env("QDRANT_PATH"),
@@ -342,6 +357,23 @@ def _load_config_from_env() -> EnvConfig:
         memreader_api_key=_get_env("MEMRADER_API_KEY", ""),
         memreader_api_base=_get_env("MEMRADER_API_BASE", ""),
         memreader_max_tokens=_get_env_int("MEMRADER_MAX_TOKENS", 6000),
+
+        # LLM Fallback
+        llm_fallback_enabled=_get_env_bool("MOS_CHAT_FALLBACK_ENABLED", False),
+        llm_fallback_backend=_get_env("MOS_CHAT_FALLBACK_BACKEND", "openai"),
+        llm_fallback_model=_get_env("MOS_CHAT_FALLBACK_MODEL", "LongCat-2.0"),
+        llm_fallback_api_key=_get_env("MOS_CHAT_FALLBACK_API_KEY", ""),
+        llm_fallback_api_base=_get_env(
+            "MOS_CHAT_FALLBACK_API_BASE", "https://api.longcat.chat/openai/v1"
+        ),
+        llm_fallback_temperature=_get_env_float("MOS_CHAT_FALLBACK_TEMPERATURE", 0.6),
+        llm_fallback_max_tokens=_get_env_int("MOS_CHAT_FALLBACK_MAX_TOKENS", 6000),
+        llm_fallback_primary_timeout=_get_env_float("MOS_CHAT_FALLBACK_PRIMARY_TIMEOUT", 60.0),
+        llm_fallback_max_retries=_get_env_int("MOS_CHAT_FALLBACK_MAX_RETRIES", 3),
+        llm_fallback_initial_delay_ms=_get_env_int("MOS_CHAT_FALLBACK_INITIAL_DELAY_MS", 1000),
+        llm_fallback_max_delay_ms=_get_env_int("MOS_CHAT_FALLBACK_MAX_DELAY_MS", 30000),
+        llm_fallback_backoff_multiplier=_get_env_float("MOS_CHAT_FALLBACK_BACKOFF_MULTIPLIER", 2.0),
+        llm_fallback_jitter=_get_env_bool("MOS_CHAT_FALLBACK_JITTER", True),
 
         # Embedder
         embedder_backend=_get_env("MOS_EMBEDDER_BACKEND", "universal_api"),
@@ -520,6 +552,30 @@ def get_embedder_fallback_config() -> dict[str, Any]:
         "backoff_multiplier": cfg.embedder_fallback_backoff_multiplier,
         "jitter": cfg.embedder_fallback_jitter,
         "dimension_mismatch_strategy": cfg.embedder_fallback_dimension_strategy,
+    }
+
+
+def get_llm_fallback_config() -> dict[str, Any]:
+    """Get LLM fallback configuration as a dictionary.
+
+    Consumed by ``LLMFactory.from_config`` to decide whether to wrap the primary
+    LLM with ``FallbackLLM``. Mirrors ``get_embedder_fallback_config``.
+    """
+    cfg = get_config()
+    return {
+        "enabled": cfg.llm_fallback_enabled,
+        "fallback_backend": cfg.llm_fallback_backend,
+        "fallback_model": cfg.llm_fallback_model,
+        "fallback_api_key": cfg.llm_fallback_api_key,
+        "fallback_api_base": cfg.llm_fallback_api_base,
+        "fallback_temperature": cfg.llm_fallback_temperature,
+        "fallback_max_tokens": cfg.llm_fallback_max_tokens,
+        "primary_timeout": cfg.llm_fallback_primary_timeout,
+        "max_retries": cfg.llm_fallback_max_retries,
+        "initial_delay_ms": cfg.llm_fallback_initial_delay_ms,
+        "max_delay_ms": cfg.llm_fallback_max_delay_ms,
+        "backoff_multiplier": cfg.llm_fallback_backoff_multiplier,
+        "jitter": cfg.llm_fallback_jitter,
     }
 
 

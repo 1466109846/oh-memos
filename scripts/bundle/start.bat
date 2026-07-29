@@ -70,7 +70,7 @@ if exist "%BUNDLE_ROOT%\.env" (
 :: ============================================
 :: Step 1: 启动 Qdrant
 :: ============================================
-echo [1/3] 启动 Qdrant (端口 6333)...
+echo [1/3] 启动 Qdrant (端口 16333)...
 
 :: 检�?Qdrant 是否已运�?
 tasklist /FI "IMAGENAME eq qdrant.exe" 2>nul | find /I "qdrant.exe" >nul
@@ -131,7 +131,7 @@ if %errorlevel% equ 0 (
     echo   服务地址 Service URLs:
     echo   - MemOS API: http://localhost:18000/docs
     echo   - Neo4j:     http://localhost:7474
-    echo   - Qdrant:    http://localhost:6333/dashboard
+    echo   - Qdrant:    http://localhost:16333/dashboard
     echo.
     echo   �?Ctrl+C 停止 API 服务
     echo   Press Ctrl+C to stop API service

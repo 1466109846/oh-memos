@@ -295,3 +295,11 @@ backups/
 outputs
 
 evaluation/data/temporal_locomo
+
+# Env backups (contain real API keys / passwords — never commit)
+.env.bak*
+*.env.bak*
+src/.env.bak*
+
+# Memory admin GUI: exported memory backups (may contain sensitive content)
+tools/memory-admin/backups/

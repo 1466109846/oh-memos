@@ -35,7 +35,7 @@ NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "12345678")
 
 # Qdrant
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
+QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "16333"))
 QDRANT_URL = f"http://{QDRANT_HOST}:{QDRANT_PORT}"
 
 # Embedding API

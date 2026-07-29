@@ -19,6 +19,25 @@ from oh_memos.templates.tree_reorganize_prompts import (
 logger = get_logger(__name__)
 
 
+def _strip_think(text: str) -> str:
+    """Strip reasoning-model <think>...</think> spans so they never pollute memory.
+
+    Reasoning models (deepseek-r1 / longcat / etc.) prepend a <think>…</think> block.
+    Left unstripped it broke JSON parsing AND — for inferred fact nodes — got stored
+    verbatim as the node's memory (and embedded), producing thousands of junk nodes.
+    """
+    if not text:
+        return text
+    low = text.lower()
+    end = low.rfind("</think>")
+    if end != -1:
+        return text[end + len("</think>"):].strip()
+    # An unclosed <think> means the whole output is reasoning (often truncated) → drop.
+    if "<think>" in low:
+        return ""
+    return text.strip()
+
+
 class RelationAndReasoningDetector:
     def __init__(self, graph_store: Neo4jGraphDB, llm: BaseLLM, embedder: OllamaEmbedder):
         self.graph_store = graph_store
@@ -246,6 +265,7 @@ class RelationAndReasoningDetector:
         messages = [{"role": "user", "content": prompt}]
         try:
             response = self.llm.generate(messages).strip()
+            response = _strip_think(response)
             logger.debug(f"[LLM Raw] {response}")
             return response
         except Exception as e:

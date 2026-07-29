@@ -108,6 +108,36 @@ export function keywordMatchScore(
 // Reranking
 // ============================================================================
 
+// Rerank weights: relativity (semantic) dominates, keyword overlap is a
+// secondary signal. Both are min-max normalized to [0,1] BEFORE combining,
+// because their raw scales differ wildly (RRF relativity ~0.016 vs a keyword
+// hit 2.5+); adding them raw let keyword overlap swamp semantic order ~100:1.
+const REL_WEIGHT = 0.7;
+const KW_WEIGHT = 0.3;
+
+function rerankByRelevanceAndKeywords<T>(nodes: T[], keywords: string[], enableFuzzy: boolean): T[] {
+  if (nodes.length <= 1) return nodes;
+  const rels = nodes.map((n) => Number((n as { metadata?: { relativity?: number } }).metadata?.relativity ?? 0));
+  const kws = nodes.map((n) =>
+    keywordMatchScore(
+      (n as { memory?: string }).memory ?? "",
+      keywords,
+      (n as { metadata?: Record<string, unknown> }).metadata,
+      enableFuzzy
+    )
+  );
+  const relMin = Math.min(...rels);
+  const relRange = Math.max(...rels) - relMin || 1;
+  const kwMax = Math.max(...kws) || 1;
+  return nodes
+    .map((n, i) => ({
+      n,
+      s: REL_WEIGHT * ((rels[i] - relMin) / relRange) + KW_WEIGHT * (kws[i] / kwMax),
+    }))
+    .sort((a, b) => b.s - a.s)
+    .map((x) => x.n);
+}
+
 export function applyKeywordRerank(data: SearchData, query: string, enableFuzzy = true): SearchData {
   const keywords = extractKeywords(query);
   if (keywords.length === 0) return data;
@@ -117,17 +147,9 @@ export function applyKeywordRerank(data: SearchData, query: string, enableFuzzy 
     const memData = cubeData.memories;
 
     if (memData && !Array.isArray(memData) && memData.nodes) {
-      memData.nodes = [...memData.nodes].sort((a, b) => {
-        const scoreA = (a.metadata?.relativity ?? 0) + keywordMatchScore(a.memory ?? "", keywords, a.metadata, enableFuzzy);
-        const scoreB = (b.metadata?.relativity ?? 0) + keywordMatchScore(b.memory ?? "", keywords, b.metadata, enableFuzzy);
-        return scoreB - scoreA;
-      });
+      memData.nodes = rerankByRelevanceAndKeywords(memData.nodes, keywords, enableFuzzy);
     } else if (Array.isArray(memData)) {
-      memData.sort((a, b) => {
-        const scoreA = (a.metadata?.relativity ?? 0) + keywordMatchScore(a.memory ?? "", keywords, a.metadata, enableFuzzy);
-        const scoreB = (b.metadata?.relativity ?? 0) + keywordMatchScore(b.memory ?? "", keywords, b.metadata, enableFuzzy);
-        return scoreB - scoreA;
-      });
+      cubeData.memories = rerankByRelevanceAndKeywords(memData, keywords, enableFuzzy);
     }
   }
 

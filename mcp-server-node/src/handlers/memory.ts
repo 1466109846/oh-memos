@@ -8,7 +8,8 @@ import * as crypto from "crypto";
 import { MEMOS_URL, MEMOS_USER, logger } from "../config.js";
 import { apiCallWithRetry } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
-import { formatMemoriesForDisplay } from "../formatters.js";
+// formatMemoriesForDisplay intentionally not imported here — list output is built
+// from the truncated allMemories in handleMemosList (avoids printing the full cube).
 import {
   COMPACTION_THRESHOLD,
   PREVIEW_COUNT,
@@ -139,9 +140,10 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
     user_id: MEMOS_USER,
     mem_cube_id: cubeId,
   };
-  if (!memoryType) {
-    params.limit = limit;
-  }
+  // Always cap the pull. When filtering by memory_type we need a larger sample
+  // (the API filters by internal type, not MCP type), but never the whole cube —
+  // pulling everything blew a limit=5 request up to ~1.8M tokens on large cubes.
+  params.limit = memoryType ? Math.max(limit * 20, 200) : limit;
 
   const result = await apiCallWithRetry("GET", `${MEMOS_URL}/memories`, cubeId, { params }, ensureCubeRegistered);
 
@@ -150,8 +152,9 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
     let allMemories = extractMemoriesFromData(resultData);
 
     if (memoryType) {
-      allMemories = allMemories.filter((m) => extractMcpType(m) === memoryType).slice(0, limit);
+      allMemories = allMemories.filter((m) => extractMcpType(m) === memoryType);
     }
+    allMemories = allMemories.slice(0, limit); // always bound output to the requested limit
 
     const totalCount = allMemories.length;
 
@@ -168,8 +171,20 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
       return [{ type: "text", text }];
     }
 
-    const formatted = formatMemoriesForDisplay(resultData);
-    return [{ type: "text", text: formatted }];
+    // Non-compact path: render ONLY the filtered+truncated allMemories.
+    // (Previously this fell back to formatMemoriesForDisplay(resultData) = the full
+    // untrimmed pull, which is how a limit=5 request printed the entire cube.)
+    if (totalCount === 0) {
+      return [{ type: "text", text: `## Cube: ${cubeId}\n\nNo memories${memoryType ? ` of type ${memoryType}` : ""} found.` }];
+    }
+    const header = memoryType
+      ? `## Cube: ${cubeId} — type=${memoryType} (${totalCount})`
+      : `## Cube: ${cubeId} (${totalCount})`;
+    const lines = allMemories.map((m, i) => {
+      const mm = toMinimal(m);
+      return `${i + 1}. [${mm.memoryType}] ${mm.summary}\n   ID: \`${mm.id}\``;
+    });
+    return [{ type: "text", text: [header, "", ...lines].join("\n\n") }];
   } else if (result.data) {
     return apiErrorResponse("List", String((result.data as Record<string, unknown>).message ?? "Unknown error"));
   } else {

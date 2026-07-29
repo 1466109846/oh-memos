@@ -531,7 +531,7 @@ class APIConfig:
                     "distance_metric": "cosine",
                     # Only set host/port if QDRANT_URL is not provided (prioritize cloud)
                     "host": None if os.getenv("QDRANT_URL") else os.getenv("QDRANT_HOST", "localhost"),
-                    "port": None if os.getenv("QDRANT_URL") else int(os.getenv("QDRANT_PORT", "6333")),
+                    "port": None if os.getenv("QDRANT_URL") else int(os.getenv("QDRANT_PORT", "16333")),
                     "path": os.getenv("QDRANT_PATH"),
                     "url": os.getenv("QDRANT_URL"),
                     "api_key": os.getenv("QDRANT_API_KEY"),

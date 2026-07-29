@@ -1,0 +1,4 @@
+# backups 内含删除前自动导出的记忆(可能含敏感内容),不纳入版本控制
+backups/
+__pycache__/
+*.pyc

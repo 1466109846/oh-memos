@@ -51,6 +51,10 @@ class Searcher:
     ):
         self.graph_store = graph_store
         self.embedder = embedder
+        # Small per-searcher LRU for query embeddings: repeated/similar searches
+        # re-embed the same short query text via a remote API on every call otherwise.
+        self._embed_cache: dict[str, list[float]] = {}
+        self._embed_cache_cap = 128
         self.llm = dispatcher_llm
 
         self.task_goal_parser = TaskGoalParser(dispatcher_llm)
@@ -238,7 +242,7 @@ class Searcher:
         # fine mode will trigger initial embedding search
         if mode == "fine_old":
             logger.info("[SEARCH] Fine mode: embedding search")
-            query_embedding = self.embedder.embed([query])[0]
+            query_embedding = self._embed_cached([query])[0]
 
             # retrieve related nodes by embedding
             related_nodes = [
@@ -286,9 +290,19 @@ class Searcher:
         query = parsed_goal.rephrased_query or query
         # if goal has extra memories, embed them too
         if parsed_goal.memories:
-            query_embedding = self.embedder.embed(list({query, *parsed_goal.memories}))
+            query_embedding = self._embed_cached(list({query, *parsed_goal.memories}))
 
         return parsed_goal, query_embedding, context, query
+
+    def _embed_cached(self, texts: list[str]) -> list[list[float]]:
+        """Embed texts, serving repeats from a small LRU (queries recur often)."""
+        missing = [t for t in texts if t not in self._embed_cache]
+        if missing:
+            for t, vec in zip(missing, self.embedder.embed(missing)):
+                if len(self._embed_cache) >= self._embed_cache_cap:
+                    self._embed_cache.pop(next(iter(self._embed_cache)))
+                self._embed_cache[t] = vec
+        return [self._embed_cache[t] for t in texts]
 
     @timed
     def _retrieve_paths(

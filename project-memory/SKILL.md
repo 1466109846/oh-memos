@@ -120,9 +120,9 @@ memos_save(content="...", memory_type="FEATURE", cube_id="dev_cube")
 |------|-------------|---------|
 | `memos_context_resume` | **Context compacted or session start** | `project_path: "/mnt/g/Cyber/AudioCraft Studio"` |
 | `memos_search` | Find related memories, solutions, patterns | `query: "ERROR_PATTERN ModuleNotFoundError"` |
-| `memos_search_context` | **Smart search with conversation context** | `query: "what was the solution?"` |
+| `memos_search_context` | Search + client-side intent/temporal boosting (pass recent messages as `context`) | `query: "what was the solution?"` |
 | `memos_save` | Record important information | `content: "Fixed X by Y", memory_type: "BUGFIX"` |
-| `memos_list` | See all memories in project | `cube_id: "dev_cube", limit: 10` |
+| `memos_list` | See all memories in project | `project_path: "/mnt/g/Cyber/AudioCraft Studio", limit: 10` |
 | `memos_list_cubes` | **Discover available cubes** | `include_status: true` |
 | `memos_suggest` | Get search suggestions | `context: "Connection refused error"` |
 | `memos_get_graph` | View dependency/causal relationships | `query: "Neo4j"` → shows CAUSE/RELATE/CONFLICT |
@@ -415,7 +415,7 @@ The following scripts in `scripts/` folder still work but MCP is preferred:
 | `MEMOS_URL` | `http://localhost:18000` | MemOS API base URL |
 | `MEMOS_USER` | `dev_user` | Default user ID |
 | `MEMOS_DEFAULT_CUBE` | `dev_cube` | Default memory cube ID |
-| `MEMOS_CUBES_DIR` | `G:/test/MemOS/data/memos_cubes` | Cube storage (for auto-registration) |
+| `MEMOS_CUBES_DIR` | `G:/test/oh-memos/data/oh-memos_cubes` | Cube storage (for auto-registration) |
 | `NEO4J_HTTP_URL` | `http://localhost:7474/db/neo4j/tx/commit` | Neo4j HTTP endpoint |
 | `NEO4J_USER` | `neo4j` | Neo4j username |
 | `NEO4J_PASSWORD` | `12345678` | Neo4j password |
@@ -459,7 +459,7 @@ If you see "Cube Registration Failed" error:
 # Manual registration (fallback)
 curl -X POST "http://localhost:18000/mem_cubes" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"dev_user","mem_cube_name_or_path":"G:/test/MemOS/data/memos_cubes/dev_cube"}'
+  -d '{"user_id":"dev_user","mem_cube_name_or_path":"G:/test/oh-memos/data/oh-memos_cubes/dev_cube"}'
 ```
 
 ---

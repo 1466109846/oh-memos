@@ -62,7 +62,7 @@ echo        [OK] Python %PYVER% (%ENV_TYPE%)
 
 :: Start Qdrant (silent)
 echo  [2/4] Starting Qdrant...
-netstat -ano 2>nul | findstr ":6333 " | findstr "LISTENING" >nul 2>&1
+netstat -ano 2>nul | findstr ":16333 " | findstr "LISTENING" >nul 2>&1
 if !errorlevel! NEQ 0 (
     if exist "%QDRANT_HOME%\qdrant.exe" (
         powershell -WindowStyle Hidden -Command "Start-Process -FilePath '%QDRANT_HOME%\qdrant.exe' -WorkingDirectory '%QDRANT_HOME%' -WindowStyle Hidden" >nul 2>&1

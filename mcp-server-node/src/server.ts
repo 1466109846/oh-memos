@@ -104,10 +104,34 @@ async function backgroundInit(): Promise<void> {
 // Run Server
 // ============================================================================
 
+/**
+ * Some MCP clients JSON-encode `params.arguments` instead of sending an object,
+ * which the SDK rejects during validation ("expected record, received string")
+ * before any tool handler runs. Normalize those requests at the transport
+ * boundary so a client quirk doesn't make every tool call fail.
+ */
+function tolerateStringArguments(transport: StdioServerTransport): void {
+  const downstream = transport.onmessage?.bind(transport);
+  if (!downstream) return;
+  transport.onmessage = (msg: unknown): void => {
+    try {
+      const m = msg as { method?: string; params?: { arguments?: unknown } };
+      if (m?.method === "tools/call" && typeof m.params?.arguments === "string") {
+        const raw = m.params.arguments.trim();
+        m.params.arguments = raw ? JSON.parse(raw) : {};
+        logger.warning("Client sent tools/call arguments as a JSON string; parsed it into an object");
+      }
+    } catch (err) {
+      logger.warning(`Could not normalize string tools/call arguments: ${err}`);
+    }
+    downstream(msg as never);
+  };
+}
+
 export async function runServer(): Promise<void> {
   const server = new McpServer({
     name: "memos-memory",
-    version: "1.0.0",
+    version: "1.0.1",
   });
 
   registerTools(server);
@@ -117,6 +141,9 @@ export async function runServer(): Promise<void> {
   // Connect FIRST (completes MCP handshake immediately),
   // then do background init to prevent Claude Code timeout.
   await server.connect(transport);
+  // Must run after connect(): the SDK installs its own onmessage there, and we
+  // wrap it so malformed-but-recoverable requests are fixed before validation.
+  tolerateStringArguments(transport);
 
   // Background init — don't await
   backgroundInit().catch((err) => {

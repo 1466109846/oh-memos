@@ -53,7 +53,7 @@ async def _get_temporal_memories(
 
     Args:
         client: httpx client
-        cube_id: Memory cube ID (used for logging, actual filter uses MEMOS_USER)
+        cube_id: Memory cube ID (used as the user_name filter, matching how memories are stored)
         top_k: Number of results
         time_window_hours: Optional time window filter (last N hours)
 
@@ -73,7 +73,7 @@ async def _get_temporal_memories(
         AND n.updated_at >= datetime() - duration({{hours: {time_window_hours}}})
         """
 
-    # Use MEMOS_USER as the user_name filter (consistent with how memories are stored)
+    # Filter by cube_id: memories are stored with user_name = cube_id (NOT MEMOS_USER)
     # Note: status is 'activated' in MemOS tree_text mode (not 'LongTermMemory')
     cypher_query = f"""
     MATCH (n:Memory)
@@ -93,7 +93,7 @@ async def _get_temporal_memories(
             json={
                 "statements": [{
                     "statement": cypher_query,
-                    "parameters": {"user_name": MEMOS_USER, "top_k": top_k}
+                    "parameters": {"user_name": cube_id, "top_k": top_k}
                 }]
             },
             auth=neo4j_auth

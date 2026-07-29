@@ -14,7 +14,7 @@ def test_default_config_values():
     assert config.api_url == "http://localhost:18000"
     assert config.neo4j_uri == "bolt://localhost:7687"
     assert config.qdrant_host == "localhost"
-    assert config.qdrant_port == 6333
+    assert config.qdrant_port == 16333
 
 
 def test_save_and_load_config():

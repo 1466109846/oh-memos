@@ -608,7 +608,7 @@ async def startup_auto_register():
 
     # Wait for Qdrant to be ready
     qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-    qdrant_port = os.environ.get("QDRANT_PORT", "6333")
+    qdrant_port = os.environ.get("QDRANT_PORT", "16333")
     qdrant_health_url = f"http://{qdrant_host}:{qdrant_port}/"
     qdrant_ready = False
     import httpx as _httpx
@@ -764,6 +764,11 @@ class SearchRequest(BaseRequest):
         None,
         description="List of cube IDs to search in",
         json_schema_extra={"example": ["cube123", "cube456"]},
+    )
+    top_k: int | None = Field(
+        None,
+        description="Maximum number of results to return. Falls back to the server default when omitted.",
+        json_schema_extra={"example": 10},
     )
 
 
@@ -1021,6 +1026,7 @@ def search_memories(search_req: SearchRequest):
         query=search_req.query,
         user_id=search_req.user_id,
         install_cube_ids=search_req.install_cube_ids,
+        top_k=search_req.top_k,
     )
     return SearchResponse(message="Search completed successfully", data=result)
 
@@ -1382,6 +1388,34 @@ async def value_error_handler(request: Request, exc: ValueError):
         status_code=400,
         content={"code": 400, "message": str(exc), "data": None},
     )
+
+
+try:
+    from neo4j.exceptions import ServiceUnavailable as _Neo4jServiceUnavailable
+
+    @app.exception_handler(_Neo4jServiceUnavailable)
+    async def neo4j_unavailable_handler(request: Request, exc: _Neo4jServiceUnavailable):
+        """Return 503 (not a raw 500) when the Neo4j graph database is unreachable.
+
+        The graph store hard-fails with ServiceUnavailable / WinError 10061 when Neo4j
+        is down or still booting. Surface that as a clear, retryable 503 instead of
+        leaking a stack trace to the client.
+        """
+        logger.error(f"Neo4j graph database unavailable: {exc}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": 503,
+                "message": (
+                    "Graph database (Neo4j) is unavailable. Make sure it is running and "
+                    "reachable (e.g. scripts/local/start_db.bat), then retry."
+                ),
+                "data": None,
+            },
+        )
+except ImportError:
+    # neo4j is an optional backend (not installed in general_text / vector-only mode).
+    logger.debug("neo4j not installed; skipping ServiceUnavailable exception handler")
 
 
 @app.exception_handler(Exception)
