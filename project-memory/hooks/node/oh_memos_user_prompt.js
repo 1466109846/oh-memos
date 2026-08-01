@@ -109,7 +109,7 @@ function detectIntents(prompt) {
   if (relationPatterns.some(p => p.test(prompt))) {
     intents.push({
       type: 'relationship_query',
-      suggestion: '→ memos_get_graph or memos_trace_path for causal chains'
+      suggestion: '→ memos_graph(mode=related) or memos_graph(mode=path) for causal chains'
     });
   }
 
@@ -123,7 +123,7 @@ function detectIntents(prompt) {
   if (statusPatterns.some(p => p.test(prompt))) {
     intents.push({
       type: 'status_query',
-      suggestion: '→ memos_list or memos_get_stats for project overview'
+      suggestion: '→ memos_list or memos_admin(action=stats) for project overview'
     });
   }
 

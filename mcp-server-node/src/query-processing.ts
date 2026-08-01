@@ -248,7 +248,7 @@ export function extractMemoriesFromResponse(data: SearchData): MemoryNode[] {
 
 const VALID_MEMORY_TYPES = new Set([
   "BUGFIX", "ERROR_PATTERN", "DECISION", "GOTCHA", "CODE_PATTERN",
-  "CONFIG", "FEATURE", "MILESTONE", "PROGRESS",
+  "CONFIG", "FEATURE", "MILESTONE", "PROGRESS", "SYNTHESIS",
 ]);
 
 const TYPE_PATTERN = /^\[([A-Z_]+)\]/;

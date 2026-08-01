@@ -1,7 +1,7 @@
 /**
  * Graph Handlers
  *
- * memos_trace_path, memos_get_graph, memos_export_schema, memos_impact
+ * memos_graph(mode="path"), memos_graph(mode="related"), memos_graph(mode="schema"), memos_graph(mode="impact")
  */
 
 import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, logger, registeredCubes } from "../config.js";
@@ -57,7 +57,7 @@ async function neo4jQuery(
 }
 
 // ============================================================================
-// memos_trace_path
+// memos_graph(mode="path")
 // ============================================================================
 
 export async function handleMemosTracePath(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -71,8 +71,8 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
       "Both source_id and target_id are required",
       ERR_PARAM_MISSING,
       [
-        "Get node IDs from memos_search or memos_get_graph",
-        '`memos_trace_path(source_id="uuid-1", target_id="uuid-2")`',
+        'Get node IDs from memos_search or memos_graph(mode="related")',
+        '`memos_graph(mode="path", source_id="uuid-1", target_id="uuid-2")`',
       ]
     );
   }
@@ -204,7 +204,7 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
 }
 
 // ============================================================================
-// memos_get_graph
+// memos_graph(mode="related")
 // ============================================================================
 
 export async function handleMemosGetGraph(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -357,7 +357,7 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
 }
 
 // ============================================================================
-// memos_export_schema
+// memos_graph(mode="schema")
 // ============================================================================
 
 export async function handleMemosExportSchema(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -456,7 +456,7 @@ export async function handleMemosExportSchema(arguments_: Record<string, unknown
 }
 
 // ============================================================================
-// memos_impact
+// memos_graph(mode="impact")
 // ============================================================================
 
 export async function handleMemosImpact(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -469,8 +469,8 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
       "memory_id is required",
       ERR_PARAM_MISSING,
       [
-        "Get a memory_id from memos_search or memos_get_graph first",
-        '`memos_impact(memory_id="uuid-here")`',
+        'Get a memory_id from memos_search or memos_graph(mode="related") first',
+        '`memos_graph(mode="impact", memory_id="uuid-here")`',
       ]
     );
   }

@@ -16,6 +16,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
+    "schema:budget": "npm run build && node scripts/schema-budget.mjs --check",
+    "schema:budget:freeze": "npm run build && node scripts/schema-budget.mjs --write",
     "prepublishOnly": "npm run build"
   },
   "engines": {

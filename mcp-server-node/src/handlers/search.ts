@@ -1,7 +1,7 @@
 /**
  * Search Handlers
  *
- * memos_search, memos_search_context, memos_suggest, memos_context_resume
+ * memos_search, memos_search, memos_suggest, memos_context_resume
  */
 
 import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, logger } from "../config.js";
@@ -35,7 +35,7 @@ import {
 // Temporal Graph Query (Neo4j)
 // ============================================================================
 
-async function getTemporalMemories(
+export async function getTemporalMemories(
   cubeId: string,
   topK = 10,
   timeWindowHours?: number
@@ -175,6 +175,12 @@ function extractSearchMemories(data: SearchData): MemoryNode[] {
 // ============================================================================
 
 export async function handleMemosSearch(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+  // context provided → context-aware path (formerly the memos_search tool)
+  const ctx = arguments_.context;
+  if (Array.isArray(ctx) && ctx.length > 0) {
+    return handleMemosSearchContext(arguments_);
+  }
+
   const cubeId = getCubeIdFromArgs(arguments_);
   const rawQuery = String(arguments_.query ?? "");
   const topK = Number(arguments_.top_k ?? 10);
@@ -259,7 +265,7 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
 }
 
 // ============================================================================
-// memos_search_context
+// memos_search
 // ============================================================================
 
 export async function handleMemosSearchContext(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -345,19 +351,53 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
 // memos_suggest
 // ============================================================================
 
+/**
+ * The memory_type decision tree.
+ *
+ * This used to live in `memos_save`'s description, where it was the single most
+ * expensive item on the tool surface (1214 B) — and it was paid on *every*
+ * turn, whether or not anything was ever saved. Here it is paid only when the
+ * model actually asks, which is precisely when it is useful. `memos_save` keeps
+ * a one-line type mapping plus a pointer to this tool.
+ */
+const MEMORY_TYPE_DECISION_TREE = [
+  "## 🧭 memory_type 决策树",
+  "",
+  "按优先级选择,PROGRESS 排在最后:",
+  "",
+  "- **ERROR_PATTERN** — 错误签名 + 解法(有通用复用价值,换个项目也可能撞上)",
+  "- **BUGFIX** — 本项目一次性的缺陷修复,含成因与解法",
+  "- **DECISION** — 架构或设计选择,**必须写明理由**",
+  "- **GOTCHA** — 非显而易见的陷阱或绕行方案",
+  "- **CODE_PATTERN** — 可复用的代码模板",
+  "- **CONFIG** — 环境或配置变更",
+  "- **FEATURE** — 新增的功能",
+  "- **MILESTONE** — 重要的阶段性成果",
+  "- **SYNTHESIS** — 由 memos_think 证据合成的答案页(二手综合,不用于记录一手事实)",
+  "- **PROGRESS** — **仅用于纯进度更新**;禁止包含错误解决方案、技术决策、陷阱警告",
+  "",
+  "拿不准时的判据:这条记忆将来会被谁、在什么处境下搜到?",
+  "按那个处境选类型,而不是按写它时的心情。",
+].join("\n");
+
 export async function handleMemosSuggest(arguments_: Record<string, unknown>): Promise<TextContent[]> {
   const context = String(arguments_.context ?? "");
   const suggestions = suggestSearchQueries(context);
 
+  const parts: string[] = [];
+
   if (suggestions.length > 0) {
-    const result = ["## 🔍 Suggested Searches\n", "Based on your context, try these searches:\n"];
+    parts.push("## 🔍 Suggested Searches\n", "Based on your context, try these searches:\n");
     for (let i = 0; i < suggestions.length; i++) {
-      result.push(`${i + 1}. \`${suggestions[i]}\``);
+      parts.push(`${i + 1}. \`${suggestions[i]}\``);
     }
-    return [{ type: "text", text: result.join("\n") }];
   } else {
-    return [{ type: "text", text: "No specific suggestions. Try searching with keywords from your context." }];
+    parts.push("No specific suggestions. Try searching with keywords from your context.");
   }
+
+  parts.push("", "---", "", MEMORY_TYPE_DECISION_TREE);
+
+  return [{ type: "text", text: parts.join("\n") }];
 }
 
 // ============================================================================

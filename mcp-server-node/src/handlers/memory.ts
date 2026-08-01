@@ -1,7 +1,7 @@
 /**
  * Memory Handlers
  *
- * memos_save, memos_list_v2, memos_get, memos_get_stats
+ * memos_save, memos_list_v2, memos_get, memos_admin(action="stats")
  */
 
 import * as crypto from "crypto";
@@ -83,6 +83,7 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
         "New feature -> `FEATURE`",
         "Major achievement -> `MILESTONE`",
         "Pure progress update -> `PROGRESS`",
+        "Synthesized answer from memos_think evidence -> `SYNTHESIS`",
         'Example: `memos_save(content="...", memory_type="BUGFIX")`',
       ]
     );
@@ -279,7 +280,7 @@ function notFoundText(memoryId: string): string {
 }
 
 // ============================================================================
-// memos_get_stats
+// memos_admin(action="stats")
 // ============================================================================
 
 export async function handleMemosGetStats(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -307,6 +308,7 @@ export async function handleMemosGetStats(arguments_: Record<string, unknown>): 
       BUGFIX: "🐛", ERROR_PATTERN: "🔴", DECISION: "📋",
       GOTCHA: "⚠️", CODE_PATTERN: "📝", CONFIG: "⚙️",
       FEATURE: "✨", MILESTONE: "🎯", PROGRESS: "📊", INFERRED: "🔗",
+      SYNTHESIS: "🧠",
     };
 
     const result_lines = [`## 📊 Memory Stats: ${cubeId}`, `Total Memories: **${total}**`, ""];

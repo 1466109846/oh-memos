@@ -298,11 +298,9 @@ Add to `~/.claude/settings.json`:
         "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes"
       },
       "alwaysAllow": [
-        "memos_context_resume", "memos_search", "memos_search_context",
-        "memos_save", "memos_list_v2", "memos_get", "memos_suggest",
-        "memos_list_cubes", "memos_get_stats", "memos_get_graph",
-        "memos_trace_path", "memos_export_schema", "memos_register_cube",
-        "memos_create_user", "memos_validate_cubes", "memos_impact", "memos_calendar"
+        "memos_context_resume", "memos_search", "memos_save",
+        "memos_list_v2", "memos_get", "memos_suggest",
+        "memos_think", "memos_graph", "memos_admin"
       ]
     }
   }
@@ -341,22 +339,15 @@ AI uses these tools **automatically** when MCP is configured via [`oh-memos-mcp`
 | Tool | Function |
 |------|----------|
 | `memos_context_resume` | Recover context after compaction (recent 24h memories) |
-| `memos_search` | Search project memories (auto-compresses >15 results) |
-| `memos_search_context` | Context-aware search with LLM intent analysis |
-| `memos_save` | Save memories with explicit type (BUGFIX, DECISION, MILESTONE...) |
+| `memos_search` | Search project memories; pass `context` (recent turns) for LLM intent-aware search |
+| `memos_save` | Save memories with explicit type (BUGFIX, DECISION, SYNTHESIS...) |
 | `memos_list_v2` | List all memories (with compression) |
 | `memos_get` | Get full memory details by ID |
-| `memos_suggest` | Smart search query suggestions |
-| `memos_get_graph` | Query knowledge graph relationships |
-| `memos_trace_path` | Trace reasoning paths between two memories |
-| `memos_impact` | Forward blast radius — what did this memory cause downstream |
-| `memos_export_schema` | Export knowledge graph schema and statistics |
-| `memos_get_stats` | Memory type distribution statistics |
-| `memos_list_cubes` | List all available memory cubes |
-| `memos_register_cube` | Register a cube when auto-registration fails |
-| `memos_create_user` | Create a MemOS user |
-| `memos_validate_cubes` | Validate and fix cube configurations |
-| `memos_calendar` | Calendar view (project timeline / student mode) |
+| `memos_suggest` | Smart search query suggestions + memory_type decision tree |
+| `memos_think` | Evidence pack for a question: retrieval + contradiction/staleness flags + gap analysis; caller synthesizes and may persist as SYNTHESIS |
+| `memos_graph` | Knowledge graph queries — `mode`: related / path / impact / schema |
+| `memos_admin` | Maintenance — `action`: list_cubes / register_cube / create_user / validate_cubes / stats / calendar |
+| `memos_export_wiki` | Export a cube as an interlinked markdown wiki (git-friendly) |
 | `memos_delete` | Delete memories (disabled by default) |
 
 > 📖 MCP configuration guide: [`mcp-server-node/README.md`](mcp-server-node/README.md)

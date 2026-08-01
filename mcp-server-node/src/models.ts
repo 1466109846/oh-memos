@@ -32,6 +32,7 @@ export function getTypeIcon(memoryType: string): string {
     MILESTONE: "🎯",
     PROGRESS: "📊",
     INFERRED: "🔗",
+    SYNTHESIS: "🧠",
   };
   return icons[memoryType] ?? "📌";
 }

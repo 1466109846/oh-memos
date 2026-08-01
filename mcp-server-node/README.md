@@ -131,21 +131,21 @@ npx oh-memos-mcp
       "alwaysAllow": [
         "memos_context_resume",
         "memos_search",
-        "memos_search_context",
+        "memos_search",
         "memos_save",
         "memos_list_v2",
         "memos_get",
         "memos_suggest",
-        "memos_list_cubes",
-        "memos_get_stats",
-        "memos_get_graph",
-        "memos_trace_path",
-        "memos_export_schema",
-        "memos_register_cube",
-        "memos_create_user",
-        "memos_validate_cubes",
-        "memos_impact",
-        "memos_calendar",
+        "memos_admin(action=list_cubes)",
+        "memos_admin(action=stats)",
+        "memos_graph(mode=related)",
+        "memos_graph(mode=path)",
+        "memos_graph(mode=schema)",
+        "memos_admin(action=register_cube)",
+        "memos_admin(action=create_user)",
+        "memos_admin(action=validate_cubes)",
+        "memos_graph(mode=impact)",
+        "memos_admin(action=calendar)",
         "memos_delete"
       ]
     }
@@ -183,21 +183,21 @@ npx oh-memos-mcp
 |------|-------------|
 | `memos_save` | Save memories with explicit type (BUGFIX, DECISION, MILESTONE…) |
 | `memos_search` | Semantic search with keyword reranking |
-| `memos_search_context` | Context-aware search with conversation history |
+| `memos_search` | Context-aware search with conversation history |
 | `memos_list_v2` | List memories with auto-compaction |
 | `memos_get` | Get full memory details by ID |
-| `memos_get_stats` | Memory type distribution statistics |
+| `memos_admin(action=stats)` | Memory type distribution statistics |
 | `memos_suggest` | Smart search query suggestions |
 | `memos_context_resume` | Recover project context after compaction |
-| `memos_trace_path` | Trace reasoning paths between two memories |
-| `memos_get_graph` | Query knowledge graph with relationships |
-| `memos_export_schema` | Export graph schema and statistics |
-| `memos_impact` | Forward blast radius — what did this memory cause? |
-| `memos_calendar` | Calendar view (project timeline / student mode) |
-| `memos_list_cubes` | List all available memory cubes |
-| `memos_register_cube` | Register a cube with the API |
-| `memos_create_user` | Create a MemOS user |
-| `memos_validate_cubes` | Validate and fix cube namespace configs |
+| `memos_graph(mode=path)` | Trace reasoning paths between two memories |
+| `memos_graph(mode=related)` | Query knowledge graph with relationships |
+| `memos_graph(mode=schema)` | Export graph schema and statistics |
+| `memos_graph(mode=impact)` | Forward blast radius — what did this memory cause? |
+| `memos_admin(action=calendar)` | Calendar view (project timeline / student mode) |
+| `memos_admin(action=list_cubes)` | List all available memory cubes |
+| `memos_admin(action=register_cube)` | Register a cube with the API |
+| `memos_admin(action=create_user)` | Create a MemOS user |
+| `memos_admin(action=validate_cubes)` | Validate and fix cube namespace configs |
 | `memos_delete` | Delete memories (disabled by default, set `MEMOS_ENABLE_DELETE=true`) |
 
 ---

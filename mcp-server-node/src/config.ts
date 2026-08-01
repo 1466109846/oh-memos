@@ -207,6 +207,7 @@ export const MEMORY_TYPES = new Set([
   "CODE_PATTERN",
   "GOTCHA",
   "PROGRESS",
+  "SYNTHESIS",
 ]);
 
 // ============================================================================

@@ -12,7 +12,7 @@
 如果你想运行 `mkdir -p .../memory` 或用 `Write` 创建记忆文件 → **停下来**,改用 MCP oh-memos 工具。
 
 ### Tools Available:
-`oh-memos_context_resume`, `oh-memos_search`, `oh-memos_save`, `oh-memos_list_v2`, `oh-memos_suggest`, `oh-memos_get_stats`, `oh-memos_get_graph`, `oh-memos_trace_path`, `oh-memos_export_schema`, `oh-memos_list_cubes`, `oh-memos_register_cube`
+`oh-memos_context_resume`, `oh-memos_search`(可带 `context` 做上下文感知检索), `oh-memos_save`, `oh-memos_list_v2`, `oh-memos_get`, `oh-memos_suggest`, `oh-memos_think`(证据包+缺口分析), `oh-memos_graph`(`mode`: related/path/impact/schema), `oh-memos_admin`(`action`: list_cubes/register_cube/create_user/validate_cubes/stats/calendar), `oh-memos_export_wiki`
 
 ### Cube Routing (CRITICAL)
 
@@ -43,7 +43,7 @@ oh-memos_save(content="...", cube_id="dev_cube")  # ✗
 
 2. **During Development (Dependency & Logic)**:
     - 识别当前项目的技术栈版本。
-    - 如果发现现有记忆与当前代码冲突,使用 `oh-memos_get_graph` 梳理关系。
+    - 如果发现现有记忆与当前代码冲突,使用 `oh-memos_graph`(mode=related)梳理关系。
 
 3. **After Coding (Knowledge Consolidation)**:
     - 完成功能模块、修复 Bug 或达成技术决策后,**必须**使用 `oh-memos_save` 将关键信息写入记忆。

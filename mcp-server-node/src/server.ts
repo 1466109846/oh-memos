@@ -8,8 +8,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { MEMOS_DEFAULT_CUBE, MEMOS_ENABLE_DELETE, logger } from "./config.js";
 import { waitForApiReady } from "./api-client.js";
 import { ensureCubeRegistered } from "./cube-manager.js";
-import { toolSchemas } from "./tools-registry.js";
+import { toolSchemas, toolAnnotations } from "./tools-registry.js";
 import { dispatchTool, handleApiUnreachable } from "./handlers/index.js";
+import { recordRawArgKeys } from "./handlers/arg-contract.js";
 import type { TextContent } from "./types.js";
 
 // ============================================================================
@@ -29,6 +30,12 @@ function registerTools(server: McpServer): void {
       {
         description: schema.description,
         inputSchema: schema.inputSchema,
+        // Lets a client tell retrieval from mutation without parsing prose.
+        // The practical win is plan mode: without readOnlyHint every
+        // `memos_search` raises a permission prompt, and CLAUDE.md asks for a
+        // search before coding — so the friction was quietly training the
+        // rule away.
+        annotations: toolAnnotations[name],
       },
       async (args: Record<string, unknown>) => {
         try {
@@ -109,17 +116,24 @@ async function backgroundInit(): Promise<void> {
  * which the SDK rejects during validation ("expected record, received string")
  * before any tool handler runs. Normalize those requests at the transport
  * boundary so a client quirk doesn't make every tool call fail.
+ *
+ * This is also the last point where the arguments are still intact: zod strips
+ * undeclared keys immediately after, without a trace. So the keys are recorded
+ * here (by request id) for `checkArgContract` to report on later.
  */
 function tolerateStringArguments(transport: StdioServerTransport): void {
   const downstream = transport.onmessage?.bind(transport);
   if (!downstream) return;
   transport.onmessage = (msg: unknown): void => {
     try {
-      const m = msg as { method?: string; params?: { arguments?: unknown } };
-      if (m?.method === "tools/call" && typeof m.params?.arguments === "string") {
-        const raw = m.params.arguments.trim();
-        m.params.arguments = raw ? JSON.parse(raw) : {};
-        logger.warning("Client sent tools/call arguments as a JSON string; parsed it into an object");
+      const m = msg as { id?: unknown; method?: string; params?: { arguments?: unknown } };
+      if (m?.method === "tools/call") {
+        if (typeof m.params?.arguments === "string") {
+          const raw = m.params.arguments.trim();
+          m.params.arguments = raw ? JSON.parse(raw) : {};
+          logger.warning("Client sent tools/call arguments as a JSON string; parsed it into an object");
+        }
+        recordRawArgKeys(m.id, m.params?.arguments);
       }
     } catch (err) {
       logger.warning(`Could not normalize string tools/call arguments: ${err}`);

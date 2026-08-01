@@ -1,7 +1,7 @@
 /**
  * Calendar Handler
  *
- * memos_calendar - project mode and student mode
+ * memos_admin(action="calendar") - project mode and student mode
  */
 
 import { MEMOS_URL, MEMOS_USER } from "../config.js";
@@ -215,7 +215,7 @@ function formatCalendarOutput(
 }
 
 // ============================================================================
-// memos_calendar
+// memos_admin(action="calendar")
 // ============================================================================
 
 export async function handleMemosCalendar(arguments_: Record<string, unknown>): Promise<TextContent[]> {

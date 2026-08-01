@@ -1,8 +1,8 @@
 /**
  * Admin Handlers
  *
- * memos_list_cubes, memos_register_cube, memos_create_user,
- * memos_validate_cubes, memos_delete
+ * memos_admin(action="list_cubes"), memos_admin(action="register_cube"), memos_admin(action="create_user"),
+ * memos_admin(action="validate_cubes"), memos_delete
  */
 
 import * as fs from "fs";
@@ -40,7 +40,7 @@ import {
 } from "./utils.js";
 
 // ============================================================================
-// memos_list_cubes
+// memos_admin(action="list_cubes")
 // ============================================================================
 
 export async function handleMemosListCubes(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -75,13 +75,13 @@ export async function handleMemosListCubes(arguments_: Record<string, unknown>):
   }
 
   result.push(`\n**Default cube**: \`${MEMOS_DEFAULT_CUBE}\``);
-  result.push("\n*Use `memos_list_cubes(include_status=True)` to check registration status.*");
+  result.push('\n*Use `memos_admin(action="list_cubes", include_status=true)` to check registration status.*');
 
   return [{ type: "text", text: result.join("\n") }];
 }
 
 // ============================================================================
-// memos_register_cube
+// memos_admin(action="register_cube")
 // ============================================================================
 
 export async function handleMemosRegisterCube(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -93,8 +93,8 @@ export async function handleMemosRegisterCube(arguments_: Record<string, unknown
       "cube_id parameter is required",
       ERR_PARAM_MISSING,
       [
-        "Use memos_list_cubes() to find available cubes",
-        '`memos_register_cube(cube_id="dev_cube")`',
+        'Use memos_admin(action="list_cubes") to find available cubes',
+        '`memos_admin(action="register_cube", cube_id="dev_cube")`',
       ]
     );
   }
@@ -163,7 +163,7 @@ export async function handleMemosRegisterCube(arguments_: Record<string, unknown
         if (errorMsg.toLowerCase().includes("reranker")) {
           hint = "Edit the cube's config.json and change `reranker.backend` to `http_bge` or `noop`.";
         } else if (errorMsg.toLowerCase().includes("user")) {
-          hint = "Use `memos_create_user` tool to create the user first.";
+          hint = 'Use `memos_admin(action="create_user")` to create the user first.';
         }
         return errorResponse(
           `Registration failed: ${errorMsg}`,
@@ -180,7 +180,7 @@ export async function handleMemosRegisterCube(arguments_: Record<string, unknown
 }
 
 // ============================================================================
-// memos_create_user
+// memos_admin(action="create_user")
 // ============================================================================
 
 export async function handleMemosCreateUser(arguments_: Record<string, unknown>): Promise<TextContent[]> {
@@ -226,7 +226,7 @@ export async function handleMemosCreateUser(arguments_: Record<string, unknown>)
 }
 
 // ============================================================================
-// memos_validate_cubes
+// memos_admin(action="validate_cubes")
 // ============================================================================
 
 export async function handleMemosValidateCubes(arguments_: Record<string, unknown>): Promise<TextContent[]> {

@@ -75,7 +75,7 @@ Intelligent project memory system powered by **MemOS MCP Server**. Use MCP tools
 
 ### 健康检查
 
-`memos_get_stats` 会在 PROGRESS 占比 >70% 时输出健康警告：
+`memos_admin(action=stats)` 会在 PROGRESS 占比 >70% 时输出健康警告：
 
 ```
 ⚠️ 健康警告: PROGRESS 类型占比过高 (>70%)
@@ -120,16 +120,16 @@ memos_save(content="...", memory_type="FEATURE", cube_id="dev_cube")
 |------|-------------|---------|
 | `memos_context_resume` | **Context compacted or session start** | `project_path: "/mnt/g/Cyber/AudioCraft Studio"` |
 | `memos_search` | Find related memories, solutions, patterns | `query: "ERROR_PATTERN ModuleNotFoundError"` |
-| `memos_search_context` | Search + client-side intent/temporal boosting (pass recent messages as `context`) | `query: "what was the solution?"` |
+| `memos_search` | Search + client-side intent/temporal boosting (pass recent messages as `context`) | `query: "what was the solution?"` |
 | `memos_save` | Record important information | `content: "Fixed X by Y", memory_type: "BUGFIX"` |
 | `memos_list` | See all memories in project | `project_path: "/mnt/g/Cyber/AudioCraft Studio", limit: 10` |
-| `memos_list_cubes` | **Discover available cubes** | `include_status: true` |
+| `memos_admin(action=list_cubes)` | **Discover available cubes** | `include_status: true` |
 | `memos_suggest` | Get search suggestions | `context: "Connection refused error"` |
-| `memos_get_graph` | View dependency/causal relationships | `query: "Neo4j"` → shows CAUSE/RELATE/CONFLICT |
-| `memos_trace_path` | **Trace paths between memories** | `source_id: "...", target_id: "..."` |
-| `memos_export_schema` | **View graph structure and health** | Shows node/edge counts, types, connectivity |
-| `memos_register_cube` | **Manual cube registration (fallback)** | `cube_id: "my_project_cube"` |
-| `memos_create_user` | **Create user (fallback)** | `user_id: "dev_user"` |
+| `memos_graph(mode=related)` | View dependency/causal relationships | `query: "Neo4j"` → shows CAUSE/RELATE/CONFLICT |
+| `memos_graph(mode=path)` | **Trace paths between memories** | `source_id: "...", target_id: "..."` |
+| `memos_graph(mode=schema)` | **View graph structure and health** | Shows node/edge counts, types, connectivity |
+| `memos_admin(action=register_cube)` | **Manual cube registration (fallback)** | `cube_id: "my_project_cube"` |
+| `memos_admin(action=create_user)` | **Create user (fallback)** | `user_id: "dev_user"` |
 | `getGraphData` (IPC) | **Renderer-side graph data fetch** | `projectId: "ddsp-svc-6.3"` (Desktop App Only) |
 
 ---
@@ -172,7 +172,7 @@ The `<KnowledgeGraph />` component (located in `renderer/components/memory/Knowl
 | Working with config file | `CONFIG {filename}` |
 | Opening file for editing | `{filename} gotcha` |
 
-### When to Get Graph (`memos_get_graph`) - NEW!
+### When to Get Graph (`memos_graph(mode=related)`) - NEW!
 
 | User Says / Context | Query | Returns |
 |---------------------|-------|---------|
@@ -190,7 +190,7 @@ The `<KnowledgeGraph />` component (located in `renderer/components/memory/Knowl
 [Neo4j启动失败, JAVA_HOME not set]
 ```
 
-### When to Trace Path (`memos_trace_path`) - NEW!
+### When to Trace Path (`memos_graph(mode=path)`) - NEW!
 
 | Scenario | Use Case |
 |----------|----------|
@@ -200,19 +200,19 @@ The `<KnowledgeGraph />` component (located in `renderer/components/memory/Knowl
 
 **Example:**
 ```
-memos_trace_path(source_id="uuid1", target_id="uuid2", max_depth=5)
+memos_graph(mode="path", source_id="uuid1", target_id="uuid2", max_depth=5)
 → [决策A] ──CAUSE──> [变更B] ──CAUSE──> [问题C]
 ```
 
-### When to List Cubes (`memos_list_cubes`) - NEW!
+### When to List Cubes (`memos_admin(action=list_cubes)`) - NEW!
 
 | Scenario | Action |
 |----------|--------|
-| 遇到 "cube not found" 错误 | `memos_list_cubes()` 查看可用 cubes |
-| 切换项目 | `memos_list_cubes(include_status=true)` 查看注册状态 |
+| 遇到 "cube not found" 错误 | `memos_admin(action="list_cubes")` 查看可用 cubes |
+| 切换项目 | `memos_admin(action="list_cubes", include_status=true)` 查看注册状态 |
 | 初始化项目 | 确认 cube 是否存在 |
 
-### When to Export Schema (`memos_export_schema`) - NEW!
+### When to Export Schema (`memos_graph(mode=schema)`) - NEW!
 
 | Scenario | What You Get |
 |----------|--------------|
@@ -349,22 +349,22 @@ Tags: gotcha, {category}
 │  Hit error       ───> memos_search    ───> Find ERROR_PATTERN   │
 │                       query: "ERROR_PATTERN {type}"             │
 │                                                                 │
-│  Need context    ───> memos_search_context ─> Smart search      │
+│  Need context    ───> memos_search ─> Smart search      │
 │                       with conversation history                 │
 │                                                                 │
-│  Need root cause ───> memos_get_graph ───> View CAUSE chain     │
+│  Need root cause ───> memos_graph(mode=related) ───> View CAUSE chain     │
 │                       query: "{error_keyword}"                  │
 │                                                                 │
-│  Trace path      ───> memos_trace_path ──> A→B→C chain          │
+│  Trace path      ───> memos_graph(mode=path) ──> A→B→C chain          │
 │                       source_id, target_id                      │
 │                                                                 │
-│  Check deps      ───> memos_get_graph ───> View relationships   │
+│  Check deps      ───> memos_graph(mode=related) ───> View relationships   │
 │                       query: "{component}"                      │
 │                                                                 │
-│  Cube not found  ───> memos_list_cubes ──> Discover cubes       │
+│  Cube not found  ───> memos_admin(action=list_cubes) ──> Discover cubes       │
 │                       include_status: true                      │
 │                                                                 │
-│  Graph health    ───> memos_export_schema > Stats & structure   │
+│  Graph health    ───> memos_graph(mode=schema) > Stats & structure   │
 │                                                                 │
 │  Solved error    ───> memos_save      ───> Save ERROR_PATTERN   │
 │                       memory_type: "ERROR_PATTERN"              │
@@ -431,7 +431,7 @@ The MCP server includes **smart cube management**:
 2. **Automatic Registration**: Cubes are auto-registered on first use
 3. **Path Verification**: Checks if cube directory exists before registration
 4. **Helpful Error Messages**: If a cube is not found and cannot be created, shows available cubes
-5. **Cube Discovery**: Use `memos_list_cubes` to see all available cubes
+5. **Cube Discovery**: Use `memos_admin(action=list_cubes)` to see all available cubes
 
 **How it works for new projects:**
 ```
@@ -451,7 +451,7 @@ Ready to use!
 - Cubes directory must be writable
 
 If you see "Cube Registration Failed" error:
-1. Use `memos_list_cubes()` to see available cubes
+1. Use `memos_admin(action="list_cubes")` to see available cubes
 2. Verify `dev_cube` exists as template
 3. Check cubes directory permissions
 
@@ -473,16 +473,16 @@ curl -X POST "http://localhost:18000/mem_cubes" \
 **Error**: `Cube 'xxx' not found` or `Cube not registered`
 
 **Recovery Steps** (all via MCP):
-1. `memos_list_cubes()` → See available cubes
-2. If cube exists but not registered: `memos_register_cube(cube_id="xxx")`
+1. `memos_admin(action="list_cubes")` → See available cubes
+2. If cube exists but not registered: `memos_admin(action="register_cube", cube_id="xxx")`
 3. If cube doesn't exist: Create cube directory with config.json, then register
 
 **Example**:
 ```
-memos_list_cubes(include_status=true)
+memos_admin(action="list_cubes", include_status=true)
 → Shows: dev_cube (registered), my_project (not registered)
 
-memos_register_cube(cube_id="my_project")
+memos_admin(action="register_cube", cube_id="my_project")
 → "Cube 'my_project' registered successfully"
 ```
 
@@ -491,7 +491,7 @@ memos_register_cube(cube_id="my_project")
 **Error**: `User 'xxx' does not exist`
 
 **Recovery Steps** (all via MCP):
-1. `memos_create_user(user_id="xxx")` → Create the user
+1. `memos_admin(action="create_user", user_id="xxx")` → Create the user
 2. Retry the original operation
 
 **Example**:
@@ -499,7 +499,7 @@ memos_register_cube(cube_id="my_project")
 memos_save(content="...", cube_id="my_cube")
 → Error: User 'dev_user' does not exist
 
-memos_create_user(user_id="dev_user")
+memos_admin(action="create_user", user_id="dev_user")
 → "User 'dev_user' created successfully"
 
 memos_save(content="...", cube_id="my_cube")
@@ -512,7 +512,7 @@ memos_save(content="...", cube_id="my_cube")
 
 **Recovery Steps**:
 1. Wait a moment and retry (API may be starting)
-2. Try a simpler operation first: `memos_list_cubes()`
+2. Try a simpler operation first: `memos_admin(action="list_cubes")`
 3. If persistent, the MemOS API service may need restart (outside MCP scope)
 
 ### Memory Not Found
@@ -521,8 +521,8 @@ memos_save(content="...", cube_id="my_cube")
 
 **Recovery Steps** (all via MCP):
 1. `memos_list(cube_id="xxx", limit=20)` → Check what memories exist
-2. `memos_list_cubes()` → Verify using correct cube_id
-3. `memos_search_context(query="...", context=[...])` → Use context-aware search
+2. `memos_admin(action="list_cubes")` → Verify using correct cube_id
+3. `memos_search(query="...", context=[...])` → Use context-aware search
 4. Try broader search terms or different memory types
 
 ### Save Failed
@@ -530,9 +530,9 @@ memos_save(content="...", cube_id="my_cube")
 **Error**: `Save operation failed`
 
 **Recovery Steps** (all via MCP):
-1. `memos_list_cubes(include_status=true)` → Check cube status
-2. If not registered: `memos_register_cube(cube_id="xxx")`
-3. If user error: `memos_create_user(user_id="xxx")`
+1. `memos_admin(action="list_cubes", include_status=true)` → Check cube status
+2. If not registered: `memos_admin(action="register_cube", cube_id="xxx")`
+3. If user error: `memos_admin(action="create_user", user_id="xxx")`
 4. Retry save operation
 
 ### Quick Recovery Flowchart
@@ -540,14 +540,14 @@ memos_save(content="...", cube_id="my_cube")
 ```
 Error occurred
     │
-    ├─ "Cube not found" ────────────> memos_list_cubes()
+    ├─ "Cube not found" ────────────> memos_admin(action="list_cubes")
     │                                      │
-    │                                      ├─ Found? → memos_register_cube()
+    │                                      ├─ Found? → memos_admin(action="register_cube")
     │                                      └─ Not found? → Create cube first
     │
-    ├─ "User does not exist" ───────> memos_create_user(user_id="xxx")
+    ├─ "User does not exist" ───────> memos_admin(action="create_user", user_id="xxx")
     │
-    ├─ "Save failed" ───────────────> memos_list_cubes(include_status=true)
+    ├─ "Save failed" ───────────────> memos_admin(action="list_cubes", include_status=true)
     │                                      │
     │                                      └─ Check cube/user, then retry
     │

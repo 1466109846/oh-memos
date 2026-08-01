@@ -1,11 +1,16 @@
 /**
  * Tool Handler Dispatcher
+ *
+ * Graph and admin operations are consolidated behind memos_graph(mode) and
+ * memos_admin(action): one schema on the tool surface, same handlers inside.
  */
 
 import { handleMemosSave, handleMemosList, handleMemosGet, handleMemosGetStats } from "./memory.js";
-import { handleMemosSearch, handleMemosSearchContext, handleMemosSuggest, handleMemosContextResume } from "./search.js";
+import { handleMemosSearch, handleMemosSuggest, handleMemosContextResume } from "./search.js";
 import { handleMemosTracePath, handleMemosGetGraph, handleMemosExportSchema, handleMemosImpact } from "./graph.js";
 import { handleMemosCalendar } from "./calendar.js";
+import { handleMemosThink } from "./think.js";
+import { handleMemosExportWiki } from "./wiki-export.js";
 import {
   handleMemosListCubes,
   handleMemosRegisterCube,
@@ -29,42 +34,57 @@ export async function dispatchTool(
       return handleMemosList(arguments_);
     case "memos_get":
       return handleMemosGet(arguments_);
-    case "memos_get_stats":
-      return handleMemosGetStats(arguments_);
 
     // Search tools
     case "memos_search":
       return handleMemosSearch(arguments_);
-    case "memos_search_context":
-      return handleMemosSearchContext(arguments_);
     case "memos_suggest":
       return handleMemosSuggest(arguments_);
     case "memos_context_resume":
       return handleMemosContextResume(arguments_);
+    case "memos_think":
+      return handleMemosThink(arguments_);
 
-    // Graph tools
-    case "memos_trace_path":
-      return handleMemosTracePath(arguments_);
-    case "memos_get_graph":
-      return handleMemosGetGraph(arguments_);
-    case "memos_export_schema":
-      return handleMemosExportSchema(arguments_);
-    case "memos_impact":
-      return handleMemosImpact(arguments_);
+    // Graph (consolidated)
+    case "memos_graph":
+      switch (String(arguments_.mode ?? "related")) {
+        case "path":
+          return handleMemosTracePath(arguments_);
+        case "impact":
+          return handleMemosImpact(arguments_);
+        case "schema":
+          return handleMemosExportSchema(arguments_);
+        default:
+          return handleMemosGetGraph(arguments_);
+      }
 
-    // Calendar
-    case "memos_calendar":
-      return handleMemosCalendar(arguments_);
+    // Wiki export
+    case "memos_export_wiki":
+      return handleMemosExportWiki(arguments_);
 
-    // Admin tools
-    case "memos_list_cubes":
-      return handleMemosListCubes(arguments_);
-    case "memos_register_cube":
-      return handleMemosRegisterCube(arguments_);
-    case "memos_create_user":
-      return handleMemosCreateUser(arguments_);
-    case "memos_validate_cubes":
-      return handleMemosValidateCubes(arguments_);
+    // Admin (consolidated)
+    case "memos_admin":
+      switch (String(arguments_.action ?? "")) {
+        case "list_cubes":
+          return handleMemosListCubes(arguments_);
+        case "register_cube":
+          return handleMemosRegisterCube(arguments_);
+        case "create_user":
+          return handleMemosCreateUser(arguments_);
+        case "validate_cubes":
+          return handleMemosValidateCubes(arguments_);
+        case "stats":
+          return handleMemosGetStats(arguments_);
+        case "calendar":
+          return handleMemosCalendar(arguments_);
+        default:
+          return errorResponse(
+            `Unknown admin action: ${String(arguments_.action ?? "(none)")}`,
+            undefined,
+            ["Valid actions: list_cubes, register_cube, create_user, validate_cubes, stats, calendar"]
+          );
+      }
+
     case "memos_delete":
       return handleMemosDelete(arguments_);
 

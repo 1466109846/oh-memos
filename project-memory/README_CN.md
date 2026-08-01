@@ -180,9 +180,9 @@ AI：[执行搜索...]
 | `memos_search` | 搜索记忆 | `query: "ERROR_PATTERN 连接失败"` |
 | `memos_save` | 保存记忆 | `content: "...", memory_type: "BUGFIX"` |
 | `memos_list` | 列出记忆 | `cube_id: "dev_cube", limit: 10` |
-| `memos_get_graph` | 查看关系图 | `query: "Neo4j"` |
-| `memos_trace_path` | 追溯因果链 | `source_id: "...", target_id: "..."` |
-| `memos_list_cubes` | 发现可用 cubes | `include_status: true` |
+| `memos_graph(mode=related)` | 查看关系图 | `query: "Neo4j"` |
+| `memos_graph(mode=path)` | 追溯因果链 | `source_id: "...", target_id: "..."` |
+| `memos_admin(action=list_cubes)` | 发现可用 cubes | `include_status: true` |
 
 ---
 
@@ -248,10 +248,10 @@ project-memory/
 
 ```bash
 # 使用 MCP 工具查看可用 cubes
-memos_list_cubes()
+memos_admin(action="list_cubes")
 
 # 手动注册
-memos_register_cube(cube_id="your_cube")
+memos_admin(action="register_cube", cube_id="your_cube")
 ```
 
 ### 记忆保存失败
@@ -262,7 +262,7 @@ memos_register_cube(cube_id="your_cube")
 
 ### PROGRESS 类型过多
 
-`memos_get_stats` 会在 PROGRESS 占比 >70% 时警告。解决方法：
+`memos_admin(action=stats)` 会在 PROGRESS 占比 >70% 时警告。解决方法：
 1. 保存时显式指定 `memory_type`
 2. 参考类型选择决策树
 

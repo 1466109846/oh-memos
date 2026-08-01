@@ -61,8 +61,8 @@ export function cubeRegistrationError(cubeId: string, detail: string | null): Te
     ERR_CUBE_REGISTRATION,
     [
       `Check if MemOS API is running: \`curl http://localhost:18000/health\``,
-      `Verify cube exists: \`memos_list_cubes(include_status=True)\``,
-      `Try manual registration: \`memos_register_cube(cube_id="...")\``,
+      `Verify cube exists: \`memos_admin(action="list_cubes", include_status=True)\``,
+      `Try manual registration: \`memos_admin(action="register_cube", cube_id="...")\``,
     ]
   );
 }
@@ -73,9 +73,9 @@ export function apiErrorResponse(operation: string, statusOrMsg: string | number
   // (save/search/list hit these far more often than register_cube does).
   const suggestions: string[] = [];
   if (msg.includes("user") && (msg.includes("not exist") || msg.includes("not found"))) {
-    suggestions.push('User missing — run `memos_create_user(user_id="dev_user")`, then retry');
+    suggestions.push('User missing — run `memos_admin(action="create_user", user_id="dev_user")`, then retry');
   } else if (msg.includes("not loaded") || (msg.includes("cube") && msg.includes("not found"))) {
-    suggestions.push("Cube not registered — run `memos_register_cube(cube_id=\"...\")` (find ids via `memos_list_cubes()`), then retry");
+    suggestions.push('Cube not registered — run `memos_admin(action="register_cube", cube_id="...")` (find ids via `memos_admin(action="list_cubes")`), then retry');
   }
   suggestions.push(
     "Check API health: `curl http://localhost:18000/health/detail`",
