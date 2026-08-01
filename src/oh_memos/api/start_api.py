@@ -39,6 +39,7 @@ from oh_memos.api.product_models import (
 from oh_memos.configs.mem_os import MOSConfig
 from oh_memos.mem_os.main import MOS
 from oh_memos.mem_user.user_manager import UserManager, UserRole
+from oh_memos.security.redact import redact_obj, redact_text
 
 
 # Suppress harmless warnings
@@ -522,6 +523,18 @@ def _ensure_cube_directory(cubes_dir: str, cube_id: str) -> str | None:
         return None
 
 
+def _redact_text_or_log(text: str, *, where: str) -> str:
+    """Redact credentials from text, recording which kinds were found.
+
+    The log line names the credential *kind* only — never the value — so that
+    the warning itself doesn't become the leak it is trying to prevent.
+    """
+    cleaned, labels = redact_text(text)
+    if labels:
+        logger.warning(f"[{where}] redacted credentials before storing: {', '.join(labels)}")
+    return cleaned
+
+
 def _try_auto_register_cube(mos_instance, mem_cube_id: str, user_id: str) -> bool:
     """Try to auto-register a cube on-demand. Returns True on success."""
     # Check if already loaded
@@ -952,6 +965,21 @@ def add_memory(memory_create: MemoryCreate):
         raise ValueError("Either messages, memory_content, or doc_path must be provided")
     mos_instance = get_mos_instance()
 
+    # Strip credentials before anything is embedded or persisted. Memories are
+    # written automatically from whatever context the assistant holds (error
+    # traces, config dumps), and a leaked key here gets re-read into the context
+    # window by every later search — so redact at the boundary, not on read.
+    if memory_create.memory_content:
+        memory_create.memory_content = _redact_text_or_log(
+            memory_create.memory_content, where="add_memory"
+        )
+    if memory_create.messages:
+        for message in memory_create.messages:
+            if getattr(message, "content", None):
+                message.content = _redact_text_or_log(
+                    message.content, where="add_memory/messages"
+                )
+
     # Auto-register cube if needed
     if memory_create.mem_cube_id:
         target_user_id = memory_create.user_id or mos_instance.user_id
@@ -1041,6 +1069,13 @@ def update_memory(
     mos_instance = get_mos_instance()
     target_user_id = user_id if user_id is not None else mos_instance.user_id
     _try_auto_register_cube(mos_instance, mem_cube_id, target_user_id)
+    # Same reasoning as add_memory: an update rewrites stored content, so it is
+    # a write path too and must not be the hole redaction leaks through.
+    updated_memory, labels = redact_obj(updated_memory)
+    if labels:
+        logger.warning(
+            f"[update_memory] redacted credentials before storing: {', '.join(labels)}"
+        )
     mos_instance.update(
         mem_cube_id=mem_cube_id,
         memory_id=memory_id,

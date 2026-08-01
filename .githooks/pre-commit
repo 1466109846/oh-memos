@@ -24,7 +24,11 @@ fi
 # Catches keys pasted into otherwise-innocent files (configs, docs, scripts).
 for f in $(git diff --cached --name-only --diff-filter=ACMR); do
   case "$f" in
-    *.example|*.template|*.md|.gitignore|*/pre-commit) continue ;;
+    # tests/test_redact.py exists precisely to hold credential-shaped fixtures:
+    # the redaction patterns can only be tested against strings that look like
+    # the real thing. Exempted by exact path rather than all of tests/, so a key
+    # pasted into any other test is still caught.
+    *.example|*.template|*.md|.gitignore|*/pre-commit|tests/test_redact.py) continue ;;
   esac
   [ -f "$f" ] || continue
   hits=$(git show ":$f" 2>/dev/null | grep -nE \
