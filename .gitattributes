@@ -1,0 +1,32 @@
+# 行尾规范化 —— 防止 Windows 侧编辑把 CRLF 提交进 shell 脚本。
+#
+# 背景：scripts/bundle/*.sh 曾以 CRLF 提交，导致 Linux/macOS 上
+# `bash install.sh` 直接报 $'\r': command not found，heredoc 的 EOF\r
+# 也永远匹配不上 —— 整条 Unix bundle 安装路径不可用。
+
+* text=auto
+
+# Unix 脚本必须 LF，否则解释器读到 \r 就崩
+*.sh   text eol=lf
+*.bash text eol=lf
+
+# Windows 批处理必须 CRLF，否则 cmd.exe 对标签/多行块的处理会出问题
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# 二进制资产不做任何转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.tgz  binary
+*.jar  binary
+*.dll  binary
+*.exe  binary
+*.so   binary
+*.dylib binary
