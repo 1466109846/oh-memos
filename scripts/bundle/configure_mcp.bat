@@ -1,67 +1,88 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul 2>&1
 setlocal EnableDelayedExpansion
 
-:: MemOS MCP Configuration for Claude Code
-:: 自动配置 MCP �?Claude Code
+:: oh-memos MCP Configuration for Claude Code
+:: Configure the Node MCP server (mcp-server-node) into Claude Code
 
 set "BUNDLE_ROOT=%~dp0..\.."
 pushd "%BUNDLE_ROOT%"
 set "BUNDLE_ROOT=%CD%"
 popd
 
-:: 转换路径格式（Windows -> Unix-like for JSON�?
+:: Windows -> Unix-like path for JSON
 set "BUNDLE_ROOT_UNIX=%BUNDLE_ROOT:\=/%"
+
+:: MCP server ships as the npm package oh-memos-mcp (pure Node, no Python),
+:: fetched on demand by npx. Data stays in the bundle, so MEMOS_CUBES_DIR
+:: still points at BUNDLE_ROOT.
+set "MCP_PACKAGE=oh-memos-mcp"
+set "CUBES_DIR=%BUNDLE_ROOT_UNIX%/data/oh-memos_cubes"
+
+:: npx is required: the config generated below cannot start without it
+where npx >nul 2>&1
+if errorlevel 1 (
+    echo   [WARN] npx not found on PATH
+    echo   The oh-memos MCP server ships as an npm package and needs Node.js ^>= 18.
+    echo   Install Node.js first: https://nodejs.org/
+    echo   The config is still generated, but cannot start until Node is installed.
+    echo.
+) else (
+    echo   [OK] npx found on PATH
+    echo.
+)
 
 echo.
 echo ========================================
-echo   MemOS MCP 配置工具
+echo   oh-memos MCP Configuration
 echo   Configure MCP for Claude Code
 echo ========================================
 echo.
 
-:: Claude Code 配置文件路径
+:: Claude Code config path
 set "CLAUDE_CONFIG=%USERPROFILE%\.claude\settings.json"
 set "CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude"
 
-:: 检�?Claude Code 配置目录
 if not exist "%CLAUDE_CONFIG_DIR%" (
-    echo [INFO] 创建 Claude Code 配置目录...
+    echo [INFO] Creating Claude Code config directory...
     mkdir "%CLAUDE_CONFIG_DIR%"
 )
 
 echo.
 echo ================================================
-echo   MCP 配置信息 (MemOSlocal)
+echo   MCP config info (oh-memos)
 echo ================================================
 echo.
-echo   请将以下配置添加到您�?Claude Code settings:
+echo   Add the following to your Claude Code settings:
 echo.
-echo   方式1: 使用 Claude Code 命令
+echo   Option 1: Claude Code command
 echo   ----------------------------------
-echo   �?Claude Code 中运�?
+echo   In Claude Code, run:
 echo.
-echo   /mcp add MemOSlocal
+echo   /mcp add oh-memos
 echo.
-echo   然后输入以下配置:
-echo   - command: %BUNDLE_ROOT%\runtime\conda\python.exe
-echo   - args: %BUNDLE_ROOT%\mcp-server\MemOS_mcp_server.py
+echo   Then enter:
+echo   - command: npx
+echo   - args: -y %MCP_PACKAGE%
 echo.
 echo.
-echo   方式2: 手动编辑配置文件
+echo   Option 2: Edit the config file manually
 echo   ----------------------------------
-echo   编辑文件: %CLAUDE_CONFIG%
+echo   Edit: %CLAUDE_CONFIG%
 echo.
-echo   添加以下内容�?"mcpServers" 部分:
+echo   Add the following under "mcpServers":
 echo.
 echo   {
 echo     "mcpServers": {
-echo       "MemOSlocal": {
-echo         "command": "%BUNDLE_ROOT_UNIX%/runtime/conda/python.exe",
-echo         "args": ["%BUNDLE_ROOT_UNIX%/mcp-server/MemOS_mcp_server.py"],
+echo       "oh-memos": {
+echo         "type": "stdio",
+echo         "command": "npx",
+echo         "args": ["-y", "%MCP_PACKAGE%"],
 echo         "env": {
-echo           "MemOS_URL": "http://localhost:18000",
-echo           "MemOS_CUBES_DIR": "%BUNDLE_ROOT_UNIX%/data/MemOS_cubes"
+echo           "MEMOS_URL": "http://localhost:18000",
+echo           "MEMOS_USER": "dev_user",
+echo           "MEMOS_DEFAULT_CUBE": "dev_cube",
+echo           "MEMOS_CUBES_DIR": "%CUBES_DIR%"
 echo         }
 echo       }
 echo     }
@@ -70,19 +91,22 @@ echo.
 echo ================================================
 echo.
 
-:: 生成配置模板文件
+:: Generate config template file
 set "MCP_CONFIG_FILE=%BUNDLE_ROOT%\mcp-config.json"
 
-echo 正在生成配置模板文件...
+echo Generating config template...
 (
 echo {
 echo   "mcpServers": {
-echo     "MemOSlocal": {
-echo       "command": "%BUNDLE_ROOT_UNIX%/runtime/conda/python.exe",
-echo       "args": ["%BUNDLE_ROOT_UNIX%/mcp-server/MemOS_mcp_server.py"],
+echo     "oh-memos": {
+echo       "type": "stdio",
+echo       "command": "npx",
+echo       "args": ["-y", "%MCP_PACKAGE%"],
 echo       "env": {
-echo         "MemOS_URL": "http://localhost:18000",
-echo         "MemOS_CUBES_DIR": "%BUNDLE_ROOT_UNIX%/data/MemOS_cubes"
+echo         "MEMOS_URL": "http://localhost:18000",
+echo         "MEMOS_USER": "dev_user",
+echo         "MEMOS_DEFAULT_CUBE": "dev_cube",
+echo         "MEMOS_CUBES_DIR": "%CUBES_DIR%"
 echo       }
 echo     }
 echo   }
@@ -90,21 +114,26 @@ echo }
 ) > "%MCP_CONFIG_FILE%"
 
 echo.
-echo 配置模板已保存到: %MCP_CONFIG_FILE%
+echo Config template saved to: %MCP_CONFIG_FILE%
 echo.
 echo ================================================
-echo   下一�?Next Steps
+echo   Next Steps
 echo ================================================
 echo.
-echo   1. 启动 MemOS 服务: start.bat
-echo   2. �?Claude Code 中使�?MemOS_* 工具
+echo   1. Start services: start.bat
+echo   2. Use memos_* tools in Claude Code
 echo.
-echo   可用工具 Available Tools:
-echo   - MemOS_search     : 搜索记忆
-echo   - MemOS_save       : 保存记忆
-echo   - MemOS_list       : 列出记忆
-echo   - MemOS_list_cubes : 列出 Cubes
-echo   - MemOS_suggest    : 智能建议
+echo   Available Tools (10):
+echo   - memos_context_resume : restore project context (session start / after compaction)
+echo   - memos_search         : search memories (pass context for LLM intent)
+echo   - memos_save           : save a memory (memory_type is required)
+echo   - memos_list_v2        : list memories
+echo   - memos_get            : fetch one memory by ID
+echo   - memos_suggest        : query suggestions + memory_type decision tree
+echo   - memos_think          : evidence pack + gap analysis
+echo   - memos_graph          : knowledge graph (mode=related/path/impact/schema)
+echo   - memos_admin          : maintenance (action=list_cubes/register_cube/stats/calendar...)
+echo   - memos_export_wiki    : export an interlinked markdown wiki
 echo.
 echo ================================================
 echo.

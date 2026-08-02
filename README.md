@@ -300,7 +300,7 @@ Add to `~/.claude/settings.json`:
       "alwaysAllow": [
         "memos_context_resume", "memos_search", "memos_save",
         "memos_list_v2", "memos_get", "memos_suggest",
-        "memos_think", "memos_graph", "memos_admin"
+        "memos_think", "memos_graph", "memos_admin", "memos_export_wiki"
       ]
     }
   }

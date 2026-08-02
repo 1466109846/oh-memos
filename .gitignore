@@ -224,6 +224,12 @@ venv.bak/
 !package-lock.json
 !tsconfig.json
 !project-memory/hooks/settings-template.json
+# MCP 配置模板（用户按 ${BUNDLE_ROOT} 占位符自行替换）
+!config/mcp-config.template.json
+!config/mcp-config.node.template.json
+# schema budget 基线：npm run schema:budget --check 的对比基准，
+# 不入库则该 token 预算纪律只在作者本机成立
+!mcp-server-node/schema-baseline.json
 !vite.config.ts
 !pyproject.toml
 !poetry.lock

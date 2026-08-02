@@ -1,0 +1,16 @@
+{
+  "_comment": "oh-memos MCP — 源码开发用变体。指向本地编译的 dist,始终与源码一致且离线可用;改动源码后需在 mcp-server-node 目录执行 npm run build。日常使用请优先用 mcp-config.template.json(npx 路线,与 README 及 scripts/bundle/configure_mcp.* 一致)。使用时把 ${BUNDLE_ROOT} 替换为你的 oh-memos 安装路径(Windows 用正斜杠,例如 G:/test/oh-memos)。前提: (1) 本机已装 Node>=18; (2) API 已在 localhost:18000 启动。",
+  "mcpServers": {
+    "oh-memos": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${BUNDLE_ROOT}/mcp-server-node/dist/index.js"],
+      "env": {
+        "MEMOS_URL": "http://localhost:18000",
+        "MEMOS_USER": "dev_user",
+        "MEMOS_DEFAULT_CUBE": "dev_cube",
+        "MEMOS_CUBES_DIR": "${BUNDLE_ROOT}/data/oh-memos_cubes"
+      }
+    }
+  }
+}

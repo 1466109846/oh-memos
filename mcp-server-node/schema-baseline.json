@@ -1,0 +1,64 @@
+{
+  "bytesPerTokenAssumed": 3.2,
+  "toolCount": 11,
+  "totalBytes": 12488,
+  "alwaysOnBytes": 11063,
+  "tools": {
+    "memos_context_resume": {
+      "descriptionBytes": 205,
+      "schemaBytes": 330,
+      "totalBytes": 657
+    },
+    "memos_search": {
+      "descriptionBytes": 543,
+      "schemaBytes": 1306,
+      "totalBytes": 1967
+    },
+    "memos_think": {
+      "descriptionBytes": 249,
+      "schemaBytes": 623,
+      "totalBytes": 986
+    },
+    "memos_export_wiki": {
+      "descriptionBytes": 216,
+      "schemaBytes": 537,
+      "totalBytes": 873
+    },
+    "memos_save": {
+      "descriptionBytes": 295,
+      "schemaBytes": 1285,
+      "totalBytes": 1693
+    },
+    "memos_list_v2": {
+      "descriptionBytes": 72,
+      "schemaBytes": 676,
+      "totalBytes": 862
+    },
+    "memos_get": {
+      "descriptionBytes": 90,
+      "schemaBytes": 436,
+      "totalBytes": 636
+    },
+    "memos_suggest": {
+      "descriptionBytes": 180,
+      "schemaBytes": 233,
+      "totalBytes": 529
+    },
+    "memos_graph": {
+      "descriptionBytes": 201,
+      "schemaBytes": 877,
+      "totalBytes": 1190
+    },
+    "memos_admin": {
+      "descriptionBytes": 238,
+      "schemaBytes": 1314,
+      "totalBytes": 1670
+    },
+    "memos_delete": {
+      "descriptionBytes": 570,
+      "schemaBytes": 726,
+      "totalBytes": 1425,
+      "conditional": true
+    }
+  }
+}

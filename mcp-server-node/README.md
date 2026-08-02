@@ -177,28 +177,22 @@ npx oh-memos-mcp
 
 ---
 
-## Tools (18)
+## Tools (10)
 
 | Tool | Description |
 |------|-------------|
-| `memos_save` | Save memories with explicit type (BUGFIX, DECISION, MILESTONE…) |
-| `memos_search` | Semantic search with keyword reranking |
-| `memos_search` | Context-aware search with conversation history |
+| `memos_context_resume` | Recover project context after compaction (recent 24h + project state) |
+| `memos_search` | Semantic search with keyword reranking. Pass `context` (recent turns) to enable LLM intent analysis and query expansion |
+| `memos_save` | Save memories with explicit type (BUGFIX, DECISION, MILESTONE, SYNTHESIS…) |
 | `memos_list_v2` | List memories with auto-compaction |
 | `memos_get` | Get full memory details by ID |
-| `memos_admin(action=stats)` | Memory type distribution statistics |
-| `memos_suggest` | Smart search query suggestions |
-| `memos_context_resume` | Recover project context after compaction |
-| `memos_graph(mode=path)` | Trace reasoning paths between two memories |
-| `memos_graph(mode=related)` | Query knowledge graph with relationships |
-| `memos_graph(mode=schema)` | Export graph schema and statistics |
-| `memos_graph(mode=impact)` | Forward blast radius — what did this memory cause? |
-| `memos_admin(action=calendar)` | Calendar view (project timeline / student mode) |
-| `memos_admin(action=list_cubes)` | List all available memory cubes |
-| `memos_admin(action=register_cube)` | Register a cube with the API |
-| `memos_admin(action=create_user)` | Create a MemOS user |
-| `memos_admin(action=validate_cubes)` | Validate and fix cube namespace configs |
-| `memos_delete` | Delete memories (disabled by default, set `MEMOS_ENABLE_DELETE=true`) |
+| `memos_suggest` | Smart search query suggestions + `memory_type` decision tree |
+| `memos_think` | Evidence pack for a question: retrieval + contradiction/staleness flags + gap analysis. The caller synthesizes the answer and may persist it as `SYNTHESIS` |
+| `memos_graph` | Knowledge graph queries — `mode`: `related` / `path` / `impact` / `schema` |
+| `memos_admin` | Maintenance — `action`: `list_cubes` / `register_cube` / `create_user` / `validate_cubes` / `stats` / `calendar` |
+| `memos_export_wiki` | Export a cube as an interlinked markdown wiki (page per memory + index + mermaid graph) |
+
+Plus `memos_delete`, hidden from `tools/list` unless `MEMOS_ENABLE_DELETE=true`.
 
 ---
 
