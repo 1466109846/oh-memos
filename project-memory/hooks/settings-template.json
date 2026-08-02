@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "_comment": "Copy the hooks section into your ~/.claude/settings.json. Adjust paths to match your MemOS install location.",
+  "_comment": "Copy the hooks section into your ~/.claude/settings.json. Adjust paths to match your oh-memos install location.",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_user_prompt.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_user_prompt.js",
             "timeout": 5
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_context_inject.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_context_inject.js",
             "timeout": 5
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_block_sensitive.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_block_sensitive.js",
             "timeout": 5
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_block_mkdir_memory.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_block_mkdir_memory.js",
             "timeout": 5
           }
         ]
@@ -51,12 +51,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_log_commands.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_log_commands.js",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_auto_save.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_save.js",
             "timeout": 5
           }
         ]
@@ -66,12 +66,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_notify_milestone.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_notify_milestone.js",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_auto_save.js",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_save.js",
             "timeout": 5
           }
         ]
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_pre_compact.js"
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_pre_compact.js"
           }
         ]
       }
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/memos_session_start.js"
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_session_start.js"
           }
         ]
       }

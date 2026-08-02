@@ -1,116 +1,97 @@
-# MemOS Hooks
+# oh-memos Hooks
 
-Claude Code hooks for enhanced memory integration.
+Claude Code hooks that wire oh-memos into your session — context injection, intent
+detection, milestone prompts, and guardrails against hand-rolled memory directories.
 
 ## Quick Start
 
-**选择适合你平台的文件夹：**
+Hook configuration lives in a single file: **[`settings-template.json`](settings-template.json)**.
 
-| 平台 | 文件夹 | 适用场景 |
-|------|--------|----------|
-| 🌐 **node/** | Cross-platform | ✅ **推荐** - Windows + WSL 都能用 |
-| 🐧 **bash/** | Linux/macOS/WSL | 纯 Linux 或 macOS 用户 |
-| 🪟 **powershell/** | Windows Only | 纯 Windows 用户 (不用 WSL) |
-
-## Installation
-
-### Option 1: Cross-platform (Recommended) 🌐
-
-**适用：Windows + WSL 混合使用**
+Copy its `hooks` section into your `~/.claude/settings.json` (or the project's
+`.claude/settings.json`), then replace every `<MEMOS_PATH>` with your oh-memos
+install path.
 
 ```bash
-# 复制 node/ 文件夹的配置
-cp project-memory/hooks/node/settings.json .claude/settings.json
+# 查看模板
+cat project-memory/hooks/settings-template.json
+
+# 把 <MEMOS_PATH> 替换成你的安装路径，例如：
+#   Linux / WSL   →  /mnt/g/test/oh-memos
+#   Windows       →  G:/test/oh-memos
 ```
 
-### Option 2: Bash (Linux/macOS/WSL) 🐧
+The hooks are Node.js scripts and run unchanged on Windows, WSL, Linux and macOS —
+`node` on PATH is the only requirement.
 
-**适用：纯 Linux、macOS 或只在 WSL 中使用**
+## 已接入模板的 Hooks
 
-```bash
-cp project-memory/hooks/bash/settings.json .claude/settings.json
-```
+| Hook | 事件 | 功能 |
+|------|------|------|
+| `oh_memos_session_start.js` | SessionStart | 输出 CWD → cube_id 映射 |
+| `oh_memos_user_prompt.js` | UserPromptSubmit | 意图检测（历史 / 报错 / 决策）→ 建议 `memos_search` |
+| `oh_memos_context_inject.js` | PreToolUse `Grep\|Glob\|Read\|Edit\|Write` | 自动检索记忆并注入为 `additionalContext` |
+| `oh_memos_block_sensitive.js` | PreToolUse `Edit\|Write` | 编辑 `.env` / credentials 等敏感文件前告警 |
+| `oh_memos_block_mkdir_memory.js` | PreToolUse `Bash` | 拦截 `mkdir.*memory`，强制走 MCP 工具 |
+| `oh_memos_log_commands.js` | PostToolUse `Bash` | 记录命令历史备查 |
+| `oh_memos_auto_save.js` | PostToolUse `Bash\|Edit\|Write` | 建议 `memory_type` 与 `project_path` |
+| `oh_memos_notify_milestone.js` | PostToolUse `Edit\|Write` | 改动重要文件时提示存 MILESTONE |
+| `oh_memos_pre_compact.js` | PreCompact | 提醒用 MCP 工具而非 `mkdir` 重建记忆 |
 
-### Option 3: PowerShell (Windows Only) 🪟
+## 未接入模板
 
-**适用：纯 Windows，不使用 WSL**
-
-```powershell
-Copy-Item project-memory\hooks\powershell\settings.json .claude\settings.json
-```
+| Hook | 说明 |
+|------|------|
+| `oh_memos_suggest_compact.js` | 上下文用量监控，70% / 90% 时告警。文件存在但未写进 `settings-template.json`，需要的话自行添加 |
 
 ## 文件结构
 
 ```
 project-memory/hooks/
 ├── README.md
+├── settings-template.json        ← 唯一配置入口，用 <MEMOS_PATH> 占位符
 │
-├── 🌐 node/                      ← Cross-platform (推荐)
-│   ├── settings.json             ← 配置文件
-│   ├── memos_user_prompt.js
-│   ├── memos_block_sensitive.js
-│   ├── memos_log_commands.js
-│   └── memos_notify_milestone.js
+├── node/                         ← 跨平台实现（Windows / WSL / Linux / macOS）
+│   ├── oh_memos_session_start.js
+│   ├── oh_memos_user_prompt.js
+│   ├── oh_memos_context_inject.js
+│   ├── oh_memos_block_sensitive.js
+│   ├── oh_memos_block_mkdir_memory.js
+│   ├── oh_memos_log_commands.js
+│   ├── oh_memos_auto_save.js
+│   ├── oh_memos_notify_milestone.js
+│   ├── oh_memos_pre_compact.js
+│   └── oh_memos_suggest_compact.js
 │
-├── 🐧 bash/                      ← Linux/macOS/WSL
-│   ├── settings.json
-│   ├── memos_user_prompt.sh
-│   ├── memos_block_sensitive.sh
-│   ├── memos_log_commands.sh
-│   └── memos_notify_milestone.sh
-│
-└── 🪟 powershell/                ← Windows Only
-    ├── settings.json
-    ├── memos_user_prompt.ps1
-    ├── memos_user_prompt.cmd
-    ├── memos_block_sensitive.ps1
-    ├── memos_log_commands.ps1
-    └── memos_notify_milestone.ps1
+└── powershell/                   ← 纯 Windows 的部分实现（无配置模板，需手写）
+    ├── oh_memos_user_prompt.ps1
+    ├── oh_memos_user_prompt.cmd
+    ├── oh_memos_block_sensitive.ps1
+    ├── oh_memos_log_commands.ps1
+    └── oh_memos_notify_milestone.ps1
 ```
 
-## Hook 功能说明
-
-| Hook | 触发时机 | 功能 |
-|------|----------|------|
-| `memos_user_prompt` | 用户发送消息 | 确认记忆系统激活 |
-| `memos_block_sensitive` | 编辑文件前 | 警告敏感文件 (.env, credentials 等) |
-| `memos_log_commands` | 执行命令后 | 记录 bash 命令历史 |
-| `memos_notify_milestone` | 编辑文件后 | 提示保存里程碑 |
-
-## 跨平台原理 (node/)
-
-Node.js 脚本自动检测运行环境：
-
-```javascript
-process.platform === 'win32'
-  ? 'G:/path/to/script.js'      // Windows
-  : '/mnt/g/path/to/script.js'  // WSL/Linux
-```
-
-这样同一个配置文件可以在 Windows CMD 和 WSL 中都正常工作。
+> `powershell/` 只覆盖 4 个 hook，且不再随附 `settings.json`。它存在的前提是你不想装
+> Node —— 但 oh-memos 的 MCP server 本身就需要 Node，所以绝大多数情况直接用 `node/`
+> 即可。
 
 ## 自定义
 
-### 添加敏感文件模式
-
-编辑 `node/memos_block_sensitive.js`:
+**添加敏感文件模式** — 编辑 `node/oh_memos_block_sensitive.js`：
 
 ```javascript
 const sensitivePatterns = [
   '.env',
   'credentials',
-  'your_pattern_here'  // 添加自定义模式
+  'your_pattern_here'
 ];
 ```
 
-### 添加里程碑文件
-
-编辑 `node/memos_notify_milestone.js`:
+**添加里程碑文件** — 编辑 `node/oh_memos_notify_milestone.js`：
 
 ```javascript
 const milestoneFiles = [
   'README.md',
-  'your_file_here'  // 添加自定义文件
+  'your_file_here'
 ];
 ```
 
@@ -122,5 +103,5 @@ claude --debug
 
 ## 相关文档
 
-- [MCP Guide](../../docs/MCP_GUIDE.md) - MCP 记忆工具
-- [CLAUDE.md](../../CLAUDE.md) - 项目配置
+- [MCP Guide](../../docs/MCP_GUIDE.md) — MCP 记忆工具
+- [CLAUDE.md](../../CLAUDE.md) — 项目配置

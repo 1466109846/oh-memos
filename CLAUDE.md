@@ -106,12 +106,12 @@ oh-memos provides Claude Code hooks in `project-memory/hooks/node/`. See `projec
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `oh-memos_session_start.js` | SessionStart | Output CWD→cube_id mapping |
-| `oh-memos_user_prompt.js` | UserPromptSubmit | Smart intent detection, suggest oh-memos_search |
-| `oh-memos_block_mkdir_memory.js` | PreToolUse (Bash) | Block `mkdir.*memory` commands |
-| `oh-memos_auto_save.js` | PostToolUse (Bash/Edit/Write) | Suggest memory type + project_path |
-| `oh-memos_notify_milestone.js` | PostToolUse (Edit/Write) | Suggest MILESTONE for important files |
-| `oh-memos_pre_compact.js` | PreCompact | Remind: use MCP oh-memos, not mkdir |
+| `oh_memos_session_start.js` | SessionStart | Output CWD→cube_id mapping |
+| `oh_memos_user_prompt.js` | UserPromptSubmit | Smart intent detection, suggest oh-memos_search |
+| `oh_memos_block_mkdir_memory.js` | PreToolUse (Bash) | Block `mkdir.*memory` commands |
+| `oh_memos_auto_save.js` | PostToolUse (Bash/Edit/Write) | Suggest memory type + project_path |
+| `oh_memos_notify_milestone.js` | PostToolUse (Edit/Write) | Suggest MILESTONE for important files |
+| `oh_memos_pre_compact.js` | PreCompact | Remind: use MCP oh-memos, not mkdir |
 
 ---
 

@@ -120,14 +120,14 @@ Ready-to-use hooks in `project-memory/hooks/node/`:
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
-| `oh-memos_context_inject.js` | PreToolUse | **Auto-injects** related memories when Claude searches/edits files |
-| `oh-memos_session_start.js` | SessionStart | Maps CWD → cube_id at startup |
-| `oh-memos_user_prompt.js` | UserPromptSubmit | Detects intent (history, errors, decisions) → suggests oh-memos_search |
-| `oh-memos_pre_compact.js` | PreCompact | Reminds: save before compaction, resume after |
-| `oh-memos_suggest_compact.js` | PreToolUse | Monitors context usage, warns at 70%/90% |
-| `oh-memos_auto_save.js` | PostToolUse | Suggests appropriate memory_type after edits |
-| `oh-memos_block_mkdir_memory.js` | PreToolUse | Blocks `mkdir` for memory directories |
-| `oh-memos_notify_milestone.js` | PostToolUse | Suggests MILESTONE save for important files |
+| `oh_memos_context_inject.js` | PreToolUse | **Auto-injects** related memories when Claude searches/edits files |
+| `oh_memos_session_start.js` | SessionStart | Maps CWD → cube_id at startup |
+| `oh_memos_user_prompt.js` | UserPromptSubmit | Detects intent (history, errors, decisions) → suggests oh-memos_search |
+| `oh_memos_pre_compact.js` | PreCompact | Reminds: save before compaction, resume after |
+| `oh_memos_suggest_compact.js` | PreToolUse | Monitors context usage, warns at 70%/90% |
+| `oh_memos_auto_save.js` | PostToolUse | Suggests appropriate memory_type after edits |
+| `oh_memos_block_mkdir_memory.js` | PreToolUse | Blocks `mkdir` for memory directories |
+| `oh_memos_notify_milestone.js` | PostToolUse | Suggests MILESTONE save for important files |
 
 > See [`project-memory/hooks/settings-template.json`](project-memory/hooks/settings-template.json) for setup instructions.
 
