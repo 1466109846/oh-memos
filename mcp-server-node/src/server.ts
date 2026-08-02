@@ -4,6 +4,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 import { MEMOS_DEFAULT_CUBE, MEMOS_ENABLE_DELETE, logger } from "./config.js";
 import { waitForApiReady } from "./api-client.js";
@@ -142,10 +145,19 @@ function tolerateStringArguments(transport: StdioServerTransport): void {
   };
 }
 
+// serverInfo 从 package.json 读取,而非硬编码 —— 硬编码会在每次发版后
+// 悄悄漂移(2.0.0 发布时这里仍报 1.0.1)。dist/server.js 的上一级即包根。
+const pkg: { name: string; version: string } = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"),
+    "utf8",
+  ),
+);
+
 export async function runServer(): Promise<void> {
   const server = new McpServer({
-    name: "memos-memory",
-    version: "1.0.1",
+    name: pkg.name,
+    version: pkg.version,
   });
 
   registerTools(server);

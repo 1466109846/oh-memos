@@ -6,6 +6,18 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.1] — 2026-08-02
+
+### Fixed
+
+- MCP `serverInfo` was hardcoded in `server.ts` and reported
+  `{name: "memos-memory", version: "1.0.1"}` — a name matching neither the
+  package (`oh-memos-mcp`) nor the conventional server key (`oh-memos`), and a
+  version that 2.0.0 shipped stale. Clients display this during the handshake.
+  It is now read from `package.json` at startup, so it cannot drift again.
+
+---
+
 ## [2.0.0] — 2026-08-02
 
 ### ⚠️ Breaking — tool surface consolidated from 18 to 10
