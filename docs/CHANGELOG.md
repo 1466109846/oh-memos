@@ -7,6 +7,187 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-02
+
+### 💥 BREAKING — MCP 工具面 18 → 10，分发统一走 npx
+
+`oh-memos-mcp` 发布 **2.0.0**。上一轮把 11 个工具合并进 3 个派发工具，**没有兼容层**——MCP SDK 只派发已注册的工具，旧名一律返回 `Unknown tool`。若你的客户端配置里锁了工具名（如 Claude Code 的 `alwaysAllow`），升级前必须先改。
+
+| 1.x 工具 | 2.0 替代 |
+|---------|---------|
+| `memos_search_context` | `memos_search`，传 `context` 数组 |
+| `memos_get_graph` / `memos_trace_path` / `memos_impact` / `memos_export_schema` | `memos_graph(mode=related/path/impact/schema)` |
+| `memos_list_cubes` / `memos_register_cube` / `memos_create_user` / `memos_validate_cubes` / `memos_get_stats` / `memos_calendar` | `memos_admin(action=list_cubes/register_cube/create_user/validate_cubes/stats/calendar)` |
+
+不变：`memos_context_resume`、`memos_search`、`memos_save`、`memos_list_v2`、`memos_get`、`memos_suggest`、`memos_delete`。
+
+- **版本号从 1.0.1 提到 2.0.0** — 此前以 patch 号躺在盘上，发出去会让所有 `npx -y oh-memos-mcp` 用户在无感知的情况下被打断
+- **新增 `mcp-server-node/CHANGELOG.md`** — 完整迁移表（旧工具名从 registry 上的 1.0.0 tarball 实读，非凭记忆）
+
+### 🔀 分发路线冲突修复
+
+两份 README 全篇宣传 `npx -y oh-memos-mcp`，而 `scripts/bundle/configure_mcp.*` 生成的配置指向 `$BUNDLE_ROOT/mcp-server-node/dist/index.js`——一个没有任何 bundle 脚本会构建、打包或校验的路径，且 `command: "node"` 无 PATH 检查。同时 npm 上的 latest 仍是 3-04 的 1.0.0，早于 `memos_think` / `memos_export_wiki` / 合并后的 `memos_graph`、`memos_admin`。**两条路各缺最后一块，哪条都走不通。**
+
+- `configure_mcp.sh/.bat` 改为生成 `command:"npx", args:["-y","oh-memos-mcp"]`，`MEMOS_CUBES_DIR` 仍指 BUNDLE_ROOT（数据留在 bundle 内），并前置探测 npx 而非等到 MCP 启动才失败
+- `config/mcp-config.template.json` **此前仍是已废弃的 Python 路线**（`memoslocal` / `.venv/Scripts/python.exe` / `mcp-server/memos_mcp_server.py` / 旧的 `data/memos_cubes`），改为 npx 路线
+- 被跟踪的模板是死路线、可用的 Node 版反被 `.gitignore` 的通配 `*.json` 挡在外面未跟踪——已对调，并把硬编码的 `G:/test/oh-memos` 换成 `${BUNDLE_ROOT}` 占位符
+- **`mcp-server-node/schema-baseline.json` 纳入版本控制** — 它是 `npm run schema:budget --check` 的对比基线，不入库则该 token 预算纪律只在作者本机成立
+
+### 🪝 Hooks 配置全链路失效修复
+
+- **`settings-template.json` 的 9 条 hook 路径全部指向不存在的文件** — 脚本实名 `oh_memos_*.js`，模板写的是 `memos_*.js`。CLAUDE.md 正是让用户照此配置，等于所有按文档操作的用户 hook 从来就是坏的
+- **删除 `project-memory/hooks/bash/`** — 内含 4 个 `.sh`，其 shebang 却是 `#!/usr/bin/env node`，即放在 `bash/` 目录里的 JavaScript，`bash -n` 必然失败；且是 `node/` 版的陈旧副本（`user_prompt` 13 行 vs node 版 145 行）
+- **删除 node/ bash/ powershell/ 三个 `settings.json`** — 硬编码 `/mnt/g/test/MemOS`、`G:/test/MemOS`（旧项目名，目录已不存在），且同样缺 `oh_` 前缀。它们从未被 git 跟踪（`*.json` 通配），而旧 `hooks/README.md` 却在教用户 `cp` 这些仓库里根本没有的文件。现统一以 `settings-template.json` 为唯一入口
+- 重写 `hooks/README.md`（原标题仍为 "MemOS Hooks"，目录树写每目录 4 个文件而 node/ 实有 10 个）
+- 修正 CLAUDE.md 与 README.md 共 12 处 `oh-memos_*.js` 连字符误写（实名为下划线）
+
+### 🔧 行尾规范化
+
+`scripts/bundle/*.sh` 与 `evaluation/scripts/*.sh` 共 11 个文件**以 CRLF 提交入库**，在 Linux/macOS 上完全无法执行：bash 把 `\r` 并进 token，`BUNDLE_ROOT` 解析成 `scripts/bundle\r/../..`，heredoc 结束标记变 `EOF\r` 永不匹配，最终在文件末行报 `syntax error: unexpected end of file`——而真正的原因在开头。`bash -n` 对 11 个文件全部失败。
+
+仓库既无 `.gitattributes` 也未设 `core.autocrlf`，CRLF 原样存储并落到每一个 Unix 检出。**整条 Unix bundle 安装路径从来没能跑起来。**
+
+- 新增 `.gitattributes`：`*.sh` 锁 LF，`*.bat`/`*.cmd`/`*.ps1` 锁 CRLF，二进制不转换
+- `memory-admin.bat` 由 LF 改回 CRLF
+
+### 🐛 其他
+
+- **MCP `serverInfo` 硬编码** — `server.ts` 写死 `{name:"memos-memory", version:"1.0.1"}`，名字与包名 `oh-memos-mcp`、客户端 server key `oh-memos` 三者皆不一致，且版本随发版静默漂移（2.0.0 发布后握手仍自报 1.0.1）。改为启动时从 `package.json` 读取。发布为 **2.0.1**
+
+**验证:** tsc 干净；schema budget 12488 B（+0.0% vs 基线）；`npm pack` 产出 48 文件；`configure_mcp.sh` 实跑生成可解析 JSON；npx 探测两分支均实测；对已发布包执行 stdio `initialize` + `tools/list` 返回正好 10 个工具，`memos_delete` 正确隐藏。
+
+**Commits:**
+- `98450d8` - chore: normalize line endings and add .gitattributes
+- `81982aa` - feat(mcp)!: release 2.0.0 and unify distribution on npx
+- `5ff1572` - fix(hooks): repair hook paths and drop the stale bash/ variant
+- `5918579` - fix(mcp): read serverInfo from package.json instead of hardcoding it
+
+## [2.9.0] - 2026-08-01
+
+### 🧠 memos_think — 证据包 + 缺口分析
+
+只读工具。`/search` 语义检索与最近 72h 时序召回双路去重，输出编号证据（`[n]` + id + 类型 + 日期 + 700 字符截断）、证据间图关系、矛盾/演进候选、过期候选、缺口分析，以及回灌为 `SYNTHESIS` 的指引。
+
+**合成刻意留给调用方模型，服务端不产散文**——这是与 GBrain `think` 的关键差异决策。矛盾检测为查询时规则级，不依赖 `CONFLICT` 边（那些边只由默认关闭的 reorganizer 创建）。
+
+### 📖 memos_export_wiki — 导出互链 markdown wiki
+
+`/product/graph/data` 分页拉全量 → 过滤 WorkingMemory 层级与非 activated → 每条记忆一页（YAML frontmatter 含 generator 标记 / id / type / tags / confidence）+ `[[wikilink]]` 关联段 + `index.md` + `graph.md`（mermaid，>80 节点跳过）。默认输出 `<project_path>/docs/memory-wiki`。
+
+**安全:** 仅删除带 generator 标记的文件，外来文件保留并告警。文件 IO 必须在 Node 侧——Python API 跑在 Windows 解释不了 WSL 路径。
+
+### ✂️ MCP 工具面 token 优化：19 → 10
+
+`tools/list` payload 22.9 KB（≈5850 tokens）→ 11.2 KB（≈2856 tokens），**降 51%**。schema budget 基线由 27078 B 重冻结为 12488 B（-53.9%）。
+
+- **合并** — `memos_search_context` 并入 `memos_search`（传 `context` 即走原上下文感知路径）；graph 四件套 → `memos_graph(mode=...)`；admin 六件套 → `memos_admin(action=...)`。派发在 `handlers/index.ts` 就地 switch，原 handler 函数一个没动
+- **参数去重** — `project_path`/`cube_id` 短版描述用于除 `save`/`search` 外全部工具，完整路由说明只讲一次
+- **`memos_admin` 的 `cube_id` 去掉 default** — 否则 `register_cube` 漏传会静默注册 default cube
+- **运行时文案同步** — handler 错误提示里的旧工具名全部改为新调用形式，否则模型会照提示调用已不存在的工具
+
+### 🆕 新增 memory_type: SYNTHESIS
+
+用于从检索证据合成的答案。Node 侧 7 处改动；Python 不校验类型故零改动。
+
+### 🔒 记忆写入侧凭证脱敏（运行期）
+
+承接 `c47eefa` 的提交期拦截，这次是运行期。
+
+- `src/oh_memos/security/redact.py` — 13 条模式，按结构前缀锚定（`AKIA` / `sk-` / `sk-ant-` / `ghp_` / `github_pat_` / `eyJ` / `xox.` / `AIza` / `BEGIN PRIVATE KEY` 等）而非熵值，避免误伤普通代码与散文。顺序敏感：`sk-ant-` 必须在裸 `sk-` 之前
+- `start_api.py` 接入两条写路径：`POST /memories` 与 `PUT /memories/{cube}/{id}`（后者此前完全没覆盖）
+- 日志只记录凭证**种类**不记录值，否则告警本身就是泄漏
+- `tests/test_redact.py` — 63 项，含检测、模式顺序、误报防护、幂等、开关
+- 开关 `MEMOS_REDACT_SECRETS=false`
+
+端到端验证：LLM 提炼出的正文只写「以 `sk-pro` 开头的密钥」，证明模型自始至终未见明文——脱敏确实发生在提炼与向量化之前。
+
+**范围:** 仅覆盖写入侧，存量旧记忆不做读取侧脱敏或扫描清洗。
+
+**Commits:**
+- `1321e89` - feat(security): runtime credential redaction on memory write paths
+- `f468b54` - feat(mcp): memos_think + wiki export + SYNTHESIS; consolidate tool surface 19→10
+- `3e3c004` - chore: dogfood memory-wiki export of oh_memos_cube (82 pages)
+
+## [2.8.0] - 2026-07-29
+
+### 🖥️ Memory Admin GUI
+
+FastAPI + 单页 UI，直连 Neo4j/Qdrant/文件系统，**主 API(18000) 宕掉也能用**。
+
+- 浏览/搜索记忆、单条删除、整 cube 删除（三个存储一并清理）、批量删除、备份管理
+- 三重删除防护：键入确认、dry-run 预览、自动备份
+- 入口 `memory-admin.bat`
+
+### 🐛 MCP 读写路径审计修复
+
+**正确性:**
+- `mem_reader` 兜底键写作 `memory_list` 而读取方用 `memory list`，导致 LLM 解析失败时记忆被静默丢弃而非存储
+- MCP 时序查询按 `MEMOS_USER` 过滤，但节点存的是 `user_name = cube_id`，`context_resume` 的 24h 召回**永远为空**
+- 关系检测器把含 `<think>` 推理的 LLM 原始输出直接存为记忆（清理了 1847 个被污染节点）
+- `list_v2` 按类型过滤时拉取整个 cube 且渲染未截断结果，`limit=5` 的请求能撑到约 180 万 tokens
+
+**一致性/泄漏:**
+- `remove_oldest_memory` 删 Neo4j 节点却不删对应 Qdrant 向量，泄漏的孤儿仍占用 search top_k
+- `add_node` 在图写入失败时回滚其向量
+- `add_node`/`add_nodes_batch` 按内容去重（DB 级幂等）
+
+**性能:**
+- `_parse_node` 不认 `include_embedding` 标志，逐节点一次请求拉向量（N+1，在 Windows 上耗尽套接字：WinError 10022）
+
+### 🔐 提交期密钥与运行产物拦截
+
+`.gitignore` 只能防止误 `git add`，挡不住 `git add -f`，也认不出新起的文件名。新增 pre-commit 钩子检查**实际暂存内容**并拒绝：
+
+- env 文件及其备份、`data/*_cubes/` 下的 cube 数据、`*/backups/` 下的 GUI 导出、密钥材料（`.pem`/`.key`/`id_rsa`）
+- 粘进普通文件的凭证内容（`sk-*`、`github_pat_*`、`ghp_*`、`AKIA*`、`API_KEY/SECRET/TOKEN/PASSWORD = ...`）
+
+拦截信息中的密钥本身会被脱敏，否则告警自身就会把它泄漏进终端与 CI 日志。示例/模板文件豁免。启用：`git config core.hooksPath .githooks`
+
+同时会在 remote URL 内嵌 token 时告警。
+
+**Commits:**
+- `82e65b1` - feat: memory admin GUI + MCP read/write hardening
+- `c47eefa` - chore: block secrets and runtime artifacts at commit time
+
+## [2.7.2] - 2026-05-09
+
+### 🐛 LLM 瞬时连接错误恢复 (WinError 10053)
+
+Windows 上被上游代理/VPN 静默关闭的 keep-alive TCP 连接，在复用时抛 WinError 10053。OpenAI SDK 将其呈现为 `APIConnectionError`，而 `_safe_generate` 只对子串 `bad_response_status_code` 重试，**单次 socket abort 就会让整个 mem_reader 调用失败**。
+
+- `_safe_generate` 改为对 `APIConnectionError` / `APITimeoutError` / `RateLimitError` / `InternalServerError` 以及 WinError 10053/10054 字符串重试；重试次数 2 → 3，指数退避
+- `OpenAILLM` 注入 `httpx.Client`（`keepalive_expiry=10s` + 显式超时），SDK `max_retries` 提到 3，以便在复用前淘汰陈旧套接字
+
+**Commits:**
+- `458d50c` - fix(llm): recover from transient APIConnectionError (WinError 10053)
+
+## [2.7.1] - 2026-03-14
+
+### ⚡ 启动性能：cube 按需注册
+
+此前 `startup_auto_register` 顺序加载**全部** cube（11+），每个都要初始化 Neo4j driver、Qdrant collection、LLM 客户端与 embedder，API 启动极慢。
+
+现在启动时只注册 default cube，其余在 MCP server 调用 `/mem_cubes` 时按需注册。新增 `MEMOS_STARTUP_CUBES`：空/未设 = 仅 default（快速启动），`"cube1,cube2"` = 指定，`"all"` = 旧行为。并加入 per-cube 计时日志。
+
+### 🐛 启动与运行时阻塞修复
+
+- **事件循环阻塞** — 记忆 CRUD 与搜索端点由 `async def` 改为 `def`，交由 FastAPI 线程池执行。此前 `register_mem_cube` 与 `mos_instance.add/search` 会阻塞事件循环，冻结整个 API（含 `/health`）
+- **HuggingFace tokenizer 下载阻塞启动** — 文本分块的 gpt2 HF tokenizer 换成 chonkie 内置 `character` 模式，流式处理的 `AutoTokenizer.from_pretrained` 换成 tiktoken，消除 hf-mirror.com 超时导致的启动延迟
+
+### 🐛 cube 自动注册
+
+- 移除 `ensure_cube_registered` 中过早的模板 cube 检查（Python 与 Node 两侧），让 `_build_fallback_cube_config` 能从环境变量创建 cube
+- `handle_memos_register_cube` 支持自动创建
+- 访问未注册 cube 此前返回 500；现在 API 从 default cube 模板自动创建目录并按需注册，仍失败才返回 404
+- `startup_auto_register` 加入 Neo4j 就绪检查以免阻塞；降低启动期 Neo4j 连接拒绝与 Nacos 缺配置的日志噪音
+
+**Commits:**
+- `4d3afac` - fix: cube auto-registration without template and startup resilience
+- `c9437f3` - perf: only register default cube at startup, others on-demand
+- `bdf3bab` - fix: auto-register cubes on-demand across all API endpoints with 404 error handling
+- `8a12568` - fix: use sync handlers for memory endpoints to prevent event loop blocking
+- `c211336` - fix: remove HuggingFace tokenizer downloads that block startup
+
 ## [2.7.0] - 2026-03-04
 
 ### 📦 oh-memos-mcp — Node.js MCP Server on npm
@@ -52,9 +233,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - MCP Tools 表格工具名从 `oh-memos_*` 更正为实际的 `memos_*`，补全全部 18 个工具
 - **`mcp-server-node/README.md`** — 全新编写：Prerequisites、Quick Start、四平台配置示例、env 变量完整说明、`.env` 加载原理
 - **文档项目名全量替换**: `MemOSLocal-SM` → `oh-memos`（6 个文件，10 处）
+- **README 乱码修复** — 重命名收尾，同时清理残留的 `oh-memosLocal-SM` 写法
 
 **Commits:**
 - `e90199e` - docs: rename MemOSLocal-SM → oh-memos across all documentation
+- `f42fec6` - fix: repair garbled chars and rename oh-memosLocal-SM in README
 
 
 
