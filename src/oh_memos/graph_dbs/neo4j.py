@@ -1361,13 +1361,30 @@ class Neo4jGraphDB(BaseGraphDB):
                     f"{projection_result['relationshipCount']} relationships"
                 )
 
-                # Step 2: Get internal node IDs for seed nodes
-                seed_internal_ids_query = """
+                # Step 2: Get internal node IDs for seed nodes.
+                # These must be constrained exactly like the projection above:
+                # gds.pageRank rejects sourceNodes that are absent from the
+                # in-memory graph ("sourceNodes nodes do not exist in the
+                # in-memory graph"), so an unfiltered lookup here fails the whole
+                # call as soon as a seed belongs to another scope/status/cube.
+                seed_where = ["n.id IN $seed_ids"]
+                seed_params: dict[str, Any] = {"seed_ids": seed_ids}
+                if scope:
+                    seed_where.append("n.memory_type = $scope")
+                    seed_params["scope"] = scope
+                if status:
+                    seed_where.append("n.status = $status")
+                    seed_params["status"] = status
+                if not self.config.use_multi_db and (self.config.user_name or user_name):
+                    seed_where.append("n.user_name = $user_name")
+                    seed_params["user_name"] = user_name
+
+                seed_internal_ids_query = f"""
                 MATCH (n:Memory)
-                WHERE n.id IN $seed_ids
+                WHERE {" AND ".join(seed_where)}
                 RETURN id(n) AS internalId, n.id AS externalId
                 """
-                seed_result = session.run(seed_internal_ids_query, {"seed_ids": seed_ids})
+                seed_result = session.run(seed_internal_ids_query, seed_params)
                 seed_internal_ids = [r["internalId"] for r in seed_result]
 
                 if not seed_internal_ids:
