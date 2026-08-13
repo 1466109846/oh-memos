@@ -651,7 +651,10 @@ class PolarDBGraphDB(BaseGraphDB):
     @timed
     def update_node(self, id: str, fields: dict[str, Any], user_name: str | None = None) -> None:
         """
-        Update node fields in PolarDB, auto-converting `created_at` and `updated_at` to datetime type if present.
+        Update node fields in PolarDB.
+
+        Temporal values are normalized by the shared property-serialization path
+        below, not by a per-field allowlist.
         """
         if not fields:
             return

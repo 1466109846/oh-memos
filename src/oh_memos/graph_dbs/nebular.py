@@ -514,7 +514,12 @@ class NebulaGraphDB(BaseGraphDB):
     @timed
     def update_node(self, id: str, fields: dict[str, Any], user_name: str | None = None) -> None:
         """
-        Update node fields in Nebular, auto-converting `created_at` and `updated_at` to datetime type if present.
+        Update node fields in Nebular.
+
+        Every field goes through _format_value(), which emits datetime("…") for
+        real datetime objects, so no per-field allowlist is needed. Note that a
+        temporal value passed as an ISO *string* is stored as a string — callers
+        that need a native temporal type must pass a datetime.
         """
         user_name = user_name if user_name else self.config.user_name
         fields = fields.copy()

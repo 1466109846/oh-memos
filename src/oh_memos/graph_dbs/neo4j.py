@@ -404,18 +404,30 @@ class Neo4jGraphDB(BaseGraphDB):
 
     def update_node(self, id: str, fields: dict[str, Any], user_name: str | None = None) -> None:
         """
-        Update node fields in Neo4j, auto-converting `created_at` and `updated_at` to datetime type if present.
+        Update node fields in Neo4j, storing temporal fields as native datetime.
+
+        Any field named `*_at` is wrapped in Cypher's datetime() so it lands as a
+        temporal value rather than a string. The previous
+        ("created_at", "updated_at") allowlist meant a field added later — say
+        `archived_at` — would be written as a plain string via `n += $fields`,
+        making it invisible to datetime range comparisons. This is the write-side
+        counterpart of the same allowlist problem fixed in _parse_node().
         """
         user_name = user_name if user_name else self.config.user_name
         fields = fields.copy()  # Avoid mutating external dict
         set_clauses = []
         params = {"id": id, "fields": fields}
 
-        for time_field in ("created_at", "updated_at"):
-            if time_field in fields:
-                # Set clause like: n.created_at = datetime($created_at)
-                set_clauses.append(f"n.{time_field} = datetime(${time_field})")
-                params[time_field] = fields.pop(time_field)
+        for time_field in [k for k in fields if k.endswith("_at")]:
+            value = fields[time_field]
+            # None means "clear it"; datetime(null) would fail, so let n += $fields
+            # carry it through as a plain null assignment.
+            if value is None:
+                continue
+            # Set clause like: n.created_at = datetime($created_at)
+            set_clauses.append(f"n.{time_field} = datetime(${time_field})")
+            params[time_field] = value.isoformat() if hasattr(value, "isoformat") else value
+            fields.pop(time_field)
 
         set_clauses.append("n += $fields")  # Merge remaining fields
         set_clause_str = ",\n    ".join(set_clauses)
