@@ -30,8 +30,18 @@ import type { CubeInfo, CubeConfig } from "./types.js";
 /**
  * Convert Windows path to WSL/Linux path for local file access.
  * e.g. "G:\\test\\MemOS\\data" → "/mnt/g/test/MemOS/data"
+ *
+ * Only meaningful when this process can actually reach the drive through
+ * /mnt/<drive> — i.e. we are running inside WSL. On native Windows Node a
+ * "/mnt/g/..." string is not absolute: it resolves against the current drive,
+ * so fs.mkdirSync happily creates C:\mnt\g\... (or G:\mnt\g\... depending on
+ * cwd) and every subsequent read/write silently targets that phantom tree
+ * while the API keeps using the real Windows path. Return the path untouched
+ * on win32 so both sides address the same directory.
  */
 function toLocalPath(p: string): string {
+  // Native Windows: Windows paths are already the local paths.
+  if (process.platform === "win32") return p;
   // Already a Unix path
   if (p.startsWith("/")) return p;
   // Windows absolute path: "G:\..." or "G:/..."
