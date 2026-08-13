@@ -2456,10 +2456,17 @@ class Neo4jGraphDB(BaseGraphDB):
     def _parse_node(self, node_data: dict[str, Any]) -> dict[str, Any]:
         node = node_data.copy()
 
-        # Convert Neo4j datetime to string
-        for time_field in ("created_at", "updated_at"):
-            if time_field in node and hasattr(node[time_field], "isoformat"):
-                node[time_field] = node[time_field].isoformat()
+        # Convert Neo4j temporal values to ISO strings.
+        # Detected by capability rather than a field-name allowlist: the previous
+        # ("created_at", "updated_at") list silently missed every temporal
+        # property added later — `archived_at` reached the API as a raw
+        # neo4j.time.DateTime and failed response serialization with
+        # "Unable to serialize unknown type", turning GET /memories into a 400
+        # for any cube holding an archived memory. str/bytes are excluded because
+        # they are already serializable, not because they have isoformat().
+        for key, value in node.items():
+            if not isinstance(value, str | bytes) and hasattr(value, "isoformat"):
+                node[key] = value.isoformat()
         node.pop("user_name", None)
 
         # serialization

@@ -3310,10 +3310,14 @@ class PolarDBGraphDB(BaseGraphDB):
         """Parse node data from database format to standard format."""
         node = node_data.copy()
 
-        # Convert datetime to string
-        for time_field in ("created_at", "updated_at"):
-            if time_field in node and hasattr(node[time_field], "isoformat"):
-                node[time_field] = node[time_field].isoformat()
+        # Convert temporal values to ISO strings. Detected by capability rather
+        # than a field-name allowlist, which silently missed temporal properties
+        # added later (e.g. `archived_at`) and let raw datetime objects reach
+        # response serialization. str/bytes are excluded because they are
+        # already serializable.
+        for key, value in node.items():
+            if not isinstance(value, str | bytes) and hasattr(value, "isoformat"):
+                node[key] = value.isoformat()
 
         # Deserialize sources from JSON strings back to dict objects
         if "sources" in node and node.get("sources"):
@@ -3364,10 +3368,14 @@ class PolarDBGraphDB(BaseGraphDB):
             if isinstance(v, str):
                 node[k] = _strip_wrapping_quotes(v)
 
-        # Convert datetime to string
-        for time_field in ("created_at", "updated_at"):
-            if time_field in node and hasattr(node[time_field], "isoformat"):
-                node[time_field] = node[time_field].isoformat()
+        # Convert temporal values to ISO strings. Detected by capability rather
+        # than a field-name allowlist, which silently missed temporal properties
+        # added later (e.g. `archived_at`) and let raw datetime objects reach
+        # response serialization. str/bytes are excluded because they are
+        # already serializable.
+        for key, value in node.items():
+            if not isinstance(value, str | bytes) and hasattr(value, "isoformat"):
+                node[key] = value.isoformat()
 
         # Deserialize sources from JSON strings back to dict objects
         if "sources" in node and node.get("sources"):
