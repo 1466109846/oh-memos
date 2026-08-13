@@ -114,6 +114,13 @@ npx oh-memos-mcp
 
 ### With `alwaysAllow` (skip per-tool confirmation)
 
+`alwaysAllow` matches **tool names**, so a call form like
+`memos_admin(action=list_cubes)` matches nothing — list the bare name and every
+action of that tool is auto-approved.
+
+`memos_delete` is deliberately absent below. Auto-approving it means memories can
+be deleted without a prompt; add it only if you have decided you want that.
+
 ```json
 {
   "mcpServers": {
@@ -125,28 +132,20 @@ npx oh-memos-mcp
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes",
-        "MEMOS_ENABLE_DELETE": "true"
+        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes"
       },
       "alwaysAllow": [
         "memos_context_resume",
-        "memos_search",
         "memos_search",
         "memos_save",
         "memos_list_v2",
         "memos_get",
         "memos_suggest",
-        "memos_admin(action=list_cubes)",
-        "memos_admin(action=stats)",
-        "memos_graph(mode=related)",
-        "memos_graph(mode=path)",
-        "memos_graph(mode=schema)",
-        "memos_admin(action=register_cube)",
-        "memos_admin(action=create_user)",
-        "memos_admin(action=validate_cubes)",
-        "memos_graph(mode=impact)",
-        "memos_admin(action=calendar)",
-        "memos_delete"
+        "memos_think",
+        "memos_graph",
+        "memos_admin",
+        "memos_export_wiki",
+        "memos_canvas"
       ]
     }
   }
@@ -171,8 +170,16 @@ npx oh-memos-mcp
 | `NEO4J_HTTP_URL` | No | — | Neo4j HTTP endpoint (for direct graph queries) |
 | `NEO4J_USER` | No | — | Neo4j username |
 | `NEO4J_PASSWORD` | No | — | Neo4j password |
+| `MEMOS_ENV_FILE` | No | — | Explicit path to a `.env` file. Highest priority — see below |
 
-> **Tip**: `.env` file in your working directory is loaded automatically with highest priority.
+> **On locating `.env`**: without `MEMOS_ENV_FILE`, the file is found by guessing
+> from position (working directory, two levels above the package, then dotenv's
+> upward search). That works from a checkout and **never works under `npx`**,
+> where the package root sits in the npm cache and every candidate misses — so no
+> variable loads at all. Set `MEMOS_ENV_FILE` (or pass `--memos-env-file`) when the
+> client's working directory and the install location are both outside the project.
+> A path that does not exist warns on stderr rather than failing silently.
+>
 > Copy `.env.example` to get started.
 
 ---
@@ -191,6 +198,7 @@ npx oh-memos-mcp
 | `memos_graph` | Knowledge graph queries — `mode`: `related` / `path` / `impact` / `schema` |
 | `memos_admin` | Maintenance — `action`: `list_cubes` / `register_cube` / `create_user` / `validate_cubes` / `stats` / `calendar` |
 | `memos_export_wiki` | Export a cube as an interlinked markdown wiki (page per memory + index + mermaid graph) |
+| `memos_canvas` | Symbolic task canvas — short-term task state that survives context compaction. `action`: `open` / `update` / `show` / `list`. Nodes carry greppable ids (`000-N1`) and a `ref` anchoring them to evidence: `mem:<memory_id>` / `file:<path>` / `note:<text>` |
 
 Plus `memos_delete`, hidden from `tools/list` unless `MEMOS_ENABLE_DELETE=true`.
 

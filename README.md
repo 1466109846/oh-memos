@@ -235,9 +235,50 @@ AI **auto-retrieves** history before work:
 
 ## 🏗️Architecture
 
-<div align="center">
-<img src="docs/images/architecture-mindmap.png" width="85%" alt="Architecture"/>
-</div>
+```mermaid
+mindmap
+  root(("oh-memos"))
+    Core Concept
+      Persistent project memory
+      Privacy-first, fully local
+      Proactive AI integration
+    Storage
+      Neo4j — knowledge graph
+      Qdrant — vector search
+      Ollama — local embeddings
+    Memory Modes
+      naive_text
+        Flat vector storage
+        Similarity search only
+      tree_text
+        Graph structure
+        LLM extraction, key and tags
+        Relationship detection
+    Memory Types
+      MILESTONE
+      BUGFIX
+      DECISION
+      GOTCHA
+      CONFIG
+      ERROR_PATTERN
+      CODE_PATTERN
+      FEATURE
+      PROGRESS
+      SYNTHESIS
+    Relationships
+      CAUSE
+      CONDITION
+      RELATE
+      CONFLICT
+    Two Timescales
+      Long-term — what do we know
+      Short-term canvas — where was I
+    Benefits
+      Context survives compaction
+      No repeated explanation
+      Works fully offline
+      Per-project isolation
+```
 
 ### Two Timescales
 

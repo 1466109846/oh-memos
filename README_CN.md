@@ -191,33 +191,37 @@ pause
 
 本部分展示了适用于通用 IDE (如 Claude Desktop, Cursor, VS Code 等) 的标准 MCP 服务器配置。
 
-**通用 MCP 客户端配置示例** (如 `~/.claude.json`):
+MCP server 已发布到 npm（[`oh-memos-mcp`](https://www.npmjs.com/package/oh-memos-mcp)），**不需要 Python**，通过 `npx` 运行。
+
+**通用 MCP 客户端配置示例** (如 `~/.claude/settings.json`):
 
 ```json
 {
   "mcpServers": {
-    "memos": {
-      "command": "C:/path/to/MemOS/conda_venv/python.exe",
-      "args": [
-        "-u",
-        "C:/path/to/MemOS/mcp-server/memos_mcp_server.py"
-      ],
+    "oh-memos": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "oh-memos-mcp"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "C:/path/to/MemOS/data/memos_cubes",
-        "MEMOS_TIMEOUT_TOOL": "120.0",
-        "MEMOS_TIMEOUT_STARTUP": "30.0",
-        "MEMOS_TIMEOUT_HEALTH": "5.0",
-        "MEMOS_API_WAIT_MAX": "60.0",
-        "MEMOS_ENABLE_DELETE": "true",
-        "PYTHONIOENCODING": "utf-8"
-      }
+        "MEMOS_CUBES_DIR": "C:/path/to/oh-memos/data/oh-memos_cubes"
+      },
+      "alwaysAllow": [
+        "memos_context_resume", "memos_search", "memos_save",
+        "memos_list_v2", "memos_get", "memos_suggest",
+        "memos_think", "memos_graph", "memos_admin",
+        "memos_export_wiki", "memos_canvas"
+      ]
     }
   }
 }
 ```
+
+四个 `env` 变量全部必填，缺任一则启动即退出。Windows 路径请用正斜杠 `/`（JSON 里单个 `\` 是转义符）。
+
+> 若客户端的工作目录与安装位置都在项目之外（`npx` 场景即是），`.env` 会加载不到任何变量——用 `MEMOS_ENV_FILE` 显式指定，详见 [MCP 配置指南](docs/MCP_GUIDE.md)。
 
 > **📸 演示效果**: 本项目提供的截图 (如 Cherry Studio 系列) 展示了在 **Cherry Studio** 客户端中使用 **GLM-4.7** 模型调用 MemOS MCP 工具的实际演示效果。MemOS 具有极佳的跨客户端适配性，支持所有遵循 MCP 协议的 AI 助手。
 

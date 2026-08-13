@@ -77,7 +77,23 @@ sourceNodes nodes do not exist in the in-memory graph: [7371]
 
 **验证:** 65 单测全绿；`tsc` 干净；schema budget 12488 B → 13680 B（+9.5%，超 +5% 阈值，已 `--write` 重新冻结——新增工具的正常成本，非描述漂移；描述已从 1333 B 压到 1192 B）；`scripts/canvas-e2e.mjs` 18 项全过；真实客户端跑通 `open → update×3 → show → list → context_resume`，`mem:` ref 经 `memos_get` 解引用回原记忆；`dist/` 确认无 `*.test.js` 泄漏。图谱三项修复各自的验证见对应 commit message（6392 节点零残留时间对象、archived_at 往返被 datetime 范围谓词命中、36 个 cube 在 cwd 外被正确发现）。
 
-**Commits:** `d658b42` · `1a53d01` · `f4a61d3` · `030bc42` · `a09c6c9`（+ 本轮 canvas 提交）
+### 📖 文档：清掉整条已删除的 Python 路线
+
+`mcp-server/memos_mcp_server.py` **早已不在仓库里**，但文档仍在全面教用户配置它：
+
+- **`docs/MCP_GUIDE.md`（1231 行）整份都指向那个不存在的文件** —— 6 个平台配置、WSL wrapper 脚本、`conda_venv/python.exe`、旧的 `data/memos_cubes` 路径，以及一份含 1.x 已移除工具（`memos_list`、`memos_get_graph`）的工具参考。而 README_CN 正把它作为「完整配置导航」推荐给用户。**照这份文档操作的用户，没有一条路能走通。** 已按 npx 路线重写为 296 行：平台段落收敛成一张「配置文件位置」表（配置内容只有一份，不再六份各自漂移），新增故障排查表、cube 路由说明、画布说明。
+- **README_CN 的配置示例**同样是 Python 路线，已改为 npx。
+- **删除 `docs/images/architecture-mindmap.png`（1.5 MB）** —— 它不只是大，内容也已过期：标题写着旧项目名 `MemOSLocal-SM`，模式名写 `general_text`（实为 `naive_text`），工具列 1.x 的 `memos_get_graph`。它本就是一张思维导图，改用 Mermaid `mindmap` 内联渲染，可随代码一起 diff。`docs/images/` 从 2.3 MB 降到 816 K。
+
+### 🐛 文档中的失效配置
+
+- **`mcp-server-node/README.md` 的 `alwaysAllow` 列表有两处实际错误**：`memos_search` 重复出现；以及 `memos_admin(action=list_cubes)` 这类**调用形式**条目——`alwaysAllow` 匹配的是**工具名**，这些条目永远匹配不上任何东西，用户以为已免确认，实际每次仍会被拦。已改为裸工具名，并去掉 `memos_delete`（该示例同时设了 `MEMOS_ENABLE_DELETE=true`，等于默许无提示删除记忆）。
+- 该 README 的 `.env` 提示仍称「工作目录下的 .env 自动以最高优先级加载」，在 `npx` 场景下是错的（包根在 npm 缓存里，位置猜测全部落空）。已补 `MEMOS_ENV_FILE` 行与说明。
+- 三份文档的 `alwaysAllow` 与工具表补上 `memos_canvas`。
+
+> 仍有遗留：`.env*.example`、`docs/DEPLOY_*.md`、`docs/DB/*.md`、`VENV_scripts/README.md` 等文件里还有 `conda_venv` / 旧 `data/memos_cubes` 之类的陈旧引用。本轮未处理——其中部分涉及 Python **后端**（那是 API，不是 MCP），需要分开判断。
+
+**Commits:** `d658b42` · `1a53d01` · `f4a61d3` · `030bc42` · `a09c6c9`（+ 本轮 canvas 与文档提交）
 
 ## [3.0.0] - 2026-08-02
 

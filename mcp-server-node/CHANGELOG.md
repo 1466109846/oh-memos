@@ -76,6 +76,21 @@ This project follows [Semantic Versioning](https://semver.org/).
   independently. `cube_id` is treated as untrusted too, since it is derived from
   a caller-supplied `project_path`.
 
+### Documentation
+
+- The `alwaysAllow` example carried two defects. `memos_search` appeared twice,
+  and several entries were **call forms** — `memos_admin(action=list_cubes)` and
+  the like. `alwaysAllow` matches tool names, so those entries matched nothing:
+  a reader would believe those calls were pre-approved and still be prompted for
+  every one. Replaced with bare tool names, which auto-approve every action of
+  the tool.
+- `memos_delete` was dropped from that example, which also set
+  `MEMOS_ENABLE_DELETE: "true"` — together they auto-approve deleting memories
+  with no prompt. Enabling that is a decision worth making deliberately.
+- The `.env` note claimed the working directory's file loads "automatically with
+  highest priority". Under `npx` no file loads at all. Documented `MEMOS_ENV_FILE`
+  and what actually happens.
+
 ### Notes
 
 - Tool surface grew 12488 B → 13680 B (+9.5%), past the +5% drift budget, and the
