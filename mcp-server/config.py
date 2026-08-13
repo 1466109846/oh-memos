@@ -21,9 +21,27 @@ from mcp.server import Server
 # .env Loading
 # ============================================================================
 
+# Priority: MEMOS_ENV_FILE > project root > dotenv search from cwd upward.
+# The positional fallbacks assume the server sits next to the deployment's .env,
+# which does not hold once the package is installed somewhere else; MEMOS_ENV_FILE
+# lets the caller state the location instead of relying on layout. Mirrors the
+# same option in mcp-server-node/src/config.ts.
+_explicit_dotenv = (os.environ.get("MEMOS_ENV_FILE") or "").strip()
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _dotenv_path = os.path.join(_project_root, ".env")
-if os.path.isfile(_dotenv_path):
+
+if _explicit_dotenv:
+    _explicit_path = os.path.abspath(_explicit_dotenv)
+    if os.path.isfile(_explicit_path):
+        load_dotenv(_explicit_path, override=True)
+    else:
+        # Don't fall back silently: an explicit path that does not exist would
+        # otherwise surface much later as a missing-variable error.
+        print(
+            f"[oh-memos-mcp] MEMOS_ENV_FILE points at a missing file: {_explicit_path}",
+            file=sys.stderr,
+        )
+elif os.path.isfile(_dotenv_path):
     load_dotenv(_dotenv_path, override=True)
 else:
     load_dotenv()  # fallback: search from cwd upward

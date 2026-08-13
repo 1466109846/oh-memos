@@ -12,12 +12,41 @@ import { parseArgs } from "util";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load .env with priority: cwd > package root > dotenv default search
+// Load .env with priority:
+//   MEMOS_ENV_FILE / --memos-env-file > cwd > package root > dotenv search
+//
+// The positional fallbacks only work when the server happens to sit next to the
+// deployment's .env. Under `npx oh-memos-mcp` the package lives in the npm cache,
+// so `pkgEnv` resolves inside _npx/... and every lookup misses: the cube builder
+// then fails on the first required variable (MOS_CHAT_MODEL) and registration is
+// dead for reasons the client cannot see. MEMOS_ENV_FILE makes the location
+// explicit and is the only reliable option for npx-based installs.
+const cliEnvFile = (() => {
+  const argv = process.argv.slice(2);
+  const i = argv.indexOf("--memos-env-file");
+  if (i !== -1 && argv[i + 1]) return argv[i + 1];
+  const inline = argv.find((a) => a.startsWith("--memos-env-file="));
+  return inline ? inline.slice("--memos-env-file=".length) : undefined;
+})();
+
+const explicitEnv = (cliEnvFile ?? process.env.MEMOS_ENV_FILE)?.trim();
 const cwdEnv = resolve(process.cwd(), ".env");
 const pkgRoot = resolve(__dirname, "..", "..");
 const pkgEnv = resolve(pkgRoot, ".env");
 
-if (existsSync(cwdEnv)) {
+if (explicitEnv) {
+  const explicitPath = resolve(explicitEnv);
+  if (existsSync(explicitPath)) {
+    loadDotenv({ path: explicitPath, override: true });
+  } else {
+    // Explicit intent that cannot be honoured: say so on stderr rather than
+    // silently falling back and failing later on a missing variable. stdout is
+    // the MCP protocol channel and must not be written to.
+    process.stderr.write(
+      `[oh-memos-mcp] MEMOS_ENV_FILE points at a missing file: ${explicitPath}\n`
+    );
+  }
+} else if (existsSync(cwdEnv)) {
   loadDotenv({ path: cwdEnv, override: true });
 } else if (existsSync(pkgEnv)) {
   loadDotenv({ path: pkgEnv, override: true });
@@ -43,6 +72,9 @@ function parseCliArgs(): Record<string, string | undefined> {
         "memos-timeout-startup": { type: "string" },
         "memos-timeout-health": { type: "string" },
         "memos-api-wait-max": { type: "string" },
+        // Consumed before this point (see the dotenv block above); declared here
+        // so it shows up as a first-class flag rather than an unknown token.
+        "memos-env-file": { type: "string" },
       },
       strict: false,
     });
