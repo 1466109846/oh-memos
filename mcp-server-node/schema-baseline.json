@@ -1,8 +1,8 @@
 {
   "bytesPerTokenAssumed": 3.2,
-  "toolCount": 11,
-  "totalBytes": 12488,
-  "alwaysOnBytes": 11063,
+  "toolCount": 12,
+  "totalBytes": 13680,
+  "alwaysOnBytes": 12255,
   "tools": {
     "memos_context_resume": {
       "descriptionBytes": 205,
@@ -53,6 +53,11 @@
       "descriptionBytes": 238,
       "schemaBytes": 1314,
       "totalBytes": 1670
+    },
+    "memos_canvas": {
+      "descriptionBytes": 250,
+      "schemaBytes": 826,
+      "totalBytes": 1192
     },
     "memos_delete": {
       "descriptionBytes": 570,

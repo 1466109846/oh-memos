@@ -24,6 +24,7 @@ import {
   parseMemoryTypePrefix,
 } from "../query-processing.js";
 import { suggestSearchQueries } from "../memory-analysis.js";
+import { summarizeActiveCanvases } from "./canvas.js";
 import type { TextContent, MemoryNode, SearchData } from "../types.js";
 import {
   apiErrorResponse,
@@ -428,6 +429,12 @@ export async function handleMemosContextResume(arguments_: Record<string, unknow
   }
 
   const lines = ["## Context Resumed", ""];
+
+  // Unfinished task canvases come first: after a compaction, "where was I" is
+  // more urgent than "what do we know". Headlines only — the model opens what it
+  // needs with memos_canvas(action="show").
+  const canvasLines = summarizeActiveCanvases(cubeId);
+  if (canvasLines.length > 0) lines.push(...canvasLines);
 
   if (recentMemories.length > 0) {
     lines.push(`**Recent memories** (${recentMemories.length} items, last 24h):`, "");

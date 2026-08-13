@@ -6,6 +6,88 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`memos_canvas`** — a symbolic task canvas: short-term task state that survives
+  context compaction. One Mermaid file per task under
+  `{MEMOS_CUBES_DIR}/{cube_id}/canvas/`, whose nodes carry a greppable id
+  (`000-N1`) and an optional `ref` anchoring them to evidence:
+  `mem:<memory_id>` (a memory in the graph), `file:<path>` (any file, including
+  the large tool results the harness already offloads), or `note:<text>`.
+
+  `action`: `open` (needs `goal`) · `update` (appends a node; `node_id` edits one
+  in place) · `show` · `list`.
+
+  Canvases are deliberately **not** written to Neo4j or Qdrant. A canvas changes
+  several times an hour, and paying an embedding round trip for a `doing→done`
+  flip would be absurd. Durable facts still go through `memos_save`; the canvas
+  points at them with a `mem:` ref.
+
+  This is **not** a token-saving feature. The design it borrows from
+  ([TencentDB-Agent-Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory))
+  achieves its reduction by intercepting and replacing tool output before the
+  model sees it, which a Claude Code hook cannot do — `PreToolUse` can rewrite a
+  tool's *input* via `updatedInput`, but no hook can rewrite its *output*. What
+  this offers instead is task state that survives compaction, and a path from a
+  summary back to the evidence behind it.
+
+  Node ids and canvas prefixes are allocated as max+1 and **never reuse a gap**:
+  a deleted `000-N2` may still be cited from a commit message, a memory body or
+  another node's ref, and handing that id to a new node would silently repoint
+  every one of those citations.
+
+- `memos_context_resume` now lists **unfinished** canvases first — headlines and
+  counts only, a few dozen tokens — so the first thing visible after a compaction
+  is the open work rather than a memory feed. Injecting canvas bodies here would
+  rebuild the very context bloat the canvas exists to avoid; the model opens what
+  it needs with `show`.
+
+- **Test infrastructure.** This package previously had none: no test script, no
+  `*.test.ts`. Adds vitest and `npm test`, with 65 unit tests covering the
+  parse/render round trip, node-id allocation, Mermaid label injection, path
+  traversal refusal and atomic writes. `scripts/canvas-e2e.mjs` adds 18 checks
+  driven over real MCP stdio rather than mocks.
+
+- `MEMOS_ENV_FILE` env var and `--memos-env-file` flag, to point the server at an
+  explicit `.env`. Previously the file was located only by guessing from position
+  (cwd, two levels above the package, dotenv's upward search) — which works from
+  a checkout and never works under `npx`, where the package root sits in the npm
+  cache and every candidate misses, loading not one variable. A path that does
+  not exist now warns on stderr rather than falling through silently.
+
+### Fixed
+
+- `toLocalPath()` rewrote Windows cube paths to `/mnt/...` unconditionally. That
+  mapping only resolves inside WSL; under native Windows Node the result is not
+  absolute, so it resolved against the current drive and every cube write landed
+  in a phantom tree while the API kept reading the real path. Registration
+  reported success, then `/search` and `/memories` failed 400 — the loaded cube
+  had no memory backend.
+
+### Security
+
+- `canvasPath` is the one place caller text becomes a filesystem path. It uses a
+  **whitelist** (`[a-z0-9-]`) rather than a blacklist of dangerous characters,
+  because a blacklist is always missing an entry. `.` is outside the whitelist,
+  so `..` cannot survive it — traversal is structurally impossible rather than
+  merely checked for — and a post-resolve containment check backs that up
+  independently. `cube_id` is treated as untrusted too, since it is derived from
+  a caller-supplied `project_path`.
+
+### Notes
+
+- Tool surface grew 12488 B → 13680 B (+9.5%), past the +5% drift budget, and the
+  baseline was re-frozen. This is the cost of a new tool rather than description
+  drift; the description was trimmed from 1333 B to 1192 B first, moving detail
+  into `show`'s output (the same move `memos_suggest` made with the memory-type
+  decision tree).
+- `tsconfig.json` now excludes `src/**/*.test.ts`. Without it the test files
+  compile into `dist` and ship with `npm publish`.
+
+---
+
 ## [2.0.1] — 2026-08-02
 
 ### Fixed

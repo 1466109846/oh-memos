@@ -9,6 +9,44 @@
 - 支持 OpenAI 兼容 API
 - 一键启动脚本
 
+## 架构
+
+记忆不是一件事。**持久事实**与**进行中的任务状态**生命周期不同、变更频率不同，因此存放位置也不同：
+
+| | **长期记忆** | **短期画布** |
+|---|---|---|
+| 回答 | 「我们知道什么」 | 「我做到哪了」 |
+| 生命周期 | 无限期 | 一个任务 |
+| 变更频率 | 有新发现时 | 一小时数次 |
+| 存储 | Neo4j + Qdrant | 每任务一个 Mermaid 文件 |
+| 写入成本 | LLM 抽取 + embedding | 一次文件写 |
+| 工具 | `memos_save` / `memos_search` / `memos_graph` | `memos_canvas` |
+
+两者由 `ref` 相连：画布节点用 `mem:<memory_id>` 锚定到一条记忆，于是**抽象很便宜，回到证据的路仍然通畅**。画布永不做 embedding —— 为一次 `doing→done` 付一趟 embedding 往返不合理。
+
+```mermaid
+flowchart TB
+    AI["Claude Code / AI"]
+    HK["Hooks<br/>SessionStart · UserPrompt · PreToolUse<br/>PostToolUse · PreCompact"]
+    MCP["MCP Server<br/><i>主动记忆工具</i>"]
+
+    AI --> MCP
+    HK -.->|"建议 / 注入"| MCP
+
+    MCP -->|"长期<br/>我们知道什么"| API["oh-memos 后端<br/>:18000"]
+    MCP -->|"短期<br/>我做到哪了"| CV["任务画布<br/>{cube}/canvas/NNN-slug.mmd<br/><i>跨压缩存续</i>"]
+
+    API --> NEO["Neo4j :7687<br/><i>图谱</i>"]
+    API --> QD["Qdrant :6333<br/><i>向量</i>"]
+    API --> OL["Ollama :11434<br/><i>LLM</i>"]
+
+    CV -.->|"mem:&lt;memory_id&gt;<br/>锚定到证据"| API
+
+    style CV fill:#fffbeb,stroke:#f59e0b,stroke-width:2px
+    style API fill:#eff6ff,stroke:#3b82f6,stroke-width:2px
+    style MCP fill:#f5f3ff,stroke:#8b5cf6,stroke-width:2px
+```
+
 ## 快速开始
 
 ### 💡 部署 Claude 技能 (Skills) - 推荐

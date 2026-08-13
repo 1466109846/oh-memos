@@ -33,6 +33,65 @@
 
 ---
 
+## 🆕 What's New — v3.1 (August 2026)
+
+### 🗺️ Symbolic Task Canvas — task state that survives compaction
+
+Every memory in oh-memos was **cross-session**: durable facts about the project.
+Nothing tracked state *inside* a session, so when the context compacted, "where
+was I" had to be rebuilt by rereading history.
+
+`memos_canvas` is that missing layer. One Mermaid file per task, whose nodes carry
+a greppable id and an anchor to the evidence behind them:
+
+```mermaid
+graph LR
+    000-N1["status: done<br/>summary: read the source<br/>ref: file:src/parser.ts"]
+    000-N2["status: doing<br/>summary: fix the off-by-one<br/>ref: mem:f475dd26-..."]
+    000-N1 --> 000-N2
+```
+
+| `ref` scheme | Points at | Opened with |
+|---|---|---|
+| `mem:<memory_id>` | a memory in the knowledge graph | `memos_get(memory_id=...)` |
+| `file:<path>` | any file, incl. offloaded tool results | Read |
+| `note:<text>` | an inline remark | — |
+
+`memos_context_resume` now surfaces **unfinished** canvases first — headlines and
+counts only — so the first thing visible after a compaction is the open work.
+
+Inspired by the symbolic memory in
+[TencentDB-Agent-Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory),
+but deliberately **not** a port of it. Their token reduction comes from
+intercepting and replacing tool output before the model sees it, which a Claude
+Code hook cannot do — `PreToolUse` can rewrite a tool's *input*, but no hook can
+rewrite its *output*, and the harness already offloads large results on its own.
+**So this claims no token saving.** What it does claim: task state that survives
+compaction, and a summary you can check against its evidence.
+
+### 🧪 First tests in the MCP server
+
+The `mcp-server-node` package shipped with **zero tests**. It now has 65 unit
+tests plus 18 end-to-end checks driven over real MCP stdio — covering the
+parse/render round trip, Mermaid injection escaping, and path-traversal refusal.
+
+### 🐛 Graph fixes found along the way
+
+- **Any cube holding an archived memory returned `400` from `GET /memories`** —
+  `_parse_node()` converted only two temporal fields, so `archived_at` reached
+  the serializer as a raw driver object. `POST /search` on the same data
+  succeeded, and the error came from a global handler, so nothing in the log
+  pointed at serialization. Now converts by capability, not a name allowlist.
+- **PPR silently degraded to no associative results** — seed ids were resolved
+  without the filter used to project the graph, so `gds.pageRank.stream` rejected
+  the whole call and an `except` block swallowed it. Retrieval quality dropped
+  with one log line to show for it.
+- **Native Windows cube writes landed in a phantom directory tree** —
+  `/mnt/...` rewriting only resolves inside WSL. Registration reported success,
+  then every read failed 400.
+
+---
+
 ## 🆕 What's New — v2.6 (March 2026)
 
 ### 🔍 Knowledge Graph — Fixed & Supercharged
@@ -180,6 +239,25 @@ AI **auto-retrieves** history before work:
 <img src="docs/images/architecture-mindmap.png" width="85%" alt="Architecture"/>
 </div>
 
+### Two Timescales
+
+Memory here is not one thing. Durable facts and in-flight task state have
+different lifetimes, change at different rates, and belong in different places:
+
+| | **Long-term memory** | **Short-term canvas** |
+|---|---|---|
+| Answers | "what do we know" | "where was I" |
+| Lifetime | indefinite | one task |
+| Changes | on a finding | several times an hour |
+| Storage | Neo4j + Qdrant | one Mermaid file per task |
+| Write cost | LLM extraction + embedding | a file write |
+| Tools | `memos_save` / `memos_search` / `memos_graph` | `memos_canvas` |
+
+They are joined by the `ref`: a canvas node anchors to a memory with
+`mem:<memory_id>`, so abstraction stays cheap while the path back to evidence
+stays open. A canvas is never embedded — paying an embedding round trip for a
+`doing→done` flip would be absurd.
+
 ### Dual-Engine Design
 
 | Engine | Role | Technology |
@@ -188,30 +266,27 @@ AI **auto-retrieves** history before work:
 | **Vector Search** | Semantic similarity matching | Qdrant |
 | **LLM Extraction** | Auto-extract key, tags, confidence | Ollama / OpenAI |
 
-```
-+-------------------------------------------------------------+
-|                   Claude Code / AI                          |
-|                           |                                 |
-|                  +-------------+                            |
-|                  | MCP Server  | <- Proactive memory tools  |
-|                  +------+------+                            |
-|                         |                                   |
-|  +------------------------------------------------------+   |
-|  |          oh-memos Backend (localhost:18000)          |   |
-|  |                                                      |   |
-|  |  +------------+   +------------+   +----------+     |   |
-|  |  |   Neo4j    |   |   Qdrant   |   |  Ollama  |     |   |
-|  |  |   :7687    |   |   :6333    |   |  :11434  |     |   |
-|  |  |  (Graph)   |   |  (Vector)  |   |  (LLM)   |     |   |
-|  |  +------------+   +------------+   +----------+     |   |
-|  +------------------------------------------------------+   |
-|                                                             |
-|  +------------------------------------------------------+   |
-|  |          Hooks System (Claude Code)                  |   |
-|  |  SessionStart · UserPrompt · PreToolUse · PostTool   |   |
-|  |     · PreCompact · ContextMonitor · SessionEnd       |   |
-|  +------------------------------------------------------+   |
-+-------------------------------------------------------------+
+```mermaid
+flowchart TB
+    AI["Claude Code / AI"]
+    HK["Hooks<br/>SessionStart · UserPrompt · PreToolUse<br/>PostToolUse · PreCompact"]
+    MCP["MCP Server<br/><i>proactive memory tools</i>"]
+
+    AI --> MCP
+    HK -.->|"suggest / inject"| MCP
+
+    MCP -->|"long-term<br/>what do we know"| API["oh-memos Backend<br/>:18000"]
+    MCP -->|"short-term<br/>where was I"| CV["Task Canvas<br/>{cube}/canvas/NNN-slug.mmd<br/><i>survives compaction</i>"]
+
+    API --> NEO["Neo4j :7687<br/><i>graph</i>"]
+    API --> QD["Qdrant :6333<br/><i>vector</i>"]
+    API --> OL["Ollama :11434<br/><i>LLM</i>"]
+
+    CV -.->|"mem:&lt;memory_id&gt;<br/>anchors to evidence"| API
+
+    style CV fill:#fffbeb,stroke:#f59e0b,stroke-width:2px
+    style API fill:#eff6ff,stroke:#3b82f6,stroke-width:2px
+    style MCP fill:#f5f3ff,stroke:#8b5cf6,stroke-width:2px
 ```
 
 ### 🔒 Privacy-First
@@ -338,7 +413,7 @@ AI uses these tools **automatically** when MCP is configured via [`oh-memos-mcp`
 
 | Tool | Function |
 |------|----------|
-| `memos_context_resume` | Recover context after compaction (recent 24h memories) |
+| `memos_context_resume` | Recover context after compaction — unfinished canvases + recent 24h memories |
 | `memos_search` | Search project memories; pass `context` (recent turns) for LLM intent-aware search |
 | `memos_save` | Save memories with explicit type (BUGFIX, DECISION, SYNTHESIS...) |
 | `memos_list_v2` | List all memories (with compression) |
@@ -348,6 +423,7 @@ AI uses these tools **automatically** when MCP is configured via [`oh-memos-mcp`
 | `memos_graph` | Knowledge graph queries — `mode`: related / path / impact / schema |
 | `memos_admin` | Maintenance — `action`: list_cubes / register_cube / create_user / validate_cubes / stats / calendar |
 | `memos_export_wiki` | Export a cube as an interlinked markdown wiki (git-friendly) |
+| `memos_canvas` | Symbolic task canvas — task state that survives compaction; `action`: open / update / show / list |
 | `memos_delete` | Delete memories (disabled by default) |
 
 > 📖 MCP configuration guide: [`mcp-server-node/README.md`](mcp-server-node/README.md)

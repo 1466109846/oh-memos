@@ -182,6 +182,23 @@ list_cubes · register_cube (fix "not loaded") · create_user (fix "user does no
     }),
   },
 
+  memos_canvas: {
+    description: `Task canvas — short-term task state that survives context compaction.
+action: open (needs goal) · update (append node; node_id edits one) · show · list.
+Node ids are greppable (000-N1); ref anchors evidence: mem:<id> / file:<path> / note:<text>.`,
+    inputSchema: z.object({
+      action: z.enum(["open", "update", "show", "list"]),
+      project_path: projectPathBrief,
+      cube_id: cubeIdBrief,
+      name: z.string().optional().describe("update/show: canvas name (from list)"),
+      goal: z.string().optional().describe("open: the task"),
+      node_id: z.string().optional().describe("update: edit this node, else append"),
+      summary: z.string().optional().describe("update: step text (required to append)"),
+      status: z.enum(["todo", "doing", "done", "blocked"]).optional(),
+      ref: z.string().optional().describe("update: evidence anchor"),
+    }),
+  },
+
   // Delete tool schema (registered conditionally)
   memos_delete: {
     description: `⚠️ DELETE memories from project memory. USE WITH CAUTION!
@@ -228,6 +245,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "memos_delete",
   "memos_admin",       // register_cube / create_user / validate_cubes mutate state
   "memos_export_wiki", // writes: renders wiki .md files into the target project
+  "memos_canvas",      // open/update write a .mmd file under the cube
 ]);
 
 /**

@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-13
+
+### ✨ 新增 `memos_canvas` —— 符号化短期任务记忆
+
+此前所有记忆都是**跨会话**的长期事实，会话**内部**的任务状态无人管：上下文一压缩，「我做到哪一步了」就只能靠翻历史重建。`memos_canvas` 补的是这一层。
+
+一个画布是一个 Mermaid 文件（`{cube}/canvas/{NNN}-{slug}.mmd`），节点带可 grep 的 id（`000-N1`）和一个指向证据的 `ref`：
+
+| ref 形式 | 指向 | 打开方式 |
+|---------|------|---------|
+| `mem:<memory_id>` | Neo4j 图谱里的一条记忆 | `memos_get(memory_id=...)` |
+| `file:<path>` | 任意文件（含 harness 卸载的大工具结果） | Read |
+| `note:<text>` | 内联短说明 | — |
+
+`memos_canvas(action=open/update/show/list)`。`memos_context_resume` 现在会先列出**未完成**的画布（仅标题+计数，几十 token），压缩后第一眼看到的是待办任务而非记忆流水。
+
+**灵感来自 [TencentDB-Agent-Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) 的「符号化记忆」，但刻意没有照搬**，因为两个实测约束让照搬无从下手：
+
+1. **Claude Code 的 PostToolUse hook 不能改写工具输出** —— 只能追加 `additionalContext`。腾讯的 −61% token 依赖 OpenClaw 的 `after-tool-call` patch 拦截并替换工具结果；官方 hooks 文档确认 PreToolUse 有 `updatedInput` 可改写**输入**，PostToolUse 无任何改写**输出**的字段。
+2. **harness 本身已在做卸载** —— 超阈值的工具结果自动落盘 `<session>/tool-results/*.json` 并只返回路径。
+
+**所以本功能不承诺 token 节省**，那个数字复制不了。它承诺的是跨压缩的任务状态存续，以及从摘要回到证据的可追证路径。
+
+三个设计决策（均有测试钉住）：
+
+- **node_id 与 canvas prefix 只 max+1，绝不填补空洞** —— 删掉的 `000-N2` 可能仍被 commit message、记忆正文或另一个节点的 ref 引用，复用该 id 会静默重指向所有这些引用。id 很便宜，花掉而不回收。
+- **`ref` 必须带 scheme** —— 这是相对腾讯设计的改进：他们的 `result_ref` 只能指向本地 `refs/*.md`，我们的 `mem:` 能指进知识图谱（他们没有这一层）。不校验存在性（`mem:` id 在图里不在盘上，`file:` 可能下一刻才写）。
+- **`parseCanvas` 永不抛异常** —— 画布是在「模型刚丢失上下文」这一刻被读取的，那是最不该收到异常的时刻。损坏的 header 只丢 goal，损坏的行只丢那一行。
+
+**画布不进 Neo4j/Qdrant**：它一小时内改数次，为一次 `doing→done` 付 embedding 往返不合理。长期事实仍走 `memos_save`，画布用 `mem:` 指过去。
+
+安全：`canvasPath` 是唯一把调用方文本变成文件路径的地方，用**白名单** `[a-z0-9-]` 而非危险字符黑名单（黑名单总会漏一个）。`.` 不在白名单内，故 `..` 结构上无法存活——遍历是不可能而非「被检查到」；之外还有 resolve 后的 containment 二次校验。`cube_id` 同样视为不可信输入（它由调用方给的 `project_path` 推导）。
+
+### 🧪 首次引入测试基础设施
+
+`mcp-server-node` 此前**零测试**（无 test script、无 `*.test.ts`）。新增 vitest 3.2.4 + `vitest.config.ts` + `npm test`，本轮 65 个单测覆盖 parse/render 往返、node_id 分配、Mermaid 注入转义、路径遍历拒绝、原子写。
+
+`tsconfig.json` 加 `exclude: src/**/*.test.ts` —— 否则测试文件会编入 `dist` 并被 `npm publish` 一起发出去。
+
+另有 `scripts/canvas-e2e.mjs`：18 项检查跑在**真实 MCP stdio** 上（含遍历拒绝、schemeless ref 拒绝、`node_id` 就地编辑不产生新 id、文件确实落盘为 Mermaid），而非 mock。
+
+### 🐛 图谱时间字段序列化（双向）
+
+- **`_parse_node()` 只转换 `created_at` / `updated_at` 两个字段**（`030bc42`）。任何后加的时间属性仍是驱动对象，出站时炸在序列化：`400 Unable to serialize unknown type: <class 'neo4j.time.DateTime'>`。`archived_at` 正是这样一个字段——**任何含已归档记忆的 cube，`GET /memories` 一律 400**（测试 cube 中 6392 节点里有 7 个），而同数据上 `POST /search` 正常，因为它不走这条路径。状态码来自全局 ValueError handler，日志里没有任何一行指向序列化。改为**按能力判断**而非名字白名单，新增时间字段无法再复现此问题；三个后端（neo4j、neo4j_community、polardb）同时修复——`neo4j_community` 是文档默认后端，带有完全相同的潜在 bug。
+- **`update_node()` 的写入方向同病**（`a09c6c9`）：只有 `created_at` / `updated_at` 被包进 Cypher 的 `datetime()`，其他时间字段以纯字符串落库，对 datetime 范围比较完全不可见。改为按 `_at` 后缀判断。**既有数据未受影响**——`archived_at` 由 `archiver.py` 经 Cypher 端 `datetime()` 写入，从不走 `update_node`，故 32 个已归档节点本就是原生 DateTime；此修复关闭潜在路径而非修补存量行。
+
+### 🐛 PPR 种子查询未按图投影过滤
+
+`search_by_ppr()` 用 scope/status/user_name 构建节点过滤器投影内存图，却用裸 `MATCH (n:Memory) WHERE n.id IN $seed_ids` 解析种子 id（`1a53d01`）。任何落在过滤器之外的种子——不同 `memory_type`、非 activated 节点、共享库多租户下别的 cube 命名空间——都不在投影里，`gds.pageRank.stream` 直接拒绝整次调用：
+
+```
+sourceNodes nodes do not exist in the in-memory graph: [7371]
+```
+
+而 except 块把它吞掉返回 `[]`，**PPR 静默退化为「没有联想结果」而非显式失败**：检索质量下降，除一行日志外毫无痕迹。现对种子查询施加同样三个条件，且改用参数化而非字符串插值。
+
+### 🐛 Windows 原生下 cube 路径被改写成 /mnt
+
+`toLocalPath()` 无条件把 `G:/...` 转成 `/mnt/g/...`（`d658b42`）。该映射只在 WSL 内成立；原生 Windows Node 下 `/mnt/g/...` 不是绝对路径，会相对当前驱动器解析，于是**每一次 cube 写入都落进幻影目录树**（`C:\mnt\g\...` 或 `G:\mnto\g\...`，取决于 cwd），而 API 仍在读真实路径。
+
+实际后果：`C:\mnt` 与 `G:\mnt` 下 6 个 `text_mem` 为空的 stub `config.json`，时间戳比真身更新；当 server 由 cwd 不在项目根的客户端启动时，`listAvailableCubes()` 返回 0 个 cube。注册报告成功（`POST /mem_cubes` 200），随后 `/search` 与 `/memories` 400——因为载入的 cube 没有记忆后端。win32 下原样返回路径。Python 版 server 从无此转换。
+
+### ✨ `MEMOS_ENV_FILE`：显式指定 .env 位置
+
+两个 server 此前只靠位置猜测 `.env`：cwd、包上两级、dotenv 向上搜索（`f4a61d3`）。从 checkout 运行时有效，**经 npx 安装时永远无效**——包根在 npm 缓存里，所有候选路径全部落空，一个变量都加载不到。cube 构建随即死在第一个必填变量上（`MOS_CHAT_MODEL is required to build a fallback cube config`），对用户表现为「注册成功但立刻自报未注册」，因为目录压根没被创建。
+
+新增 `MEMOS_ENV_FILE`（Node server 另有 `--memos-env-file`）作为最高优先级来源。**路径不存在时在 stderr 告警而非静默穿透**——那里的拼写错误否则看起来与它要修的故障一模一样。变量未设时位置回退逻辑不变。
+
+**验证:** 65 单测全绿；`tsc` 干净；schema budget 12488 B → 13680 B（+9.5%，超 +5% 阈值，已 `--write` 重新冻结——新增工具的正常成本，非描述漂移；描述已从 1333 B 压到 1192 B）；`scripts/canvas-e2e.mjs` 18 项全过；真实客户端跑通 `open → update×3 → show → list → context_resume`，`mem:` ref 经 `memos_get` 解引用回原记忆；`dist/` 确认无 `*.test.js` 泄漏。图谱三项修复各自的验证见对应 commit message（6392 节点零残留时间对象、archived_at 往返被 datetime 范围谓词命中、36 个 cube 在 cwd 外被正确发现）。
+
+**Commits:** `d658b42` · `1a53d01` · `f4a61d3` · `030bc42` · `a09c6c9`（+ 本轮 canvas 提交）
+
 ## [3.0.0] - 2026-08-02
 
 ### 💥 BREAKING — MCP 工具面 18 → 10，分发统一走 npx

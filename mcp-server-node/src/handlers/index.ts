@@ -11,6 +11,7 @@ import { handleMemosTracePath, handleMemosGetGraph, handleMemosExportSchema, han
 import { handleMemosCalendar } from "./calendar.js";
 import { handleMemosThink } from "./think.js";
 import { handleMemosExportWiki } from "./wiki-export.js";
+import { handleMemosCanvas } from "./canvas.js";
 import {
   handleMemosListCubes,
   handleMemosRegisterCube,
@@ -61,6 +62,10 @@ export async function dispatchTool(
     // Wiki export
     case "memos_export_wiki":
       return handleMemosExportWiki(arguments_);
+
+    // Symbolic task canvas (local files, no API round trip)
+    case "memos_canvas":
+      return handleMemosCanvas(arguments_);
 
     // Admin (consolidated)
     case "memos_admin":
