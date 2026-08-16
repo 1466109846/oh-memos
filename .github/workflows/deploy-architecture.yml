@@ -1,0 +1,65 @@
+name: Deploy architecture map
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/architecture/**"
+      - ".github/workflows/deploy-architecture.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Publish architecture map
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # upload-pages-artifact publishes the contents of `path` at the site root.
+      # Staging into architecture/ keeps the published URL at
+      # <pages-origin>/architecture/, which is what README.md links to, and
+      # leaves the site root free for a future landing page.
+      - name: Stage the Pages site
+        run: |
+          set -euo pipefail
+          mkdir -p _site/architecture
+          cp -R docs/architecture/. _site/architecture/
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=architecture/">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>oh-memos architecture</title>
+          </head>
+          <body>
+            <p>Opening the <a href="architecture/">oh-memos architecture map</a>…</p>
+          </body>
+          </html>
+          HTML
+          test -f _site/architecture/index.html
+          test -f _site/architecture/oh-memos.architecture.html
+          find _site -type f | sort
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

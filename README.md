@@ -17,7 +17,7 @@ memory into another.
 
 English | [简体中文](README_CN.md) ·
 [Architecture](ARCHITECTURE.md) ·
-[Interactive map](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html) ·
+[Interactive map](https://lsg1103275794.github.io/oh-memos/architecture/) ·
 [MCP guide](docs/MCP_GUIDE.md)
 
 <img src="docs/images/cover.jpg" width="72%" alt="oh-memos project memory overview">
@@ -202,8 +202,14 @@ flowchart LR
 
 For module boundaries, write/search sequences, deployment topology, and an
 "edit here for X" guide, read [ARCHITECTURE.md](ARCHITECTURE.md). The
-[interactive architecture map](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html)
+[interactive architecture map](https://lsg1103275794.github.io/oh-memos/architecture/)
 supports zoom, themes, tracing, and export.
+
+<a href="https://lsg1103275794.github.io/oh-memos/architecture/">
+  <img src="docs/architecture/oh-memos.architecture.preview.png" width="100%" alt="oh-memos architecture map: AI clients, Node MCP server, FastAPI, MOS core, code graph, and memory stores">
+</a>
+
+<p align="center"><sub>Static preview of the architecture map — click it to open the interactive version.</sub></p>
 
 ### Two memory timescales
 
@@ -274,7 +280,7 @@ Important boundaries:
 | Document | Use it for |
 |---|---|
 | [Architecture](ARCHITECTURE.md) | Runtime boundaries, data flows, modules, and change navigation |
-| [Interactive architecture](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html) · [source JSON](docs/architecture/oh-memos.architecture.json) | Explore and export the system diagram |
+| [Interactive architecture](https://lsg1103275794.github.io/oh-memos/architecture/) · [source JSON](docs/architecture/oh-memos.architecture.json) | Explore and export the system diagram |
 | [MCP guide](docs/MCP_GUIDE.md) | Client-specific MCP configuration |
 | [Deployment (EN)](docs/DEPLOY_EN.md) · [部署（中文）](docs/DEPLOY_CN.md) | Full setup, operations, and alternate modes |
 | [API reference](docs/product-api-tests.md) | HTTP endpoint examples |

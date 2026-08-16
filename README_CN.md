@@ -16,7 +16,7 @@ oh-memos 为兼容 MCP 的 AI 助手提供一个长期、可检索、按项目�
 
 [English](README.md) | 简体中文 ·
 [架构说明](ARCHITECTURE.md) ·
-[交互式架构图](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html) ·
+[交互式架构图](https://lsg1103275794.github.io/oh-memos/architecture/) ·
 [MCP 配置指南](docs/MCP_GUIDE.md)
 
 <img src="docs/images/cover.jpg" width="72%" alt="oh-memos 项目记忆概览">
@@ -234,7 +234,13 @@ flowchart LR
 
 模块边界、写入/检索时序、部署拓扑和“修改某能力该看哪里”详见
 [ARCHITECTURE.md](ARCHITECTURE.md)。也可以打开支持缩放、主题、链路追踪和导出的
-[交互式架构图](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html)。
+[交互式架构图](https://lsg1103275794.github.io/oh-memos/architecture/)。
+
+<a href="https://lsg1103275794.github.io/oh-memos/architecture/">
+  <img src="docs/architecture/oh-memos.architecture.preview.png" width="100%" alt="oh-memos 架构图：AI 客户端、Node MCP 服务、FastAPI、MOS 核心、代码图与记忆存储">
+</a>
+
+<p align="center"><sub>架构图静态预览，点击可打开交互式版本。</sub></p>
 
 ### 两种记忆时间尺度
 
@@ -306,7 +312,7 @@ flowchart LR
 | 文档 | 用途 |
 |---|---|
 | [架构说明](ARCHITECTURE.md) | 运行边界、数据流、模块与修改导航 |
-| [交互式架构图](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html) · [源 JSON](docs/architecture/oh-memos.architecture.json) | 浏览并导出完整系统图 |
+| [交互式架构图](https://lsg1103275794.github.io/oh-memos/architecture/) · [源 JSON](docs/architecture/oh-memos.architecture.json) | 浏览并导出完整系统图 |
 | [MCP 配置指南](docs/MCP_GUIDE.md) | 各类客户端的 MCP 配置 |
 | [部署（中文）](docs/DEPLOY_CN.md) · [Deployment (EN)](docs/DEPLOY_EN.md) | 完整安装、运维和其他运行模式 |
 | [API 参考](docs/product-api-tests.md) | HTTP 接口示例 |

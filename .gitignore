@@ -218,6 +218,9 @@ venv.bak/
 !docs/openapi.json
 !docs/architecture/oh-memos.architecture.html
 !docs/architecture/oh-memos.architecture.json
+# GitHub Pages entry point for docs/architecture (published by
+# .github/workflows/deploy-architecture.yml)
+!docs/architecture/index.html
 # deploy bundle must ship the same hooks template as the canonical tree
 !oh-memos-deploy/.claude/skills/project-memory/hooks/settings-template.json
 !README.md
