@@ -1,11 +1,11 @@
 ---
 name: project-memory
-description: "Proactive project memory management via MemOS MCP. ALWAYS pass project_path parameter for correct cube routing. USE MCP TOOLS AUTOMATICALLY when: (1) Starting work - memos_search for context, (2) Completing tasks - memos_save as MILESTONE, (3) Fixing bugs - memos_save as ERROR_PATTERN, (4) Making decisions - memos_save as DECISION, (5) Encountering errors - memos_search for solutions, (6) User mentions '之前/上次/previously' - memos_search history, (7) Context compacted - memos_context_resume to recover. NEVER use mkdir or Write for memory files."
+description: "Proactive project memory management via oh-memos MCP. ALWAYS pass project_path parameter for correct cube routing. USE MCP TOOLS AUTOMATICALLY when: (1) Starting work - memos_search for context, (2) Completing tasks - memos_save as MILESTONE, (3) Fixing bugs - memos_save as ERROR_PATTERN, (4) Making decisions - memos_save as DECISION, (5) Encountering errors - memos_search for solutions, (6) User mentions '之前/上次/previously' - memos_search history, (7) Context compacted - memos_context_resume to recover. NEVER use mkdir or Write for memory files."
 ---
 
 # Project Memory (MCP Powered)
 
-Intelligent project memory system powered by **MemOS MCP Server**. Use MCP tools directly - no scripts needed!
+Intelligent project memory system powered by **oh-memos MCP Server**. Use MCP tools directly - no scripts needed!
 
 ---
 
@@ -110,7 +110,7 @@ memos_save(content="...", memory_type="FEATURE", cube_id="dev_cube")
 | 项目路径 | cube_id |
 |---------|---------|
 | `/mnt/g/Cyber/AudioCraft Studio` | `audiocraft_studio_cube` |
-| `/mnt/g/test/MemOS` | `memos_cube` |
+| `/mnt/g/test/oh-memos` | `oh_memos_cube` |
 | `/mnt/g/MCP_server/Skill_Seekers` | `skill_seekers_cube` |
 | `~/my-app` | `my_app_cube` |
 
@@ -122,40 +122,41 @@ memos_save(content="...", memory_type="FEATURE", cube_id="dev_cube")
 | `memos_search` | Find related memories, solutions, patterns | `query: "ERROR_PATTERN ModuleNotFoundError"` |
 | `memos_search` | Search + client-side intent/temporal boosting (pass recent messages as `context`) | `query: "what was the solution?"` |
 | `memos_save` | Record important information | `content: "Fixed X by Y", memory_type: "BUGFIX"` |
-| `memos_list` | See all memories in project | `project_path: "/mnt/g/Cyber/AudioCraft Studio", limit: 10` |
+| `memos_list_v2` | See all memories in project (compacted when large) | `project_path: "...", limit: 10` |
+| `memos_get` | Full details of ONE memory after a compacted list/search | `memory_id: "uuid"` |
+| `memos_think` | **Evidence pack for a question** — contradictions, staleness, gaps. You synthesize, citing `[n]` | `query: "why did retrieval regress?"` |
+| `memos_canvas` | **Short-term task state that survives compaction** (Mermaid file per task) | `action: "open", goal: "..."` |
 | `memos_admin(action=list_cubes)` | **Discover available cubes** | `include_status: true` |
-| `memos_suggest` | Get search suggestions | `context: "Connection refused error"` |
+| `memos_suggest` | Get search suggestions + memory_type decision tree | `context: "Connection refused error"` |
 | `memos_graph(mode=related)` | View dependency/causal relationships | `query: "Neo4j"` → shows CAUSE/RELATE/CONFLICT |
 | `memos_graph(mode=path)` | **Trace paths between memories** | `source_id: "...", target_id: "..."` |
+| `memos_graph(mode=impact)` | Forward blast radius of one memory | `memory_id: "uuid"` |
 | `memos_graph(mode=schema)` | **View graph structure and health** | Shows node/edge counts, types, connectivity |
 | `memos_admin(action=register_cube)` | **Manual cube registration (fallback)** | `cube_id: "my_project_cube"` |
 | `memos_admin(action=create_user)` | **Create user (fallback)** | `user_id: "dev_user"` |
-| `getGraphData` (IPC) | **Renderer-side graph data fetch** | `projectId: "ddsp-svc-6.3"` (Desktop App Only) |
+| `memos_admin(action=stats)` | Per-type counts + health warning | `project_path: "..."` |
+| `memos_export_wiki` | Export a cube as an interlinked markdown wiki (git-friendly) | `project_path: "..."` |
+
+`memos_delete` exists but is **hidden unless `MEMOS_ENABLE_DELETE=true`**. Never
+assume it is callable.
 
 ---
 
-## Desktop Integration: Knowledge Graph Visualization
+## Browsing memories as a human
 
-The desktop app now supports real-time Neo4j knowledge graph visualization.
+Two read paths exist outside the MCP tools:
 
-### Usage in Renderer
-```typescript
-const accomplish = getAccomplish();
-const graphData = await accomplish.getGraphData("ddsp-svc-6.3");
-```
+- **Web GUI** — `memory-admin.bat` serves `http://127.0.0.1:18010`. Lists every
+  cube with its Neo4j node count and Qdrant point count, browses and filters
+  memories, shows relationships, deletes, exports. It talks to Neo4j/Qdrant
+  directly, so it works even when the API is down. Use it when the human wants
+  to audit or clean up memories across many projects.
+- **Markdown wiki** — `memos_export_wiki` renders a cube into interlinked
+  markdown (one page per memory + index + graph). Git-friendly, good for review.
 
-### UI Component
-The `<KnowledgeGraph />` component (located in `renderer/components/memory/KnowledgeGraph.tsx`) provides:
-- Force-directed graph layout
-- Node color-coding by memory type
-- Interactive tooltips with memory content
-- Color coding by type:
-    - **LongTermMemory**: Blue (#3b82f6)
-    - **WorkingMemory**: Emerald (#10b981)
-    - **ShortTermMemory**: Amber (#f59e0b)
-    - **Episodic/Semantic**: Violet/Pink
-- Zoom, pan, and center controls
-- Automatic data fetching for a given `projectId`
+Neo4j node count and Qdrant point count for the same cube are **expected to
+differ** — Qdrant stores chunked vectors, so one memory can map to several
+points. Only a column being empty indicates orphaned data.
 
 ---
 
@@ -394,32 +395,22 @@ Tags: gotcha, {category}
 
 ---
 
-## Legacy Scripts (Optional)
-
-> **Note**: With MCP, you rarely need these scripts. They're kept for backward compatibility.
-
-The following scripts in `scripts/` folder still work but MCP is preferred:
-
-| Script | MCP Equivalent |
-|--------|----------------|
-| `memos_init_project.py` | Auto-registered by MCP |
-| `memos_save.py` | `memos_save` tool |
-| `memos_search.py` | `memos_search` tool |
-
----
-
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEMOS_URL` | `http://localhost:18000` | MemOS API base URL |
+| `MEMOS_URL` | `http://localhost:18000` | oh-memos API base URL |
 | `MEMOS_USER` | `dev_user` | Default user ID |
 | `MEMOS_DEFAULT_CUBE` | `dev_cube` | Default memory cube ID |
-| `MEMOS_CUBES_DIR` | `G:/test/oh-memos/data/oh-memos_cubes` | Cube storage (for auto-registration) |
-| `NEO4J_HTTP_URL` | `http://localhost:7474/db/neo4j/tx/commit` | Neo4j HTTP endpoint |
-| `NEO4J_USER` | `neo4j` | Neo4j username |
-| `NEO4J_PASSWORD` | `12345678` | Neo4j password |
-| `MEMOS_ENABLE_DELETE` | `false` | Enable delete functionality |
+| `MEMOS_CUBES_DIR` | *(required)* | Absolute path to the cube directory; must match the API's |
+| `MEMOS_ENV_FILE` | — | Explicit `.env` location for the MCP server (needed under `npx`, where cwd is not the project) |
+| `MEMOS_ENABLE_DELETE` | `false` | Exposes `memos_delete`; leave off unless the user asks |
+
+`MEMOS_URL`, `MEMOS_USER`, `MEMOS_DEFAULT_CUBE` and `MEMOS_CUBES_DIR` are all
+**required** by the MCP server — it exits if any is missing.
+
+Neo4j/Qdrant credentials belong to the API, not to this skill; the MCP server
+never connects to them directly.
 
 ---
 
@@ -441,7 +432,7 @@ MCP derives cube_id: "my_new_project_cube"
         ↓
 Cube not found? Auto-create from dev_cube template
         ↓
-Auto-register with MemOS API
+Auto-register with oh-memos API
         ↓
 Ready to use!
 ```
@@ -513,14 +504,14 @@ memos_save(content="...", cube_id="my_cube")
 **Recovery Steps**:
 1. Wait a moment and retry (API may be starting)
 2. Try a simpler operation first: `memos_admin(action="list_cubes")`
-3. If persistent, the MemOS API service may need restart (outside MCP scope)
+3. If persistent, the oh-memos API service may need restart (outside MCP scope)
 
 ### Memory Not Found
 
 **Error**: Search returns empty results
 
 **Recovery Steps** (all via MCP):
-1. `memos_list(cube_id="xxx", limit=20)` → Check what memories exist
+1. `memos_list_v2(cube_id="xxx", limit=20)` → Check what memories exist
 2. `memos_admin(action="list_cubes")` → Verify using correct cube_id
 3. `memos_search(query="...", context=[...])` → Use context-aware search
 4. Try broader search terms or different memory types
@@ -551,5 +542,5 @@ Error occurred
     │                                      │
     │                                      └─ Check cube/user, then retry
     │
-    └─ "No results" ────────────────> memos_list() to verify data exists
+    └─ "No results" ────────────────> memos_list_v2() to verify data exists
 ```

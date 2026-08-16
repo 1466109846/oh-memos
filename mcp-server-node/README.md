@@ -184,8 +184,12 @@ be deleted without a prompt; add it only if you have decided you want that.
 
 ---
 
-## Tools (10)
+## Tools (17)
 
+The package defines 17 tool schemas. `memos_delete` is exposed by `tools/list`
+only when `MEMOS_ENABLE_DELETE=true`; the other 16 are available by default.
+
+<!-- mcp-tool-inventory:start -->
 | Tool | Description |
 |------|-------------|
 | `memos_context_resume` | Recover project context after compaction (recent 24h + project state) |
@@ -195,24 +199,46 @@ be deleted without a prompt; add it only if you have decided you want that.
 | `memos_get` | Get full memory details by ID |
 | `memos_suggest` | Smart search query suggestions + `memory_type` decision tree |
 | `memos_think` | Evidence pack for a question: retrieval + contradiction/staleness flags + gap analysis. The caller synthesizes the answer and may persist it as `SYNTHESIS` |
-| `memos_graph` | Knowledge graph queries — `mode`: `related` / `path` / `impact` / `schema` |
+| `memos_graph` | Explainable graph queries plus strict Graphify node-link validation — `mode`: `related` / `path` / `impact` / `schema` / `import` |
 | `memos_admin` | Maintenance — `action`: `list_cubes` / `register_cube` / `create_user` / `validate_cubes` / `stats` / `calendar` |
 | `memos_export_wiki` | Export a cube as an interlinked markdown wiki (page per memory + index + mermaid graph) |
+| `memos_import_wiki` | Import an exported wiki back into a cube; supports dry-run and versioning edited pages, never deletes memories |
 | `memos_canvas` | Symbolic task canvas — short-term task state that survives context compaction. `action`: `open` / `update` / `show` / `list`. Nodes carry greppable ids (`000-N1`) and a `ref` anchoring them to evidence: `mem:<memory_id>` / `file:<path>` / `note:<text>` |
+| `memos_distill_skill` | Create an inert, reviewable Skill candidate under `<project_path>/skill-candidates`; it never installs the candidate automatically |
+| `memos_list_skill_candidates` | List generated Skill candidates without modifying or installing them |
+| `memos_review_skill_candidate` | Approve or reject a candidate with reviewer audit metadata; approval does not install |
+| `memos_install_skill_candidate` | Install an approved candidate only into `.claude/skills/<slug>/SKILL.md`, without overwrite or script execution |
+| `memos_delete` | Delete selected or all memories. Disabled by default and requires explicit user confirmation when enabled |
+<!-- mcp-tool-inventory:end -->
 
-Plus `memos_delete`, hidden from `tools/list` unless `MEMOS_ENABLE_DELETE=true`.
+### `memos_graph` modes
+
+| Mode | Main input | Result |
+|------|------------|--------|
+| `related` | `query` | Related memories and edges, with provenance explanations when available |
+| `path` | `source_id`, `target_id` | A bounded path between two graph nodes, including relationship evidence |
+| `impact` | `memory_id`, optional `max_depth` | Forward blast radius from one memory |
+| `schema` | Optional `sample_size` | Graph structure and statistics |
+| `import` | `graph_json`, optional `project_key` | Deterministic validation and dry-run plan for Graphify NetworkX node-link JSON |
+
+`import` accepts at most 5 MB of JSON and rejects duplicate node ids, dangling
+edges, unsafe source paths, invalid confidence values, and oversized graphs. It
+does **not** write Code Graph nodes to Neo4j, Qdrant, or a memory cube.
 
 ---
 
 ## How .env Loading Works
 
-Priority order (highest first):
+Priority order for configuration values (highest first):
 
-1. **`process.cwd()/.env`** — your project working directory
-2. **Package root `.env`** — where oh-memos-mcp is installed
-3. **dotenv default search** — walks up from cwd
+1. **CLI configuration flags** such as `--memos-url`
+2. **Explicit env file** selected by `--memos-env-file` or inherited `MEMOS_ENV_FILE`
+3. **Inherited process environment** — this is where MCP client `env` values belong
+4. **Auto-discovered `process.cwd()/.env`** — provides only missing defaults
+5. **Auto-discovered package-root `.env`** — provides only missing defaults
+6. **dotenv upward fallback**, then built-in defaults
 
-This means you can place a `.env` in your project root and `npx oh-memos-mcp` will pick it up automatically — no need to repeat env vars in every MCP config.
+The automatic file search never overrides explicit MCP/launcher environment values. Use `MEMOS_ENV_FILE` only when the selected file should deliberately be authoritative; this is also the reliable option for `npx` installs.
 
 ---
 

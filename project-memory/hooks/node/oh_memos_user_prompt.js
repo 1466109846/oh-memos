@@ -123,7 +123,7 @@ function detectIntents(prompt) {
   if (statusPatterns.some(p => p.test(prompt))) {
     intents.push({
       type: 'status_query',
-      suggestion: '→ memos_list or memos_admin(action=stats) for project overview'
+      suggestion: '→ memos_list_v2 or memos_admin(action=stats) for project overview'
     });
   }
 

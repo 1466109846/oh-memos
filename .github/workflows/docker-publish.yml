@@ -1,0 +1,186 @@
+name: Build and publish Docker image
+
+# Tag policy
+#   pull_request  -> build + smoke test only, nothing is pushed
+#   push to main  -> edge, sha-<short>
+#   push v*.*.*   -> <major.minor.patch>, <major.minor>, <major>, latest,
+#                    plus sha-<short> as an immutable reference
+#   dispatch      -> manual-<full sha> (never latest, never a fake semver)
+#
+# Platforms: linux/amd64 only for now. torch is the largest and most
+# architecture-sensitive dependency here, and arm64 has not been run end to end
+# against Neo4j + Qdrant yet — a manifest that merely builds is not a tested
+# image. Flip PLATFORMS once that verification exists.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+    paths:
+      - "docker/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".dockerignore"
+      - ".github/workflows/docker-publish.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".dockerignore"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PLATFORMS: linux/amd64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-check:
+    # Only meaningful for release tags: the image must not report a version
+    # different from the tag it was published under.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Tag, pyproject and package version must agree
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          pyproject_version="$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)"
+          package_version="$(grep -m1 '^__version__ = ' src/oh_memos/__init__.py | cut -d'"' -f2)"
+          echo "tag=$tag_version pyproject=$pyproject_version package=$package_version"
+          if [ "$tag_version" != "$pyproject_version" ] || [ "$tag_version" != "$package_version" ]; then
+            echo "::error::version mismatch — bump pyproject.toml and src/oh_memos/__init__.py to $tag_version before tagging"
+            exit 1
+          fi
+
+  build:
+    needs: [version-check]
+    # version-check is skipped on non-tag refs, so always() is needed to keep
+    # those runs alive. Only success/skipped may proceed: matching on
+    # "!= 'failure'" would also let a cancelled or timed-out check through and
+    # publish a release tag whose version was never verified.
+    if: |
+      always() && (
+        needs.version-check.result == 'success' ||
+        needs.version-check.result == 'skipped'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Free up runner disk space
+        # The CPU torch wheel plus its transitive deps is large; the default
+        # runner image leaves too little headroom for a clean build.
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=edge,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=sha,format=short,prefix=sha-,enable=${{ github.event_name == 'push' }}
+            type=raw,value=manual-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=ref,event=pr
+          flavor: |
+            latest=${{ startsWith(github.ref, 'refs/tags/v') }}
+          labels: |
+            org.opencontainers.image.title=oh-memos
+            org.opencontainers.image.description=Persistent project memory API for AI assistants
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build image for smoke test
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          load: true
+          tags: oh-memos:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # The docker exporter cannot load a manifest list, which is what an
+          # attestation-carrying build produces. Attestations belong on the
+          # pushed image, not on this local smoke copy.
+          provenance: false
+          sbom: false
+
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python oh-memos:smoke -m pip check
+          docker run --rm --entrypoint python oh-memos:smoke -c "
+          import torch
+          # A CUDA wheel on a GPU-less runner also reports is_available() == False,
+          # so assert on the build variant instead of the runtime capability.
+          assert torch.version.cuda is None, f'CUDA build leaked in: {torch.version.cuda}'
+          from oh_memos.api.start_api import app
+          print('api import ok')
+          "
+          echo "--- forbidden packages ---"
+          if docker run --rm --entrypoint python oh-memos:smoke -m pip list --format=freeze \
+              | grep -E '^(nvidia-|triton|pytest)([=<>~ ]|$)'; then
+            echo "::error::image contains CUDA or test-only packages"
+            exit 1
+          fi
+          echo "none found"
+          echo "--- runs as non-root ---"
+          test "$(docker run --rm --entrypoint id oh-memos:smoke -u)" != "0"
+          echo "--- entrypoint seeds the default cube, then execs ---"
+          docker run --rm oh-memos:smoke sh -c 'test -f /data/cubes/dev_cube/config.json && echo seeded'
+
+      - name: Push image
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

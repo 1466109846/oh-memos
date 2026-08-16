@@ -20,6 +20,7 @@ import { MEMOS_URL, logger } from "../config.js";
 import { fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { extractMcpType } from "../query-processing.js";
+import { EDGE_LABELS } from "../wiki-relations.js";
 import { getTypeIcon } from "../models.js";
 import type { TextContent, MemoryNode, GraphEdge } from "../types.js";
 import {
@@ -139,14 +140,8 @@ function buildPages(nodes: MemoryNode[]): WikiPage[] {
   return pages;
 }
 
-const EDGE_LABELS: Record<string, string> = {
-  CAUSE: "导致",
-  RELATE: "相关",
-  CONDITION: "前提",
-  CONFLICT: "冲突",
-  FOLLOWS: "后续",
-  PARENT: "上级",
-};
+// Labels live in wiki-relations.ts so export and import cannot drift apart:
+// a label changed on only one side would silently stop resolving on re-import.
 
 function renderPage(page: WikiPage, edges: GraphEdge[], byId: Map<string, WikiPage>): string {
   const { node, meta } = page;
@@ -200,7 +195,7 @@ function renderIndex(cubeId: string, pages: WikiPage[], edgeCount: number, warni
     `# Memory Wiki — ${cubeId}`,
     "",
     `> 由 oh-memos 导出 · ${new Date().toISOString()} · ${pages.length} 页 · ${edgeCount} 条关联`,
-    `> 只读镜像:请勿手工编辑生成页(重导出会覆盖);系统记录仍在 oh-memos 记忆库。`,
+    `> 可编辑镜像:修改生成页后用 \`memos_import_wiki\` 回灌(未改动的页自动跳过);重导出会覆盖本地改动。`,
     "",
   ];
 
@@ -281,6 +276,8 @@ function cleanGenerated(dir: string): string[] {
         try {
           if (fs.readdirSync(full).length === 0) fs.rmdirSync(full);
         } catch { /* keep */ }
+      } else if (entry.name.startsWith(".")) {
+        continue; // tool-owned state (.wiki-import-ledger.json), not user content
       } else if (entry.name.endsWith(".md")) {
         if (isGeneratedFile(full)) fs.unlinkSync(full);
         else foreign.push(path.relative(dir, full));

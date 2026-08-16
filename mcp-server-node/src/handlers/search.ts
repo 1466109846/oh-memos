@@ -4,7 +4,8 @@
  * memos_search, memos_search, memos_suggest, memos_context_resume
  */
 
-import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, logger } from "../config.js";
+import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, MEMOS_MODE, MEMOS_CUBES_DIR, logger } from "../config.js";
+import { getMemoryProvider } from "../providers/provider-factory.js";
 import { apiCallWithRetry, fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { formatMemoriesForDisplay } from "../formatters.js";
@@ -25,6 +26,7 @@ import {
 } from "../query-processing.js";
 import { suggestSearchQueries } from "../memory-analysis.js";
 import { summarizeActiveCanvases } from "./canvas.js";
+import { applyMemoryQualityPolicy } from "../memory-quality.js";
 import type { TextContent, MemoryNode, SearchData } from "../types.js";
 import {
   apiErrorResponse,
@@ -184,12 +186,25 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
 
   const cubeId = getCubeIdFromArgs(arguments_);
   const rawQuery = String(arguments_.query ?? "");
-  const topK = Number(arguments_.top_k ?? 10);
+  const topK = Math.min(Number(arguments_.top_k ?? 10), MEMOS_MODE === "lite" ? 20 : 100);
   const compact = arguments_.compact !== false;
 
   const [memType, cleanedQuery] = parseMemoryTypePrefix(rawQuery);
   const query = cleanedQuery || rawQuery;
   const intent = detectQueryIntent(query);
+
+  const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
+  if (localProvider) {
+    let resultData = localProvider.toSearchData(cubeId, await localProvider.search(cubeId, query, topK));
+    resultData = filterMemoriesByType(resultData, memType);
+    resultData = applyKeywordRerank(resultData, query);
+    resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
+    const allMemories = extractSearchMemories(resultData);
+    if (compact && shouldCompact(allMemories.length)) {
+      return [{ type: "text", text: compactedResultToText({ preview: allMemories.slice(0, PREVIEW_COUNT).map(toMinimal), totalCount: allMemories.length, omittedCount: Math.max(0, allMemories.length - PREVIEW_COUNT), message: 'Use memos_get(memory_id="<id>") for full details', query: rawQuery, cubeId }) }];
+    }
+    return [{ type: "text", text: formatMemoriesForDisplay(resultData) }];
+  }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
@@ -228,7 +243,7 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
     resultData = filterMemoriesByType(resultData, memType);
     const keywordQuery = memType ? cleanedQuery : query;
     resultData = applyKeywordRerank(resultData, keywordQuery);
-
+    resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
     const allMemories = extractSearchMemories(resultData);
     const totalCount = allMemories.length;
 
@@ -313,6 +328,7 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
         resultData = filterMemoriesByType(resultData, memType);
         const keywordQuery = memType ? cleanedQuery : query;
         resultData = applyKeywordRerank(resultData, keywordQuery);
+        resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
         const formatted = formatMemoriesForDisplay(resultData);
 
         if (context.length > 0) {
@@ -335,6 +351,7 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
           resultData = filterMemoriesByType(resultData, memType);
           const keywordQuery = memType ? cleanedQuery : query;
           resultData = applyKeywordRerank(resultData, keywordQuery);
+          resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
           const formatted = formatMemoriesForDisplay(resultData);
           return [{ type: "text", text: `## Search Results (fallback)\n\n${formatted}` }];
         }
@@ -401,12 +418,26 @@ export async function handleMemosSuggest(arguments_: Record<string, unknown>): P
   return [{ type: "text", text: parts.join("\n") }];
 }
 
-// ============================================================================
-// memos_context_resume
-// ============================================================================
+function renderContextResume(cubeId: string, recentMemories: MemoryNode[]): TextContent[] {
+  const lines = ["## Context Resumed", ""];
+  const canvasLines = summarizeActiveCanvases(cubeId);
+  if (canvasLines.length > 0) lines.push(...canvasLines);
+  if (recentMemories.length > 0) {
+    lines.push(`**Recent memories** (${recentMemories.length} items, last 24h):`, "");
+    for (let i = 0; i < Math.min(recentMemories.length, 10); i++) lines.push(`${i + 1}. ${(recentMemories[i].memory ?? "").slice(0, 120).split("\n")[0]}`);
+  } else lines.push("No recent memories found in this cube.");
+  lines.push("", "---", "**REMINDER**: Use MCP memos tools for ALL memory operations.", "NEVER use `mkdir` or `Write` to create memory files.");
+  return [{ type: "text", text: lines.join("\n") }];
+}
+
 
 export async function handleMemosContextResume(arguments_: Record<string, unknown>): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
+  const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
+  if (localProvider) {
+    const recentMemories = await localProvider.recent(cubeId, 24, 10);
+    return renderContextResume(cubeId, recentMemories);
+  }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);

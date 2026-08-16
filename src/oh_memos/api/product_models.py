@@ -281,6 +281,18 @@ class APITracePathRequest(BaseRequest):
     mem_cube_id: str | None = Field(None, description="Memory Cube ID")
 
 
+class APIAddRelationRequest(BaseRequest):
+    """Request model for writing one graph edge between existing memories."""
+
+    user_id: str = Field(..., description="User ID")
+    mem_cube_id: str = Field(..., description="Memory Cube ID")
+    source_id: str = Field(..., description="Source memory node ID")
+    target_id: str = Field(..., description="Target memory node ID")
+    relation_type: Literal[
+        "CAUSE", "CONDITION", "RELATE", "CONFLICT", "FOLLOWS", "PARENT"
+    ] = Field(..., description="Relation type; restricted so the type cannot reach Cypher unchecked")
+
+
 class PathNode(BaseModel):
     """Model for a node in a path."""
 

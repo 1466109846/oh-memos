@@ -5,9 +5,11 @@
  */
 
 import * as crypto from "crypto";
-import { MEMOS_URL, MEMOS_USER, logger } from "../config.js";
+import { MEMOS_URL, MEMOS_USER, MEMOS_CUBES_DIR, logger } from "../config.js";
+import { getMemoryProvider } from "../providers/provider-factory.js";
 import { apiCallWithRetry } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
+import { parseMemoryWriteResponse } from "../memory-write-response.js";
 // formatMemoriesForDisplay intentionally not imported here — list output is built
 // from the truncated allMemories in handleMemosList (avoids printing the full cube).
 import {
@@ -97,6 +99,13 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
     return [{ type: "text", text: `⏭️ Skipped: Same content was saved within ${DEDUP_TTL_SECONDS}s (dedup protection)` }];
   }
 
+  const provider = getMemoryProvider(MEMOS_CUBES_DIR);
+  if (provider) {
+    const saved = await provider.save({ cubeId, content, memoryType, tags: [memoryType] });
+    markSaved(content, cubeId);
+    return [{ type: "text", text: `Memory saved as [${memoryType}] in local cube '${cubeId}' · ID: ${saved.id}` }];
+  }
+
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
@@ -116,7 +125,10 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
 
   if (result.success) {
     markSaved(content, cubeId);
-    return [{ type: "text", text: `Memory saved as [${memoryType}] in cube '${cubeId}'` }];
+    const write = parseMemoryWriteResponse(result.data as { code: number; data?: unknown });
+    const idText = write.memoryIds.length > 0 ? ` · IDs: ${write.memoryIds.join(", ")}` : "";
+    const warningText = write.warnings.length > 0 ? ` · warnings: ${write.warnings.join("; ")}` : "";
+    return [{ type: "text", text: `Memory saved as [${memoryType}] in cube '${cubeId}'${idText}${warningText}` }];
   } else if (result.data) {
     return apiErrorResponse("Save", String((result.data as Record<string, unknown>).message ?? "Unknown error"));
   } else {
@@ -133,6 +145,18 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
   const limit = Number(arguments_.limit ?? 20);
   const memoryType = arguments_.memory_type as string | undefined;
   const compact = arguments_.compact !== false; // Default true
+
+  const provider = getMemoryProvider(MEMOS_CUBES_DIR);
+  if (provider) {
+    let allMemories = await provider.list(cubeId, Math.max(limit * 20, 200), memoryType);
+    allMemories = allMemories.slice(0, limit);
+    const totalCount = allMemories.length;
+    if (compact && shouldCompact(totalCount)) {
+      return [{ type: "text", text: compactedResultToText({ preview: allMemories.slice(0, PREVIEW_COUNT).map(toMinimal), totalCount, omittedCount: totalCount - Math.min(PREVIEW_COUNT, totalCount), message: 'Use memos_get(memory_id="<id>") for full details', query: "local list", cubeId }) }];
+    }
+    if (!allMemories.length) return [{ type: "text", text: `## Cube: ${cubeId}\n\nNo memories found.` }];
+    return [{ type: "text", text: [`## Cube: ${cubeId} (${allMemories.length})`, "", ...allMemories.map((m, i) => `${i + 1}. [${extractMcpType(m)}] ${m.memory}\n   ID: \`${m.id}\``)].join("\n\n") }];
+  }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
@@ -212,9 +236,16 @@ export async function handleMemosGet(arguments_: Record<string, unknown>): Promi
     );
   }
 
+  const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
+  if (localProvider) {
+    const node = await localProvider.get(cubeId, memoryId);
+    if (!node) return [{ type: "text", text: notFoundText(memoryId) }];
+    const full = toFull(node, cubeId, MEMOS_USER);
+    return [{ type: "text", text: ["## 📝 Memory Details", "", `**ID**: \`${full.id}\``, `**Type**: ${full.memoryType}`, `**Cube**: ${full.cubeId} (local)`, full.tags.length ? `**Tags**: ${full.tags.join(", ")}` : "", full.createdAt ? `**Created**: ${full.createdAt}` : "", "", "### Content", "", full.content].filter(Boolean).join("\n") }];
+  }
+
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
-
   const result = await apiCallWithRetry(
     "GET",
     `${MEMOS_URL}/memories/${cubeId}/${memoryId}`,

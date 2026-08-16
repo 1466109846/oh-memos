@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "oh-memos · 架构感知的项目记忆",
+    "output": "oh-memos.architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/lsg1103275794/oh-memos",
+      "revision": "b30e389c5f014f520e8f8de017b5813d7fe64415"
+    },
+    "viewBox": [1720, 960],
+    "views": [
+      {
+        "id": "memory-runtime",
+        "label": "记忆主链路",
+        "focus": ["clientHosts", "mcpGateway", "memoryApi", "memoryCore", "memoryEngine", "vectorStore", "memoryGraph"],
+        "note": "沿 AI 客户端的保存或检索请求，查看语义向量与记忆关系如何进入同一个项目 Cube。"
+      },
+      {
+        "id": "code-sidecar",
+        "label": "代码图侧车",
+        "focus": ["sourceRepo", "graphAdapter", "codeGraph", "memoryGraph"],
+        "note": "Graphify graph.json 先经过严格校验和稳定 ID 映射，再以独立代码命名空间关联历史记忆。"
+      },
+      {
+        "id": "evidence-boundary",
+        "label": "证据与持久化",
+        "focus": ["graphAdapter", "codeGraph", "memoryGraph", "vectorStore", "cubeFiles"],
+        "note": "关系携带 evidence kind、置信度和源码位置；代码结构与长期记忆分层存储，避免污染语义召回。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "clientHosts",
+      "type": "external",
+      "label": "AI Clients",
+      "sublabel": "Claude · Codex · DSH",
+      "pos": [40, 330],
+      "size": [170, 72],
+      "tag": "MCP hosts"
+    },
+    {
+      "id": "mcpGateway",
+      "type": "backend",
+      "label": "Node MCP Server",
+      "sublabel": "memos_* · stdio",
+      "pos": [290, 330],
+      "size": [180, 72],
+      "tag": "recommended",
+      "sources": [{"path": "mcp-server-node/src/tools-registry.ts"}]
+    },
+    {
+      "id": "memoryApi",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "HTTP JSON · :18000",
+      "pos": [550, 330],
+      "size": [170, 72],
+      "sources": [{"path": "src/oh_memos/api/start_api.py"}]
+    },
+    {
+      "id": "memoryCore",
+      "type": "backend",
+      "label": "MOS / MOSCore",
+      "sublabel": "项目 Cube 编排",
+      "pos": [800, 330],
+      "size": [180, 72],
+      "sources": [{"path": "src/oh_memos/mem_os/core.py"}]
+    },
+    {
+      "id": "memoryEngine",
+      "type": "backend",
+      "label": "Memory Engine",
+      "sublabel": "抽取 · 召回 · 重排",
+      "pos": [1300, 330],
+      "size": [190, 72],
+      "tag": "memory layer"
+    },
+    {
+      "id": "vectorStore",
+      "type": "database",
+      "label": "Qdrant",
+      "sublabel": "语义记忆向量",
+      "pos": [730, 630],
+      "size": [160, 68]
+    },
+    {
+      "id": "memoryGraph",
+      "type": "database",
+      "label": "Memory Graph",
+      "sublabel": "Neo4j · 决策与因果",
+      "pos": [960, 630],
+      "size": [180, 68],
+      "tag": "MEMORY namespace",
+      "sources": [{"path": "src/oh_memos/graph_dbs/neo4j.py"}]
+    },
+    {
+      "id": "cubeFiles",
+      "type": "database",
+      "label": "Cube Files",
+      "sublabel": "配置 · Canvas · Wiki",
+      "pos": [1210, 630],
+      "size": [170, 68],
+      "tag": "bind mount"
+    },
+    {
+      "id": "modelProvider",
+      "type": "external",
+      "label": "LLM / Embedding",
+      "sublabel": "OpenAI-compatible · Ollama",
+      "pos": [1460, 630],
+      "size": [190, 68]
+    },
+    {
+      "id": "sourceRepo",
+      "type": "external",
+      "label": "Source Repository",
+      "sublabel": "代码 · 文档 · git diff",
+      "pos": [290, 90],
+      "size": [180, 68]
+    },
+    {
+      "id": "graphAdapter",
+      "type": "backend",
+      "label": "Graphify Adapter",
+      "sublabel": "校验 · 稳定 ID · dry-run",
+      "pos": [650, 90],
+      "size": [190, 68],
+      "tag": "node-link v1"
+    },
+    {
+      "id": "codeGraph",
+      "type": "database",
+      "label": "Code Graph",
+      "sublabel": "FILE · SYMBOL · CALLS",
+      "pos": [1010, 90],
+      "size": [180, 68],
+      "tag": "CODE namespace"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "oh-memos 分层运行时",
+      "wraps": ["mcpGateway", "memoryApi", "memoryCore", "memoryEngine", "graphAdapter", "codeGraph", "vectorStore", "memoryGraph", "cubeFiles"],
+      "pad": 34
+    }
+  ],
+  "connections": [
+    {"id": "clientMcp", "from": "clientHosts", "to": "mcpGateway", "label": "MCP / stdio", "variant": "emphasis"},
+    {"id": "mcpApi", "from": "mcpGateway", "to": "memoryApi", "label": "HTTP / JSON", "variant": "emphasis"},
+    {"id": "apiCore", "from": "memoryApi", "to": "memoryCore", "label": "memory ops", "variant": "emphasis"},
+    {"id": "coreEngine", "from": "memoryCore", "to": "memoryEngine", "label": "MemCube", "variant": "emphasis"},
+    {"id": "engineVector", "from": "memoryEngine", "to": "vectorStore", "label": "embedding + recall", "fromSide": "bottom", "toSide": "top"},
+    {"id": "engineMemoryGraph", "from": "memoryEngine", "to": "memoryGraph", "label": "MEMORY relations", "fromSide": "bottom", "toSide": "top"},
+    {"id": "engineFiles", "from": "memoryEngine", "to": "cubeFiles", "label": "durable state", "fromSide": "bottom", "toSide": "top", "labelAt": [1260, 555]},
+    {"id": "engineModels", "from": "memoryEngine", "to": "modelProvider", "label": "extract + embed", "fromSide": "bottom", "toSide": "top"},
+    {"id": "repoAdapter", "from": "sourceRepo", "to": "graphAdapter", "label": "Graphify graph.json", "variant": "dashed"},
+    {"id": "mcpAdapter", "from": "mcpGateway", "to": "graphAdapter", "label": "memos_graph import", "variant": "dashed", "fromSide": "top", "toSide": "bottom"},
+    {"id": "adapterCode", "from": "graphAdapter", "to": "codeGraph", "label": "validated symbols", "variant": "emphasis"},
+    {"id": "codeMemory", "from": "codeGraph", "to": "memoryGraph", "label": "RELATED_TO + provenance", "variant": "emphasis", "fromSide": "bottom", "toSide": "bottom", "via": [[1100, 220], [1680, 220], [1680, 760], [1050, 760]]}
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "双图层，不混库",
+      "items": [
+        "Code Graph 保存确定性的文件、符号与调用关系",
+        "Memory Graph 保存决策、Bug、配置和工程经验"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "证据优先",
+      "items": [
+        "关系统一携带 EXTRACTED / INFERRED / AMBIGUOUS / UNKNOWN",
+        "路径和影响分析返回置信度、源码位置与证据引用"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "安全渐进接入",
+      "items": [
+        "graph.json 先严格校验并生成 dry-run 计划，不直接写库",
+        "Qdrant 与现有 Neo4j 记忆图保持向后兼容"
+      ]
+    }
+  ]
+}

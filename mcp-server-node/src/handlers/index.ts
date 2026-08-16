@@ -7,26 +7,32 @@
 
 import { handleMemosSave, handleMemosList, handleMemosGet, handleMemosGetStats } from "./memory.js";
 import { handleMemosSearch, handleMemosSuggest, handleMemosContextResume } from "./search.js";
-import { handleMemosTracePath, handleMemosGetGraph, handleMemosExportSchema, handleMemosImpact } from "./graph.js";
+import { handleMemosTracePath, handleMemosGetGraph, handleMemosExportSchema, handleMemosImpact, handleMemosGraphifyImport } from "./graph.js";
 import { handleMemosCalendar } from "./calendar.js";
 import { handleMemosThink } from "./think.js";
 import { handleMemosExportWiki } from "./wiki-export.js";
+import { handleMemosImportWiki } from "./wiki-import.js";
 import { handleMemosCanvas } from "./canvas.js";
+import { handleMemosDistillSkill, handleMemosListSkillCandidates, handleMemosReviewSkillCandidate, handleMemosInstallSkillCandidate } from "./skill.js";
 import {
   handleMemosListCubes,
   handleMemosRegisterCube,
   handleMemosCreateUser,
   handleMemosValidateCubes,
   handleMemosDelete,
+  handleMemosCapabilities,
 } from "./admin.js";
 import type { TextContent } from "../types.js";
-import { MEMOS_URL } from "../config.js";
+import { MEMOS_URL, MEMOS_PROVIDER } from "../config.js";
 import { errorResponse } from "./utils.js";
 
 export async function dispatchTool(
   name: string,
   arguments_: Record<string, unknown>
 ): Promise<TextContent[]> {
+  if (MEMOS_PROVIDER === "local" && ["memos_think", "memos_graph", "memos_export_wiki", "memos_import_wiki", "memos_admin", "memos_delete"].includes(name)) {
+    return errorResponse(`LOCAL_PROVIDER_UNSUPPORTED: ${name} requires the Full HTTP/graph provider`);
+  }
   switch (name) {
     // Memory tools
     case "memos_save":
@@ -55,17 +61,29 @@ export async function dispatchTool(
           return handleMemosImpact(arguments_);
         case "schema":
           return handleMemosExportSchema(arguments_);
+        case "import":
+          return handleMemosGraphifyImport(arguments_);
         default:
           return handleMemosGetGraph(arguments_);
       }
 
-    // Wiki export
+    // Wiki export / import round-trip
     case "memos_export_wiki":
       return handleMemosExportWiki(arguments_);
+    case "memos_import_wiki":
+      return handleMemosImportWiki(arguments_);
 
     // Symbolic task canvas (local files, no API round trip)
     case "memos_canvas":
       return handleMemosCanvas(arguments_);
+    case "memos_distill_skill":
+      return handleMemosDistillSkill(arguments_);
+    case "memos_list_skill_candidates":
+      return handleMemosListSkillCandidates(arguments_);
+    case "memos_review_skill_candidate":
+      return handleMemosReviewSkillCandidate(arguments_);
+    case "memos_install_skill_candidate":
+      return handleMemosInstallSkillCandidate(arguments_);
 
     // Admin (consolidated)
     case "memos_admin":
@@ -80,13 +98,15 @@ export async function dispatchTool(
           return handleMemosValidateCubes(arguments_);
         case "stats":
           return handleMemosGetStats(arguments_);
+        case "capabilities":
+          return handleMemosCapabilities();
         case "calendar":
           return handleMemosCalendar(arguments_);
         default:
           return errorResponse(
             `Unknown admin action: ${String(arguments_.action ?? "(none)")}`,
             undefined,
-            ["Valid actions: list_cubes, register_cube, create_user, validate_cubes, stats, calendar"]
+            ["Valid actions: list_cubes, register_cube, create_user, validate_cubes, stats, calendar, capabilities"]
           );
       }
 

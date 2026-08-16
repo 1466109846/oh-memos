@@ -47,9 +47,11 @@ if (explicitEnv) {
     );
   }
 } else if (existsSync(cwdEnv)) {
-  loadDotenv({ path: cwdEnv, override: true });
+    // Auto-discovered files provide defaults; explicit process env wins.
+    loadDotenv({ path: cwdEnv, override: false });
 } else if (existsSync(pkgEnv)) {
-  loadDotenv({ path: pkgEnv, override: true });
+    // Package fallback is also advisory, never an override of launcher env.
+    loadDotenv({ path: pkgEnv, override: false });
 } else {
   loadDotenv(); // fallback: search from cwd upward
 }
@@ -161,11 +163,16 @@ function parseFloat2(name: string, value: string | undefined, defaultVal: number
 // Core Configuration (CLI args > env vars > defaults)
 // ============================================================================
 
+// -- Feature Flags --
+export type MemosMode = "full" | "lite";
+const _modeRaw = (process.env.MEMOS_MODE ?? "full").toLowerCase();
+export const MEMOS_MODE: MemosMode = _modeRaw === "lite" ? "lite" : "full";
+export const MEMOS_PROVIDER = (process.env.MEMOS_PROVIDER ?? (MEMOS_MODE === "lite" ? "local" : "api")).toLowerCase();
+
 // -- API Connection --
-export const MEMOS_URL: string = requireEnv(
-  "MEMOS_URL",
-  _args["memos-url"] ?? getEnv("MEMOS_URL", "MEMOS_BASE_URL")
-);
+export const MEMOS_URL: string = MEMOS_PROVIDER === "local"
+  ? (getEnv("MEMOS_URL", "MEMOS_BASE_URL") ?? "")
+  : requireEnv("MEMOS_URL", _args["memos-url"] ?? getEnv("MEMOS_URL", "MEMOS_BASE_URL"));
 
 export const MEMOS_USER: string = requireEnv(
   "MEMOS_USER",
@@ -207,7 +214,6 @@ export const MEMOS_API_WAIT_MAX: number = parseFloat2(
   60.0
 );
 
-// -- Feature Flags --
 const _enableDeleteRaw =
   _args["memos-enable-delete"] ?? getEnv("MEMOS_ENABLE_DELETE") ?? "false";
 export const MEMOS_ENABLE_DELETE: boolean = _enableDeleteRaw.toLowerCase() === "true";

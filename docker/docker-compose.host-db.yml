@@ -1,0 +1,55 @@
+# Overlay: run the containerized API against the Neo4j/Qdrant already running on
+# the Windows host, instead of the databases this stack would otherwise start.
+#
+#   docker compose --env-file docker/.env.host-db \
+#     -f docker/docker-compose.yml \
+#     -f docker/docker-compose.host-db.yml up -d
+#
+# Why this exists: during the migration window both sides stay usable. The
+# container and the Windows API read and write the *same* graph and vectors, so
+# there is nothing to migrate and nothing to lose if either side is stopped.
+#
+# Requires Docker Compose v2.24.4+ for the `!reset` tag used below. Older
+# versions fail at config-parse time rather than silently misbehaving.
+#
+# Two hard rules for this mode:
+#   1. NEO4J_PASSWORD must be the host Neo4j's existing password — this is not a
+#      fresh database whose password you get to choose.
+#   2. Only ONE side may accept writes. Not just the background jobs: every
+#      synchronous add() ends in _cleanup_working_memory() ->
+#      remove_oldest_memory(), which orders WorkingMemory by updated_at, keeps a
+#      fixed number and deletes the rest — deleting Qdrant vectors first, then
+#      Neo4j nodes, non-transactionally. With two writers, either side's cleanup
+#      can evict what the other just wrote. This overlay assumes the container
+#      owns writes; start the Windows side with
+#      scripts/local/start_api_no_bg.bat and use it for reads only.
+#
+# The SQLite user/cube registry is deliberately NOT shared: it stays in the
+# container's own runtime volume. Memory entities live in Neo4j/Qdrant, so an
+# independent registry costs only a one-time re-registration per cube and avoids
+# two processes contending for the same SQLite file.
+
+services:
+  memos:
+    environment:
+      # compose's `environment:` outranks `env_file:`, so these win no matter
+      # what the env file says — a stale localhost value cannot leak through.
+      # host.docker.internal + the base file's host-gateway alias reaches the
+      # host on Docker Desktop and on native Linux Docker alike.
+      NEO4J_URI: bolt://host.docker.internal:7687
+      NEO4J_HTTP_URL: http://host.docker.internal:7474/db/${NEO4J_DB_NAME:-neo4j}/tx/commit
+      # The host's Qdrant listens on 16333, not the 6333 used inside this stack's
+      # own network.
+      QDRANT_HOST: host.docker.internal
+      QDRANT_PORT: ${QDRANT_HOST_DB_PORT:-16333}
+    # Nothing to wait for: the databases are the host's, not this stack's.
+    depends_on: !reset []
+
+  # Kept defined but behind a profile so this overlay does not delete them from
+  # the base stack. `--profile docker-db` still brings the isolated databases up
+  # if you want to compare the two modes side by side.
+  neo4j:
+    profiles: ["docker-db"]
+
+  qdrant:
+    profiles: ["docker-db"]

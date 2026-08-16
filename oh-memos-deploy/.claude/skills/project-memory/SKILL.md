@@ -1,11 +1,11 @@
 ---
 name: project-memory
-description: "Proactive project memory management via MemOS MCP. USE MCP TOOLS AUTOMATICALLY when: (1) Starting work - memos_search for context, (2) Completing tasks - memos_save as MILESTONE, (3) Fixing bugs - memos_save as ERROR_PATTERN, (4) Making decisions - memos_save as DECISION, (5) Encountering errors - memos_search for solutions, (6) User mentions '之前/上次/previously' - memos_search history, (7) Need to understand dependencies/causality - memos_graph(mode=related) or memos_graph(mode=path) for relationships, (8) Cube not found - memos_admin(action=list_cubes) to discover available cubes, (9) Need full memory details - memos_get with memory_id. Available MCP tools: memos_search, memos_search, memos_save, memos_list_v2, memos_get, memos_suggest, memos_admin(action=list_cubes), memos_graph(mode=related), memos_graph(mode=path), memos_graph(mode=schema)."
+description: "Proactive project memory management via oh-memos MCP. ALWAYS pass project_path parameter for correct cube routing. USE MCP TOOLS AUTOMATICALLY when: (1) Starting work - memos_search for context, (2) Completing tasks - memos_save as MILESTONE, (3) Fixing bugs - memos_save as ERROR_PATTERN, (4) Making decisions - memos_save as DECISION, (5) Encountering errors - memos_search for solutions, (6) User mentions '之前/上次/previously' - memos_search history, (7) Context compacted - memos_context_resume to recover. NEVER use mkdir or Write for memory files."
 ---
 
 # Project Memory (MCP Powered)
 
-Intelligent project memory system powered by **MemOS MCP Server**. Use MCP tools directly - no scripts needed!
+Intelligent project memory system powered by **oh-memos MCP Server**. Use MCP tools directly - no scripts needed!
 
 ---
 
@@ -17,12 +17,15 @@ Intelligent project memory system powered by **MemOS MCP Server**. Use MCP tools
 2. **做出技术决策后必须保存为 `DECISION`**，包含理由和备选方案
 3. **发现非显而易见的陷阱必须保存为 `GOTCHA`**
 4. **保存时必须显式指定 `memory_type` 参数**，不依赖自动检测
+5. **保存时必须传 `project_path` 参数**（当前工作目录），确保存入正确的 cube
 
 ### MUST NOT (禁止)
 
 1. **禁止将 PROGRESS 作为默认/万能类型**
 2. **禁止省略 memory_type 参数** (除非是纯进度汇报)
 3. **禁止在 PROGRESS 中包含错误解决方案、技术决策、陷阱警告**
+4. **禁止用 mkdir 或 Write 创建 memory 目录/文件** — 所有记忆通过 MCP memos 工具保存
+5. **禁止不加 project_path 就用 `dev_cube`** — 每个项目应有独立 cube
 
 ### 类型选择决策树
 
@@ -86,72 +89,74 @@ Intelligent project memory system powered by **MemOS MCP Server**. Use MCP tools
 
 ## Quick Reference: MCP Tools
 
+### Cube Routing (CRITICAL)
+
+**每个项目必须使用独立的 cube，不要全部存入 `dev_cube`！**
+
+使用 `project_path` 参数让服务端自动推导 cube_id：
+
+```python
+# CORRECT: 传 project_path，自动推导
+memos_save(content="...", memory_type="FEATURE", project_path="/mnt/g/Cyber/AudioCraft Studio")
+# → 自动存入 audiocraft_studio_cube
+
+# WRONG: 不指定或用 dev_cube
+memos_save(content="...", memory_type="FEATURE", cube_id="dev_cube")
+# → 所有项目混在一起！
+```
+
+**推导规则**: 取目录名 → 小写 → 替换 `-`/`.`/空格 为 `_` → 加 `_cube` 后缀
+
+| 项目路径 | cube_id |
+|---------|---------|
+| `/mnt/g/Cyber/AudioCraft Studio` | `audiocraft_studio_cube` |
+| `/mnt/g/test/oh-memos` | `oh_memos_cube` |
+| `/mnt/g/MCP_server/Skill_Seekers` | `skill_seekers_cube` |
+| `~/my-app` | `my_app_cube` |
+
+### Tool Reference
+
 | Tool | When to Use | Example |
 |------|-------------|---------|
+| `memos_context_resume` | **Context compacted or session start** | `project_path: "/mnt/g/Cyber/AudioCraft Studio"` |
 | `memos_search` | Find related memories, solutions, patterns | `query: "ERROR_PATTERN ModuleNotFoundError"` |
-| `memos_search` | **Smart search with conversation context** | `query: "what was the solution?"` |
+| `memos_search` | Search + client-side intent/temporal boosting (pass recent messages as `context`) | `query: "what was the solution?"` |
 | `memos_save` | Record important information | `content: "Fixed X by Y", memory_type: "BUGFIX"` |
-| `memos_list_v2` | See all memories in project (with compression) | `cube_id: "dev_cube", limit: 10` |
-| `memos_get` | **Get full memory details by ID** | `memory_id: "uuid..."` (after compacted results) |
+| `memos_list_v2` | See all memories in project (compacted when large) | `project_path: "...", limit: 10` |
+| `memos_get` | Full details of ONE memory after a compacted list/search | `memory_id: "uuid"` |
+| `memos_think` | **Evidence pack for a question** — contradictions, staleness, gaps. You synthesize, citing `[n]` | `query: "why did retrieval regress?"` |
+| `memos_canvas` | **Short-term task state that survives compaction** (Mermaid file per task) | `action: "open", goal: "..."` |
 | `memos_admin(action=list_cubes)` | **Discover available cubes** | `include_status: true` |
-| `memos_suggest` | Get search suggestions | `context: "Connection refused error"` |
+| `memos_suggest` | Get search suggestions + memory_type decision tree | `context: "Connection refused error"` |
 | `memos_graph(mode=related)` | View dependency/causal relationships | `query: "Neo4j"` → shows CAUSE/RELATE/CONFLICT |
 | `memos_graph(mode=path)` | **Trace paths between memories** | `source_id: "...", target_id: "..."` |
+| `memos_graph(mode=impact)` | Forward blast radius of one memory | `memory_id: "uuid"` |
 | `memos_graph(mode=schema)` | **View graph structure and health** | Shows node/edge counts, types, connectivity |
 | `memos_admin(action=register_cube)` | **Manual cube registration (fallback)** | `cube_id: "my_project_cube"` |
 | `memos_admin(action=create_user)` | **Create user (fallback)** | `user_id: "dev_user"` |
-| `getGraphData` (IPC) | **Renderer-side graph data fetch** | `projectId: "ddsp-svc-6.3"` (Desktop App Only) |
+| `memos_admin(action=stats)` | Per-type counts + health warning | `project_path: "..."` |
+| `memos_export_wiki` | Export a cube as an interlinked markdown wiki (git-friendly) | `project_path: "..."` |
 
-### Context Compression (NEW!)
-
-When search/list returns **>15 results**, automatic compression activates:
-- Shows **top 5 previews** with ID, type, and summary
-- Displays total count and omitted count
-- Use `memos_get(memory_id="<id>")` to retrieve full details
-
-**Example compressed output:**
-```
-## 🔍 Search Results (Compacted)
-
-**Query**: `Neo4j`
-**Total**: 25 memories found
-**Showing**: Top 5 (omitted 20)
-
-### Preview
-
-1. 🐛 **[BUGFIX]** Fixed Neo4j connection timeout...
-   ID: `abc123-def456-...`
-...
-
-💡 **Tip**: Use `memos_get(memory_id="<id>")` to get full details.
-```
-
-To disable compression: `memos_search(query="...", compact=false)`
+`memos_delete` exists but is **hidden unless `MEMOS_ENABLE_DELETE=true`**. Never
+assume it is callable.
 
 ---
 
-## Desktop Integration: Knowledge Graph Visualization
+## Browsing memories as a human
 
-The desktop app now supports real-time Neo4j knowledge graph visualization.
+Two read paths exist outside the MCP tools:
 
-### Usage in Renderer
-```typescript
-const accomplish = getAccomplish();
-const graphData = await accomplish.getGraphData("ddsp-svc-6.3");
-```
+- **Web GUI** — `memory-admin.bat` serves `http://127.0.0.1:18010`. Lists every
+  cube with its Neo4j node count and Qdrant point count, browses and filters
+  memories, shows relationships, deletes, exports. It talks to Neo4j/Qdrant
+  directly, so it works even when the API is down. Use it when the human wants
+  to audit or clean up memories across many projects.
+- **Markdown wiki** — `memos_export_wiki` renders a cube into interlinked
+  markdown (one page per memory + index + graph). Git-friendly, good for review.
 
-### UI Component
-The `<KnowledgeGraph />` component (located in `renderer/components/memory/KnowledgeGraph.tsx`) provides:
-- Force-directed graph layout
-- Node color-coding by memory type
-- Interactive tooltips with memory content
-- Color coding by type:
-    - **LongTermMemory**: Blue (#3b82f6)
-    - **WorkingMemory**: Emerald (#10b981)
-    - **ShortTermMemory**: Amber (#f59e0b)
-    - **Episodic/Semantic**: Violet/Pink
-- Zoom, pan, and center controls
-- Automatic data fetching for a given `projectId`
+Neo4j node count and Qdrant point count for the same cube are **expected to
+differ** — Qdrant stores chunked vectors, so one memory can map to several
+points. Only a column being empty indicates orphaned data.
 
 ---
 
@@ -348,9 +353,6 @@ Tags: gotcha, {category}
 │  Need context    ───> memos_search ─> Smart search      │
 │                       with conversation history                 │
 │                                                                 │
-│  Need full detail ──> memos_get       ───> Get by memory_id     │
-│                       (after compacted results)                 │
-│                                                                 │
 │  Need root cause ───> memos_graph(mode=related) ───> View CAUSE chain     │
 │                       query: "{error_keyword}"                  │
 │                                                                 │
@@ -393,32 +395,22 @@ Tags: gotcha, {category}
 
 ---
 
-## Legacy Scripts (Optional)
-
-> **Note**: With MCP, you rarely need these scripts. They're kept for backward compatibility.
-
-The following scripts in `scripts/` folder still work but MCP is preferred:
-
-| Script | MCP Equivalent |
-|--------|----------------|
-| `memos_init_project.py` | Auto-registered by MCP |
-| `memos_save.py` | `memos_save` tool |
-| `memos_search.py` | `memos_search` tool |
-
----
-
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEMOS_URL` | `http://localhost:18000` | MemOS API base URL |
+| `MEMOS_URL` | `http://localhost:18000` | oh-memos API base URL |
 | `MEMOS_USER` | `dev_user` | Default user ID |
 | `MEMOS_DEFAULT_CUBE` | `dev_cube` | Default memory cube ID |
-| `MEMOS_CUBES_DIR` | `G:/test/MemOS/data/memos_cubes` | Cube storage (for auto-registration) |
-| `NEO4J_HTTP_URL` | `http://localhost:7474/db/neo4j/tx/commit` | Neo4j HTTP endpoint |
-| `NEO4J_USER` | `neo4j` | Neo4j username |
-| `NEO4J_PASSWORD` | `12345678` | Neo4j password |
-| `MEMOS_ENABLE_DELETE` | `false` | Enable delete functionality |
+| `MEMOS_CUBES_DIR` | *(required)* | Absolute path to the cube directory; must match the API's |
+| `MEMOS_ENV_FILE` | — | Explicit `.env` location for the MCP server (needed under `npx`, where cwd is not the project) |
+| `MEMOS_ENABLE_DELETE` | `false` | Exposes `memos_delete`; leave off unless the user asks |
+
+`MEMOS_URL`, `MEMOS_USER`, `MEMOS_DEFAULT_CUBE` and `MEMOS_CUBES_DIR` are all
+**required** by the MCP server — it exits if any is missing.
+
+Neo4j/Qdrant credentials belong to the API, not to this skill; the MCP server
+never connects to them directly.
 
 ---
 
@@ -440,7 +432,7 @@ MCP derives cube_id: "my_new_project_cube"
         ↓
 Cube not found? Auto-create from dev_cube template
         ↓
-Auto-register with MemOS API
+Auto-register with oh-memos API
         ↓
 Ready to use!
 ```
@@ -458,7 +450,7 @@ If you see "Cube Registration Failed" error:
 # Manual registration (fallback)
 curl -X POST "http://localhost:18000/mem_cubes" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"dev_user","mem_cube_name_or_path":"G:/test/MemOS/data/memos_cubes/dev_cube"}'
+  -d '{"user_id":"dev_user","mem_cube_name_or_path":"G:/test/oh-memos/data/oh-memos_cubes/dev_cube"}'
 ```
 
 ---
@@ -512,14 +504,14 @@ memos_save(content="...", cube_id="my_cube")
 **Recovery Steps**:
 1. Wait a moment and retry (API may be starting)
 2. Try a simpler operation first: `memos_admin(action="list_cubes")`
-3. If persistent, the MemOS API service may need restart (outside MCP scope)
+3. If persistent, the oh-memos API service may need restart (outside MCP scope)
 
 ### Memory Not Found
 
 **Error**: Search returns empty results
 
 **Recovery Steps** (all via MCP):
-1. `memos_list(cube_id="xxx", limit=20)` → Check what memories exist
+1. `memos_list_v2(cube_id="xxx", limit=20)` → Check what memories exist
 2. `memos_admin(action="list_cubes")` → Verify using correct cube_id
 3. `memos_search(query="...", context=[...])` → Use context-aware search
 4. Try broader search terms or different memory types
@@ -541,7 +533,7 @@ Error occurred
     │
     ├─ "Cube not found" ────────────> memos_admin(action="list_cubes")
     │                                      │
-    │                                      ├─ Found? → memos_admin(action="register_cube", )
+    │                                      ├─ Found? → memos_admin(action="register_cube")
     │                                      └─ Not found? → Create cube first
     │
     ├─ "User does not exist" ───────> memos_admin(action="create_user", user_id="xxx")
@@ -550,5 +542,5 @@ Error occurred
     │                                      │
     │                                      └─ Check cube/user, then retry
     │
-    └─ "No results" ────────────────> memos_list() to verify data exists
+    └─ "No results" ────────────────> memos_list_v2() to verify data exists
 ```

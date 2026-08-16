@@ -6,18 +6,20 @@ import threading
 import time
 import warnings
 
-from typing import Any, Generic, TypeVar
+from datetime import datetime
+from typing import Any, Generic, Literal, TypeVar
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from oh_memos.api.config import APIConfig
 from oh_memos.api.handlers.graph_handler import GraphHandler, HandlerDependencies
 from oh_memos.api.middleware.request_context import RequestContextMiddleware
 from oh_memos.api.product_models import (
+    APIAddRelationRequest,
     APIGraphRequest,
     APISchemaRequest,
     APITracePathRequest,
@@ -32,6 +34,7 @@ from oh_memos.api.product_models import (
     PathNode,
     SchemaData,
     SchemaResponse,
+    SimpleResponse,
     TracePath,
     TracePathData,
     TracePathResponse,
@@ -52,6 +55,14 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(override=True)
+
+# When the Docker API shares this process's Neo4j/Qdrant, only one instance may
+# run archive/reorganization writers. This explicit process-level switch is read
+# after dotenv because src/.env intentionally overrides ordinary environment
+# values at startup.
+if os.environ.get("MEMOS_DISABLE_BACKGROUND_WRITERS", "").lower() == "true":
+    os.environ["MEMOS_AUTO_ARCHIVE"] = "false"
+    os.environ["MOS_ENABLE_REORGANIZE"] = "false"
 
 T = TypeVar("T")
 
@@ -359,7 +370,20 @@ async def run_archive():
     Manually trigger the archive process.
 
     Archives expired memories based on configured TTL and types.
+
+    Refused when this instance has handed archiving to another one (host-db
+    mode): disabling only the periodic task would still leave this endpoint able
+    to archive the shared graph concurrently with the owner.
     """
+    if os.environ.get("MEMOS_DISABLE_BACKGROUND_WRITERS", "").lower() == "true":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Archiving is owned by another instance "
+                "(MEMOS_DISABLE_BACKGROUND_WRITERS=true). Run it there instead."
+            ),
+        )
+
     driver = _get_neo4j_driver()
     if not driver:
         return {"code": 500, "message": "Neo4j driver not available", "data": None}
@@ -744,6 +768,11 @@ class Message(BaseModel):
         description="Message content.",
         json_schema_extra={"example": "Hello, how can I help you?"},
     )
+    chat_time: str | None = Field(
+        None,
+        description="Message timestamp in ISO 8601 format (e.g., '2024-01-15T10:30:00Z'). Used by evaluation harnesses to preserve temporal order.",
+        json_schema_extra={"example": "2024-01-15T10:30:00Z"},
+    )
 
 
 class MemoryCreate(BaseRequest):
@@ -765,6 +794,34 @@ class MemoryCreate(BaseRequest):
         description="Path to document to store",
         json_schema_extra={"example": "/path/to/document.txt"},
     )
+    memory_type: str | None = Field(None, description="MCP business type, e.g. BUGFIX or DECISION")
+    tags: list[str] | None = Field(None, description="User-defined memory tags")
+    confidence: float | None = Field(None, ge=0.0, le=1.0, description="Confidence from 0 to 1")
+    status: Literal["activated", "archived", "deleted"] | None = Field(None, description="Memory lifecycle status")
+    created_at: str | None = Field(None, description="Original creation timestamp in ISO 8601 format")
+    updated_at: str | None = Field(None, description="Last update timestamp in ISO 8601 format")
+    source: Literal["conversation", "retrieved", "web", "file", "system"] | None = Field(None, description="Memory source")
+    session_id: str | None = Field(None, description="Source session identifier")
+    source_ref: str | None = Field(None, description="Source file, URL, or import reference")
+    dialogue_id: str | None = Field(None, description="Dialogue identifier for evaluation tracking (e.g., LOCOMO dia_id)")
+    turn_index: int | None = Field(None, ge=0, description="Turn index within a dialogue for evaluation tracking")
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_timestamp(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("must be an ISO 8601 timestamp") from exc
+        return value
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and any(not tag.strip() for tag in value):
+            raise ValueError("tags must contain non-empty strings")
+        return value
 
 
 class SearchRequest(BaseRequest):
@@ -828,6 +885,10 @@ class ConfigResponse(BaseResponse[None]):
 
 class MemoryResponse(BaseResponse[dict]):
     """Response model for memory operations."""
+
+
+class MemoryWriteResponse(BaseResponse[dict]):
+    """Response model for memory writes, including created IDs."""
 
 
 class SearchResponse(BaseResponse[dict]):
@@ -958,7 +1019,29 @@ async def get_graph_schema(req: APISchemaRequest):
     return handler.handle_get_graph_schema(req)
 
 
-@app.post("/memories", summary="Create memories", response_model=SimpleResponse)
+@app.post("/product/graph/relation", summary="Add graph relation", response_model=SimpleResponse)
+async def add_graph_relation(req: APIAddRelationRequest):
+    """
+    Link two existing memories with one typed graph edge.
+
+    This endpoint does not create or modify memory content; it only adds an edge
+    between two memory IDs that must already exist in the same cube and user scope.
+    """
+    mos_instance = get_mos_instance()
+    try:
+        mos_instance.add_relation(
+            mem_cube_id=req.mem_cube_id,
+            source_id=req.source_id,
+            target_id=req.target_id,
+            relation_type=req.relation_type,
+            user_id=req.user_id,
+        )
+        return SimpleResponse(message=f"Relation {req.relation_type} added between {req.source_id} and {req.target_id}")
+    except ValueError as e:
+        raise ValueError(str(e))  # caught by value_error_handler → 400
+
+
+@app.post("/memories", summary="Create memories", response_model=MemoryWriteResponse)
 def add_memory(memory_create: MemoryCreate):
     """Store new memories in a MemCube."""
     if not any([memory_create.messages, memory_create.memory_content, memory_create.doc_path]):
@@ -985,26 +1068,61 @@ def add_memory(memory_create: MemoryCreate):
         target_user_id = memory_create.user_id or mos_instance.user_id
         _try_auto_register_cube(mos_instance, memory_create.mem_cube_id, target_user_id)
 
+    created_ids: list[str] = []
+    add_kwargs = {
+        "mem_cube_id": memory_create.mem_cube_id,
+        "user_id": memory_create.user_id,
+        "session_id": memory_create.session_id,
+        "return_details": True,
+        "memory_type": memory_create.memory_type,
+        "tags": memory_create.tags,
+        "confidence": memory_create.confidence,
+        "status": memory_create.status,
+        "created_at": memory_create.created_at,
+        "updated_at": memory_create.updated_at,
+        "source": memory_create.source,
+        "source_ref": memory_create.source_ref,
+        "dialogue_id": memory_create.dialogue_id,
+        "turn_index": memory_create.turn_index,
+    }
+    add_kwargs = {key: value for key, value in add_kwargs.items() if value is not None}
+
+    write_details: dict[str, Any] = {
+        "created_ids": [],
+        "queued": False,
+        "backend": "unknown",
+        "warnings": [],
+    }
     if memory_create.messages:
         messages = [m.model_dump() for m in memory_create.messages]
-        mos_instance.add(
-            messages=messages,
-            mem_cube_id=memory_create.mem_cube_id,
-            user_id=memory_create.user_id,
-        )
+        write_details = mos_instance.add(messages=messages, **add_kwargs) or write_details
     elif memory_create.memory_content:
-        mos_instance.add(
-            memory_content=memory_create.memory_content,
-            mem_cube_id=memory_create.mem_cube_id,
-            user_id=memory_create.user_id,
-        )
+        write_details = mos_instance.add(memory_content=memory_create.memory_content, **add_kwargs) or write_details
     elif memory_create.doc_path:
-        mos_instance.add(
-            doc_path=memory_create.doc_path,
-            mem_cube_id=memory_create.mem_cube_id,
-            user_id=memory_create.user_id,
-        )
-    return SimpleResponse(message="Memories added successfully")
+        write_details = mos_instance.add(doc_path=memory_create.doc_path, **add_kwargs) or write_details
+
+    if isinstance(write_details, list):
+        write_details = {
+            "created_ids": [str(mid) for mid in write_details],
+            "queued": False,
+            "backend": "unknown",
+            "warnings": [],
+        }
+
+    created_ids = [str(mid) for mid in write_details.get("created_ids", [])]
+    warnings_out = [str(w) for w in write_details.get("warnings", [])]
+    if not created_ids and not write_details.get("queued"):
+        warnings_out.append("ids_unavailable: write acknowledged but no memory ids were returned")
+
+    return MemoryWriteResponse(
+        message="Memories added successfully",
+        data={
+            "memory_ids": created_ids,
+            "queued": bool(write_details.get("queued", False)),
+            "backend": str(write_details.get("backend", "unknown")),
+            "warnings": warnings_out,
+        },
+    )
 
 
 @app.get("/memories", summary="Get all memories", response_model=MemoryResponse)

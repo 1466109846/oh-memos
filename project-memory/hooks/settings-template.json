@@ -84,6 +84,35 @@
           {
             "type": "command",
             "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_pre_compact.js"
+          },
+          {
+            "type": "command",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_capture.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_capture.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_capture.js",
+            "timeout": 5
           }
         ]
       }

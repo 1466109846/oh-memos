@@ -1,0 +1,78 @@
+{
+  "model_schema": "oh_memos.configs.mem_cube.GeneralMemCubeConfig",
+  "user_id": "dev_user",
+  "cube_id": "__CUBE_ID__",
+  "config_filename": "config.json",
+  "text_mem": {
+    "backend": "tree_text",
+    "config": {
+      "cube_id": "__CUBE_ID__",
+      "memory_filename": "textual_memory.json",
+      "reorganize": true,
+      "extractor_llm": {
+        "backend": "openai",
+        "config": {
+          "model_name_or_path": "gpt-4o-mini",
+          "temperature": 0.6,
+          "max_tokens": 6000,
+          "api_key": "placeholder",
+          "api_base": "https://api.openai.com/v1"
+        }
+      },
+      "dispatcher_llm": {
+        "backend": "openai",
+        "config": {
+          "model_name_or_path": "gpt-4o-mini",
+          "temperature": 0.6,
+          "max_tokens": 6000,
+          "api_key": "placeholder",
+          "api_base": "https://api.openai.com/v1"
+        }
+      },
+      "embedder": {
+        "backend": "universal_api",
+        "config": {
+          "model_name_or_path": "BAAI/bge-m3",
+          "provider": "openai",
+          "base_url": "https://api.openai.com/v1",
+          "api_key": "placeholder",
+          "embedding_dims": 1024
+        }
+      },
+      "reranker": {
+        "backend": "rrf",
+        "config": {
+          "k": 60
+        }
+      },
+      "graph_db": {
+        "backend": "neo4j-community",
+        "config": {
+          "uri": "bolt://neo4j:7687",
+          "user": "neo4j",
+          "password": "placeholder",
+          "db_name": "neo4j",
+          "use_multi_db": false,
+          "user_name": "__CUBE_ID__",
+          "embedding_dimension": 1024,
+          "vec_config": {
+            "backend": "qdrant",
+            "config": {
+              "collection_name": "__CUBE_ID___graph",
+              "vector_dimension": 1024,
+              "distance_metric": "cosine",
+              "host": "qdrant",
+              "port": 6333
+            }
+          }
+        }
+      },
+      "search_strategy": {
+        "bm25": true,
+        "cot": false
+      }
+    }
+  },
+  "act_mem": {},
+  "para_mem": {}
+}

@@ -40,7 +40,21 @@ from oh_memos.templates.mos_prompts import QUERY_REWRITING_PROMPT
 from oh_memos.types import ChatHistory, MessageList, MOSSearchResult
 
 
-logger = get_logger(__name__)
+# Relationship types writable through the public API. The Neo4j driver
+# interpolates the relationship type directly into Cypher, so this allowlist is
+# a query-injection boundary, not a cosmetic vocabulary.
+ALLOWED_RELATION_TYPES: frozenset[str] = frozenset(
+    {"CAUSE", "CONDITION", "RELATE", "CONFLICT", "FOLLOWS", "PARENT"}
+)
+
+
+class MemoryAddResult(dict):
+    """Detailed write outcome; dict-compatible for API serialization."""
+
+    @property
+    def created_ids(self) -> list[str]:
+        return list(self.get("created_ids", []))
+
 
 
 class MOSCore:
@@ -775,7 +789,7 @@ class MOSCore:
         session_id: str | None = None,
         task_id: str | None = None,  # New: Add task_id parameter
         **kwargs,
-    ) -> None:
+    ) -> list[str]:
         """
         Add textual memories to a MemCube.
 
@@ -821,8 +835,18 @@ class MOSCore:
                 "Mem-Scheduler must be working when use asynchronous memory adding."
             )
         logger.debug(f"Mem-reader mode is: {sync_mode}")
+        created_ids: list[str] = []
+        warnings: list[str] = []
+        backend = self.mem_cubes[mem_cube_id].config.text_mem.backend
+        queued = sync_mode == "async"
+        metadata_info = {
+            key: kwargs[key]
+            for key in ("source_ref", "imported_from", "source", "capture_stage")
+            if kwargs.get(key) is not None
+        }
 
         def process_textual_memory():
+            nonlocal created_ids
             if (
                 (messages is not None)
                 and self.config.enable_textual_memory
@@ -837,7 +861,13 @@ class MOSCore:
                         add_memory.append(
                             TextualMemoryItem(memory=message["content"], metadata=metadata)
                         )
-                    self.mem_cubes[mem_cube_id].text_mem.add(add_memory)
+                    returned = self.mem_cubes[mem_cube_id].text_mem.add(add_memory)
+                    if isinstance(returned, list):
+                        created_ids.extend(str(mid) for mid in returned)
+                    else:
+                        warnings.append(
+                            f"ids_unavailable: backend '{backend}' does not return memory ids for messages"
+                        )
                 else:
                     messages_list = [messages]
                     memories = self.mem_reader.get_memory(
@@ -848,6 +878,7 @@ class MOSCore:
                     )
                     memories_flatten = [m for m_list in memories for m in m_list]
                     mem_ids: list[str] = self.mem_cubes[mem_cube_id].text_mem.add(memories_flatten)
+                    created_ids.extend(mem_ids)
                     logger.info(
                         f"Added memory user {target_user_id} to memcube {mem_cube_id}: {mem_ids}"
                     )
@@ -931,9 +962,13 @@ class MOSCore:
                 metadata = TextualMemoryMetadata(
                     user_id=target_user_id, session_id=target_session_id, source="conversation"
                 )
-                self.mem_cubes[mem_cube_id].text_mem.add(
+                returned = self.mem_cubes[mem_cube_id].text_mem.add(
                     [TextualMemoryItem(memory=memory_content, metadata=metadata)]
                 )
+                if isinstance(returned, list):
+                    created_ids.extend(str(mid) for mid in returned)
+                else:
+                    warnings.append(f"ids_unavailable: backend '{backend}' does not return memory ids for content")
             else:
                 messages_list = [
                     [{"role": "user", "content": memory_content}]
@@ -952,12 +987,20 @@ class MOSCore:
                 )
                 if _fast_ok:
                     _first_line = memory_content.splitlines()[0].strip()
+                    _item_kwargs = {
+                        key: kwargs[key]
+                        for key in ("status", "source", "created_at", "updated_at")
+                        if kwargs.get(key) is not None
+                    }
+                    if kwargs.get("confidence") is not None:
+                        _item_kwargs["confidence"] = kwargs["confidence"]
                     _item = self.mem_reader._make_memory_item(
                         value=memory_content,
-                        info={"user_id": target_user_id, "session_id": target_session_id},
+                        info={"user_id": target_user_id, "session_id": target_session_id, **metadata_info},
                         memory_type="LongTermMemory",
-                        tags=[_typed.group(1)],
+                        tags=kwargs.get("tags") or [kwargs.get("memory_type") or _typed.group(1)],
                         key=_first_line[:80],
+                        **_item_kwargs,
                     )
                     memories = [[_item]]
                     logger.info(f"[add] typed fast-path (no LLM) for [{_typed.group(1)}] content")
@@ -976,6 +1019,8 @@ class MOSCore:
                         f"Added memory user {target_user_id} to memcube {mem_cube_id}: {mem_id_list}"
                     )
                     mem_ids.extend(mem_id_list)
+
+                created_ids.extend(mem_ids)
 
                 # submit messages for scheduler
                 if self.enable_mem_scheduler and self.mem_scheduler is not None:
@@ -1016,6 +1061,8 @@ class MOSCore:
                 mem_id_list: list[str] = self.mem_cubes[mem_cube_id].text_mem.add(mem)
                 mem_ids.extend(mem_id_list)
 
+            created_ids.extend(mem_ids)
+
             # submit messages for scheduler
             if self.enable_mem_scheduler and self.mem_scheduler is not None:
                 message_item = ScheduleMessageItem(
@@ -1028,6 +1075,14 @@ class MOSCore:
                 self.mem_scheduler.submit_messages(messages=[message_item])
 
         logger.info(f"Add memory to {mem_cube_id} successfully")
+        if kwargs.get("return_details"):
+            return MemoryAddResult(
+                created_ids=created_ids,
+                queued=queued,
+                backend=backend,
+                warnings=warnings,
+            )
+        return created_ids
 
     def get(
         self, mem_cube_id: str, memory_id: str, user_id: str | None = None
@@ -1146,9 +1201,56 @@ class MOSCore:
             self.mem_cubes[mem_cube_id].text_mem.update(memory_id, memories=text_memory_item)
             logger.info(f"MemCube {mem_cube_id} updated memory {memory_id}")
         else:
-            logger.warning(
-                f" {self.mem_cubes[mem_cube_id].config.text_mem.backend} does not support update memory"
+            raise NotImplementedError(
+                "TREE_TEXT_UPDATE_UNSUPPORTED: tree_text requires an ID-preserving graph/vector update contract; "
+                "use a new version instead of overwriting this memory"
             )
+
+    def add_relation(
+        self,
+        mem_cube_id: str,
+        source_id: str,
+        target_id: str,
+        relation_type: str,
+        user_id: str | None = None,
+    ) -> None:
+        """
+        Link two existing memories with one typed graph edge.
+
+        The relation type is checked against an allowlist here as well as at the
+        API boundary: the Neo4j driver interpolates the relationship type into
+        the Cypher statement, so an unchecked type would be a query-injection
+        vector rather than merely a bad label.
+        """
+        if relation_type not in ALLOWED_RELATION_TYPES:
+            raise ValueError(
+                f"Unsupported relation_type '{relation_type}'; allowed: {sorted(ALLOWED_RELATION_TYPES)}"
+            )
+        if source_id == target_id:
+            raise ValueError("source_id and target_id must differ")
+
+        target_user_id = user_id if user_id is not None else self.user_id
+        self._validate_cube_access(target_user_id, mem_cube_id)
+        if mem_cube_id not in self.mem_cubes:
+            raise ValueError(f"MemCube '{mem_cube_id}' is not loaded. Please register.")
+
+        text_mem = self.mem_cubes[mem_cube_id].text_mem
+        graph_store = getattr(text_mem, "graph_store", None)
+        if graph_store is None:
+            raise NotImplementedError(
+                "RELATIONS_UNSUPPORTED: only graph-backed text memory (tree_text) can store relations"
+            )
+
+        # Both endpoints must already exist in this cube; add_edge MATCHes them,
+        # so a missing id would otherwise be a silent no-op reported as success.
+        for endpoint in (source_id, target_id):
+            if text_mem.get(endpoint) is None:
+                raise ValueError(f"Memory '{endpoint}' does not exist in cube '{mem_cube_id}'")
+
+        graph_store.add_edge(source_id, target_id, relation_type, user_name=mem_cube_id)
+        logger.info(
+            f"MemCube {mem_cube_id} linked {source_id} -[{relation_type}]-> {target_id}"
+        )
 
     def delete(self, mem_cube_id: str, memory_id: str, user_id: str | None = None) -> None:
         """

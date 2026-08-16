@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { MEMOS_DEFAULT_CUBE, MEMOS_ENABLE_DELETE, logger } from "./config.js";
+import { MEMOS_DEFAULT_CUBE, MEMOS_ENABLE_DELETE, MEMOS_PROVIDER, logger } from "./config.js";
 import { waitForApiReady } from "./api-client.js";
 import { ensureCubeRegistered } from "./cube-manager.js";
 import { toolSchemas, toolAnnotations } from "./tools-registry.js";
@@ -84,6 +84,10 @@ function registerTools(server: McpServer): void {
 // ============================================================================
 
 async function backgroundInit(): Promise<void> {
+  if (MEMOS_PROVIDER === "local") {
+    logger.info("Local memory provider enabled; skipping API readiness and cube registration");
+    return;
+  }
   try {
     const apiReady = await waitForApiReady();
 

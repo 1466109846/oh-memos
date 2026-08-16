@@ -8,7 +8,43 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auto-discovered `.env` no longer overrides launcher environment.** A `.env`
+  found in the working directory or package root now only fills missing values,
+  so MCP client `env` blocks and shell exports such as `MEMOS_PROVIDER=local`
+  stay in effect. A file selected explicitly through `MEMOS_ENV_FILE` or
+  `--memos-env-file` remains authoritative.
+
 ### Added
+
+- **Local Lite provider.** `MEMOS_PROVIDER=local` (implied by `MEMOS_MODE=lite`)
+  serves `memos_save`, `memos_get`, `memos_list_v2`, `memos_search`, and
+  `memos_context_resume` from a per-cube `memories.jsonl` with deterministic
+  lexical ranking, durable appends, and a cross-process lock. Graph, Think,
+  Wiki, and admin tools report `LOCAL_PROVIDER_UNSUPPORTED` rather than
+  pretending a graph backend exists.
+
+- **Skill candidate lifecycle.** `memos_review_skill_candidate` records
+  approve/reject with reviewer audit metadata, and
+  `memos_install_skill_candidate` installs only approved candidates into
+  `.claude/skills/<slug>/SKILL.md` without overwriting, following symlinks, or
+  executing anything.
+
+- **Explainable graph provenance.** `memos_graph(mode="related"|"path"|"impact")`
+  now reports normalized evidence categories (`EXTRACTED`, `INFERRED`,
+  `AMBIGUOUS`, or `UNKNOWN`) and includes confidence, evidence references,
+  source file/location, extractor version and verification time when those
+  fields exist. Legacy graph data without provenance remains readable and is
+  reported as `UNKNOWN` rather than assigned invented evidence.
+
+- **`memos_graph(mode="import")` Graphify boundary.** Accepts up to 5 MB of
+  Graphify/NetworkX node-link JSON through `graph_json`, validates `nodes` plus
+  `links` (or the `edges` alias), and produces a deterministic import plan with
+  portable stable Code Graph ids. Duplicate ids, dangling edges, unsafe source
+  paths, invalid confidence values and oversized graphs are rejected before
+  any persistence boundary. This mode is intentionally **dry-run only**: it
+  never writes to Neo4j, Qdrant or a memory cube.
 
 - **`memos_canvas`** — a symbolic task canvas: short-term task state that survives
   context compaction. One Mermaid file per task under

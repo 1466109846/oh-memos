@@ -14,9 +14,17 @@ from urllib.request import Request, urlopen
 
 
 # Configuration
-MEMOS_URL = os.environ.get("MEMOS_URL", "http://localhost:18000")
-DEFAULT_USER = os.environ.get("MEMOS_USER", "dev_user")
-CUBES_DIR = os.environ.get("MEMOS_CUBES_DIR", os.path.expanduser("~/.memos_cubes"))
+MEMOS_URL = os.environ.get("MEMOS_URL") or os.environ.get("MEMOS_BASE_URL")
+if not MEMOS_URL:
+    raise RuntimeError("MEMOS_URL is required (set MEMOS_URL or MEMOS_BASE_URL in .env)")
+
+DEFAULT_USER = os.environ.get("MEMOS_USER")
+if not DEFAULT_USER:
+    raise RuntimeError("MEMOS_USER is required (set MEMOS_USER in .env)")
+
+CUBES_DIR = os.environ.get("MEMOS_CUBES_DIR")
+if not CUBES_DIR:
+    raise RuntimeError("MEMOS_CUBES_DIR is required (set MEMOS_CUBES_DIR in .env)")
 
 # Cache file for cube ID mappings
 CUBE_CACHE_FILE = os.path.expanduser("~/.memos_cube_cache.json")

@@ -1,0 +1,47 @@
+# Overlay used ONLY while migrating the Windows data into Docker volumes.
+#
+#   docker compose --env-file docker/.env.migration \
+#     -f docker/docker-compose.yml \
+#     -f docker/docker-compose.migration.yml up -d
+#
+# Differences from the base stack, and why each exists:
+#
+#   * Neo4j is pinned to 5.15.0 — the exact version of the Windows source. A
+#     5.26 container opening a 5.15 store performs a store upgrade that is not
+#     safely reversible, so migration and upgrade must not happen at once.
+#     Upgrade to the base stack's 5.26.4 only after the migration verifies.
+#   * The API listens on 18100 by default. Docker Desktop silently skips a port
+#     binding when the host port is taken, which would otherwise leave you
+#     testing the Windows API while believing you tested the container.
+#   * Cubes bind-mount a host directory OUTSIDE the repository, so the project's
+#     data/oh-memos_cubes can be deleted at the end without breaking the stack.
+#     The host MCP server points at this same new path and keeps direct file
+#     access to cube configs and canvases.
+#   * A migration work directory is mounted read-only into the API container so
+#     verification can hash the manifest from inside the container if needed.
+#
+# Requires Docker Compose v2.24.4+ (the `!reset` tag is used by the host-db
+# overlay; this file stays compatible with the same baseline).
+
+services:
+  memos:
+    environment:
+      # Cubes live on the new host path; the container path is unchanged.
+      MEMOS_CUBES_DIR: /data/cubes
+      MOS_CUBE_PATH: /data/cubes
+    volumes:
+      - type: bind
+        source: ${OH_MEMOS_MIGRATION_DIR:?set OH_MEMOS_MIGRATION_DIR to the migration work directory}
+        target: /migration
+        read_only: true
+
+  neo4j:
+    # Match the Windows source. Loading the dump and upgrading a Neo4j store are
+    # separate operations: 5.26 can irreversibly upgrade a 5.15 store format.
+    # Keep this on 5.15 until migration verification completes; upgrade to the
+    # base stack's 5.26.4 later with the dump retained as rollback evidence.
+    image: neo4j:5.15.0
+
+  qdrant:
+    # Same version as the Windows source (qdrant.exe 1.16.3).
+    image: qdrant/qdrant:v1.16.3

@@ -18,6 +18,9 @@ portable_python/
 # ========== Environment Config (contains API keys) ==========
 .env
 src/.env
+docker/.env.docker
+docker/.env.host-db
+docker/.env.migration
 *.env.local
 
 # ========== Temporary files ==========
@@ -213,6 +216,8 @@ venv.bak/
 # but do not ignore important files
 
 !docs/openapi.json
+!docs/architecture/oh-memos.architecture.html
+!docs/architecture/oh-memos.architecture.json
 !README.md
 !WINDOWS_README.md
 !WINDOWS_DEPLOY_CN.md
@@ -243,13 +248,16 @@ runtime/
 temp/
 
 # ========== Local Scripts (machine-specific) ==========
-scripts/local/
-# Exception: shared utility scripts that are not machine-specific
-!scripts/local/start.bat
+# Exclude contents rather than the directory itself so the explicit exceptions
+# below remain reachable by Git's ignore matcher.
+scripts/local/*
+# start.bat stays excluded: it hardcodes machine-specific NEO4J_HOME/QDRANT_HOME
+# paths and has never been committed.
+scripts/local/start.bat
 !scripts/local/stop.bat
 !scripts/local/register_autostart.bat
 !scripts/local/unregister_autostart.bat
-!scripts/local/memos_status.bat
+!scripts/local/start_api_no_bg.bat
 start_db.bat
 .trae/
 .memos/

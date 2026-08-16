@@ -7,6 +7,8 @@
 import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, logger, registeredCubes } from "../config.js";
 import { fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
+import { formatProvenance } from "../graph-provenance.js";
+import { buildGraphImportPlan, renderGraphImportPlan } from "../graphify-import.js";
 import {
   detectQueryIntent,
   extractMemoriesFromResponse,
@@ -26,6 +28,48 @@ import {
 // ============================================================================
 // Neo4j Helper
 // ============================================================================
+
+/**
+ * Validate a Graphify node-link document and return a dry-run report.
+ *
+ * The MCP surface accepts JSON rather than a filesystem path so an agent
+ * cannot make the server read arbitrary local files.  Applying the plan to a
+ * database is intentionally a separate future step.
+ */
+export function handleMemosGraphifyImport(arguments_: Record<string, unknown>): TextContent[] {
+  const raw = arguments_.graph_json;
+  if (raw === undefined || raw === null || (typeof raw === "string" && !raw.trim())) {
+    return errorResponse(
+      "graph_json is required for Graphify import dry-run",
+      ERR_PARAM_MISSING,
+      ["Pass the contents of Graphify graph.json as graph_json", "No database write occurs in this mode"],
+    );
+  }
+
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    if (raw.length > 5_000_000) {
+      return errorResponse("graph_json exceeds the 5 MB safety limit", "PARAM_INVALID");
+    }
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch (err) {
+      return errorResponse(`graph_json is not valid JSON: ${String(err)}`, "PARAM_INVALID");
+    }
+  }
+
+  try {
+    const plan = buildGraphImportPlan(parsed, {
+      projectKey: typeof arguments_.project_key === "string" ? arguments_.project_key : undefined,
+    });
+    return [{ type: "text", text: renderGraphImportPlan(plan) }];
+  } catch (err) {
+    return errorResponse(`Graphify import validation failed: ${String(err)}`, "PARAM_INVALID", [
+      "Use Graphify NetworkX node-link JSON with nodes and links (or edges)",
+      "Ensure every edge endpoint refers to an existing node and source_file is project-relative",
+    ]);
+  }
+}
 
 function neo4jAuthHeader(): string {
   return `Basic ${Buffer.from(`${NEO4J_USER}:${NEO4J_PASSWORD}`).toString("base64")}`;
@@ -105,8 +149,14 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
 
         const results: string[] = ["## 🔗 Path Trace Results", ""];
 
-        if (sourceNode.memory) results.push(`**Source**: ${String(sourceNode.memory).slice(0, 80)}...`);
-        if (targetNode.memory) results.push(`**Target**: ${String(targetNode.memory).slice(0, 80)}...`);
+        if (sourceNode.memory) {
+          results.push(`**Source**: ${String(sourceNode.memory).slice(0, 80)}...`);
+          results.push(`**Source evidence**: ${formatProvenance(sourceNode)}`);
+        }
+        if (targetNode.memory) {
+          results.push(`**Target**: ${String(targetNode.memory).slice(0, 80)}...`);
+          results.push(`**Target evidence**: ${formatProvenance(targetNode)}`);
+        }
         results.push("");
 
         if (!found) {
@@ -136,6 +186,7 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
                 const edge = edges[j] as Record<string, unknown>;
                 results.push("    │");
                 results.push(`    └── ${edge.type ?? "UNKNOWN"} ──>`);
+                results.push(`        Evidence: ${formatProvenance(edge)}`);
               }
             }
             results.push("```", "");
@@ -168,7 +219,7 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
       WHERE source.id = $source_id AND target.id = $target_id
       MATCH path = shortestPath((source)-[*1..${maxDepth}]-(target))
       RETURN [n IN nodes(path) | {id: n.id, memory: n.memory}] AS nodes,
-             [r IN relationships(path) | {type: type(r)}] AS rels
+             [r IN relationships(path) | {type: type(r), provenance: properties(r)}] AS rels
       LIMIT 1
     `;
 
@@ -188,7 +239,9 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
           const nodeMem = String(nodes[j].memory ?? "").slice(0, 60);
           results.push(`[${j + 1}] ${nodeMem}...`);
           if (j < rels.length) {
-            results.push(`    └── ${rels[j].type ?? "?"} ──>`);
+            const rel = rels[j] as Record<string, unknown>;
+            results.push(`    └── ${rel.type ?? "?"} ──>`);
+            results.push(`        Evidence: ${formatProvenance(rel.provenance ?? rel)}`);
           }
         }
         results.push("```");
@@ -285,7 +338,8 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
       WHERE a.id IN [${idList}] OR b.id IN [${idList}]
       RETURN a.id as source_id, a.memory as source_memory,
              type(r) as relation_type,
-             b.id as target_id, b.memory as target_memory
+             b.id as target_id, b.memory as target_memory,
+             properties(r) as relation_provenance
       LIMIT 20
     `;
     params = {};
@@ -296,7 +350,8 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
       WHERE a.memory CONTAINS $keyword OR b.memory CONTAINS $keyword
       RETURN a.id as source_id, a.memory as source_memory,
              type(r) as relation_type,
-             b.id as target_id, b.memory as target_memory
+             b.id as target_id, b.memory as target_memory,
+             properties(r) as relation_provenance
       LIMIT 20
     `;
     params = { keyword: firstWord };
@@ -332,6 +387,7 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
           const sourceMem = String(r[1] ?? "").slice(0, 50);
           const relType = String(r[2] ?? "UNKNOWN");
           const targetMem = String(r[4] ?? "").slice(0, 50);
+          const relationProvenance = r[5] ?? {};
 
           let arrow: string;
           if (relType === "CAUSE") arrow = "──CAUSE──>";
@@ -342,6 +398,7 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
           results.push(`[${sourceMem}...]`);
           results.push(`    ${arrow}`);
           results.push(`[${targetMem}...]`);
+          results.push(`    Evidence: ${formatProvenance(relationProvenance)}`);
           results.push("");
         }
       }
@@ -491,7 +548,7 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
     WITH DISTINCT source, node
     MATCH path = shortestPath((source)-[:CAUSE|FOLLOWS*1..${maxDepth}]->(node))
     RETURN node.id AS id, node.key AS key, node.memory AS memory,
-           length(path) AS depth
+           length(path) AS depth, properties(node) AS node_provenance
     ORDER BY depth ASC
     LIMIT 30
   `;
@@ -520,7 +577,7 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
     }
 
     // Group by depth
-    const depthGroups: Record<number, Array<{ id: string; key: string; memory: string }>> = {};
+    const depthGroups: Record<number, Array<{ id: string; key: string; memory: string; provenance: unknown }>> = {};
     for (const row of rows) {
       const r = row.row as unknown[] ?? [];
       if (r.length >= 4) {
@@ -530,6 +587,7 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
           id: String(r[0] ?? ""),
           key: String(r[1] ?? ""),
           memory: String(r[2] ?? ""),
+          provenance: r[4] ?? {},
         });
       }
     }
@@ -562,6 +620,7 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
         } else {
           results.push(`- ${memPreview}`);
         }
+        results.push(`  - Evidence: ${formatProvenance(item.provenance)}`);
       }
 
       if (items.length > 8) {

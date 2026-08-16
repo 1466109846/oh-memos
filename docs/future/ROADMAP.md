@@ -71,6 +71,23 @@
 
 详见: [SKILL_TRIGGER_SYSTEM_PLAN.md](./SKILL_TRIGGER_SYSTEM_PLAN.md)
 
+### Wiki 往返与记忆可维护性
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Wiki 回灌 (`memos_import_wiki`) | ✅ 已实现 | 导出页编辑后回灌：新页创建、未改动跳过、编辑页另存版本；duplicate ID 预检、跨进程锁、原子 ledger |
+| 写入 ID/元数据闭环 | ✅ 已实现 | `POST /memories` 返回 `memory_ids`/`queued`/`backend`/`warnings`，Wiki 回灌恢复 type/tags/confidence/status/时间字段 |
+| 自动捕获兜底 | ✅ 已实现 | 默认关闭；`PreCompact`/`Stop`/`SessionEnd` 有界 checkpoint、低置信度、服务端脱敏、哈希去重、失败开放 |
+| 检索质量层 | ✅ 已实现 | 保留现有向量/BM25/图谱召回，增加质量评分、时效标记、自动捕获降权、Lite 过滤和跨 cube 排序 |
+| Lite 本地 provider | ✅ 已实现 | `MEMOS_PROVIDER=local`（`MEMOS_MODE=lite` 隐含）用每 cube `memories.jsonl` 提供 save/get/list/search/context_resume，无需 Python API、embedding 服务或 Neo4j |
+| Skill 候选生命周期 | ✅ 已实现 | `memos_distill_skill` 生成候选，`memos_review_skill_candidate` 审核，`memos_install_skill_candidate` 显式安装到项目 `.claude/skills` |
+| 本地零凭据启动 | ✅ 已实现 | Lite provider 无需任何 API key 即可保存/检索类型化记忆（词法）；语义排序可选接本地 Ollama，见下 |
+| 关系边回灌 | ✅ 已实现 | `POST /product/graph/relation` 写入 `CAUSE/CONDITION/RELATE/CONFLICT/FOLLOWS/PARENT` 边；关系类型有 allowlist（Cypher 注入边界），两端 memory 必须存在 |
+| Lite 本地语义检索 | ✅ 已实现 | 可选本地 Ollama embedding（`MEMOS_LITE_EMBED_URL`/`MEMOS_LITE_EMBED_MODEL`），混合排序 0.6 语义 + 0.4 词法；不可用自动回退词法，`MEMOS_LITE_EMBED=off` 显式关闭 |
+| tree_text 原地更新 | ⏸ 明确不支持 | API 对 tree_text update 显式返回 `TREE_TEXT_UPDATE_UNSUPPORTED`；需先有 ID-preserving graph/vector saga 与补偿合同 |
+
+详见: [2026-08-16-wiki-round-trip-and-memsearch-gap.md](../plans/2026-08-16-wiki-round-trip-and-memsearch-gap.md)
+
 ---
 
 ## 未来规划 (Future)

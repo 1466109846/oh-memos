@@ -7,7 +7,235 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.1.0] - 2026-08-13
+### 🔁 新增 `memos_import_wiki`：Markdown Wiki 往返回灌
+
+此前 `memos_export_wiki` 是单向的——导出的 Markdown 只能读，人工修正无法回到记忆库，
+记忆一旦写错就只能删除重写。本次补上反方向，导出目录成为可编辑、可 review、可回灌的镜像。
+
+#### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `mcp-server-node/src/wiki-import-format.ts` | Wiki 页解析器，导出格式 `renderPage()` 的逆运算：front-matter 字段、H1 标题、正文、`## 关联` 段落分离；纯函数无 IO |
+| `mcp-server-node/src/wiki-import-format.test.ts` | 15 个用例，覆盖完整页/最小页/中文/转义 tag/缺 id/非法类型/空正文/无 front-matter、外来文件与畸形页的分类，以及 `[TYPE]` 前缀往返恒等性 |
+| `mcp-server-node/src/handlers/wiki-import.ts` | `memos_import_wiki` 处理器：扫描 `pages/`、逐页与 cube 比对、按策略回灌、生成统计报告 |
+
+#### 回灌语义
+
+按页 front-matter 里的 `id` 与 cube 比对，四种结果：
+
+- **id 不存在** → 以 `[TYPE] 内容` 写入 `POST /memories`，命中 `core.py` 的 `MOS_TYPED_SAVE_FAST`
+  快速路径，原文直存、不触发 LLM 抽取；
+- **内容一致** → 跳过，不产生 embedding 调用（基于 id 的持久去重，区别于 `memos_save` 的 60 秒内存去重）；
+- **内容被编辑** → 默认跳过并报告；`on_edit="version"` 时另存为新版本，旧记忆保留；
+- **`status` 非 activated** → 跳过并计入归档统计。
+
+`dry_run=true` 只输出差异预览，不写任何东西。
+
+#### 安全与幂等
+
+- 只读取 `pages/` 下 front-matter 带 `generator: oh-memos-wiki-export` 标记的文件；
+  外来 `.md` 计数忽略，**任何情况下都不删除文件**。
+- 已版本化的页记入 `docs/memory-wiki/.wiki-import-ledger.json`（页 id → 内容 SHA-256），
+  避免重复导入把同一次编辑反复版本化；台账写失败会在报告中显式告警。
+- 类型必须匹配 `^[A-Z][A-Z_]{2,23}$`，比服务端快速路径的正则严一格，
+  防止畸形类型退化成 LLM 抽取路径。
+- 解析结果带类型化的 `foreign` 标志，把「用户自己的笔记」（静默忽略）与
+  「带导出标记但畸形的页」（报出明细）分开，不靠匹配错误消息文本判断归属。
+- 写入内容仍走 `start_api.py` 的凭据脱敏，与 `memos_save` 同一边界。
+
+#### 已知限制
+
+- `tree_text` 后端不支持原地更新（`MOSCore.update` 对该后端只打警告不执行），
+  因此编辑页只能另存版本，无法覆盖原记忆。原地更新需先在 Python 侧补齐更新路径。
+- `tags`、`confidence`、`created` 与关联边不回灌，当前 `POST /memories` 没有对应字段。
+
+#### 配套改动
+
+- `wiki-export.ts`：`cleanGenerated()` 跳过点文件（台账不再被报为「非生成文件」）；
+  `index.md` 的「只读镜像」提示改为往返说明。
+- `schema-baseline.json` 重新冻结：12 → 13 个工具，14820 B（≈4631 tokens）。
+- 设计方案与后续分期见 `docs/plans/2026-08-16-wiki-round-trip-and-memsearch-gap.md`。
+
+### 🧭 架构感知图谱与 Graphify 适配层
+
+- 新增统一 provenance 合同：`EXTRACTED / INFERRED / AMBIGUOUS / UNKNOWN`、置信度、证据引用、源码文件和位置。
+- `memos_graph` 的 related/path/impact 输出现在解释关系或节点证据；新增 `mode="import"`，严格校验 Graphify node-link JSON 并生成无写入 dry-run 计划。
+- 新增稳定代码节点 ID、重复节点/悬空边/危险路径/超限输入检查；代码结构图与长期记忆图保持独立命名空间。
+- README、中文 README、架构说明和本 Changelog 使用同一份受测试保护的分层拓扑：
+
+<!-- architecture-aware-memory:start -->
+```mermaid
+flowchart LR
+    CLIENT["AI Clients<br/>Claude · Codex · DSH"]
+    MCP["Node MCP Server<br/>memos_* · stdio"]
+
+    subgraph CODE_LAYER["Code structure layer / 代码结构层"]
+        REPO["Source Repository<br/>code · docs · git diff"]
+        ADAPTER["Graphify Adapter<br/>validate · stable ID · dry-run"]
+        CODE_GRAPH[("Code Graph<br/>FILE · SYMBOL · CALLS")]
+    end
+
+    subgraph MEMORY_LAYER["Project memory layer / 项目记忆层"]
+        API["FastAPI<br/>HTTP JSON · :18000"]
+        CORE["MOS / MOSCore<br/>project Cube orchestration"]
+        QDRANT[("Qdrant<br/>semantic memory")]
+        MEMORY_GRAPH[("Neo4j Memory Graph<br/>DECISION · BUGFIX · CAUSE")]
+        FILES[("Cube Files<br/>config · Canvas · Wiki")]
+    end
+
+    CLIENT -->|"MCP / stdio"| MCP
+    MCP -->|"HTTP / JSON"| API
+    API -->|"memory operations"| CORE
+    CORE -->|"embedding + recall"| QDRANT
+    CORE -->|"typed relations"| MEMORY_GRAPH
+    CORE -->|"durable state"| FILES
+
+    REPO -. "Graphify graph.json" .-> ADAPTER
+    MCP -. "memos_graph import" .-> ADAPTER
+    ADAPTER -->|"validated symbols"| CODE_GRAPH
+    CODE_GRAPH -->|"RELATED_TO + provenance"| MEMORY_GRAPH
+```
+<!-- architecture-aware-memory:end -->
+
+### 🧠 自动捕获、检索质量层、Lite 策略与 Skill 候选
+
+- 新增默认关闭的 `oh_memos_auto_capture.js`：PreCompact 有界 checkpoint、低置信度、服务端脱敏、失败开放、session/event 哈希去重；`MEMOS_MODE=lite` 强制关闭。
+- 搜索保留现有向量/BM25/全文/图谱召回，在 MCP 结果层增加 freshness、confidence、source 和 lifecycle 质量评分；自动捕获降权，Lite 默认过滤，跨 cube 统一排序。
+- `MEMOS_MODE=full|lite` 作为运行策略加入 Node MCP：Lite 不分叉存储，不改变现有 cube，只限制检索上限并减少噪音。
+- 新增 `memos_distill_skill` / `memos_list_skill_candidates`：候选只写入项目 `skill-candidates/`，带来源 memory IDs，必须人工 review，不自动安装。
+- Wiki parser 归一化 Windows CRLF，并拒绝未知 lifecycle status。
+
+### 🧾 写入 ID 与元数据闭环
+
+- `POST /memories` 现在返回 `data.memory_ids` 与 `data.warnings`，旧客户端可继续忽略新增 data。
+- 写入请求支持并校验 `memory_type`、`tags`、`confidence`、`status`、`created_at`、`updated_at`、`source`、`session_id` 和 `source_ref`。
+- `MOSCore.add()` 汇总 tree_text 已创建的长期记忆 ID；typed fast path 继续免 LLM，并透传 Wiki 元数据。
+- Wiki ledger 保存内容哈希、导入时间和新 ID；旧 ledger 格式仍可读取。
+
+### 🛡️ 一致性与部署硬化
+
+- `POST /memories` 详细结果现在包含 `created_ids`、`queued`、`backend`、`warnings`；非 tree 或无法确认 ID 时明确报告 `ids_unavailable`，async 不再伪装成已持久化。
+- Wiki 回灌增加 duplicate ID 预检、损坏 ledger 拒绝、跨进程锁、原子 ledger 替换、递归总量上限和 uncertain write 保护，并传播 API warnings。
+- 自动捕获支持 `PreCompact`、`Stop`、`SessionEnd`，过滤未知事件和 Stop 重入，解析 API JSON envelope 后才创建去重 marker；canonical/deploy hooks 与 settings 同步。
+- Skill 候选改为原子创建，拒绝覆盖已有候选和 symlink，列表只显示合法 generator/status 文件。
+
+### ✅ 审核生命周期与能力边界硬化
+
+- Skill 候选现在支持显式 approve/reject/install 状态机；安装仅写项目 `.claude/skills/<slug>/SKILL.md`，拒绝覆盖、symlink 和未审批候选。
+- tree_text update 对外显式失败（`TREE_TEXT_UPDATE_UNSUPPORTED`），避免静默成功；待 ID-preserving 图/向量事务合同后再实现。
+- 自动发现的 `.env` 不再覆盖继承环境变量；`MEMOS_ENV_FILE` 显式指定的文件仍为权威配置源。
+
+### 🗂️ True Lite provider
+
+- `MEMOS_PROVIDER=local` 或 `MEMOS_MODE=lite` 现在可在没有 Python API 的情况下运行 Node JSONL provider。
+- 每个 cube 写入 `memories.jsonl` 与 `manifest.json`，支持 fsync append、跨进程锁、typed metadata、get/list/recent 和确定性词法 search。
+- Lite 下 graph/think/wiki/admin/delete 返回 `LOCAL_PROVIDER_UNSUPPORTED`，不冒充有图谱后端；迁移边界是导出的 Wiki Markdown，不读取 Python cube 内部。
+
+### 🔗 Wiki 关系边回灌
+
+- Wiki `## 关联` wikilinks 现在在导入时写入 Neo4j 图谱边，不再仅作报告。
+- 新增 `POST /product/graph/relation`（Python API）与纯函数 wiki-relations（Node），支持 `CAUSE`、`CONDITION`、`RELATE`、`CONFLICT`、`FOLLOWS`、`PARENT`。
+- 关系类型在 Pydantic `Literal`、MOSCore `ALLOWED_RELATION_TYPES` 和 Neo4j 驱动层三处校验，防止 Cypher 注入（类型直接插值进 MERGE 语句）。
+- 写入前校验两端 memory 存在于同一 cube/user，拒绝自环；未解析/失败的 wikilinks 显示到导入报告。
+- 边标签统一在 `wiki-relations.ts EDGE_LABELS`，export 和 import 共用，避免标签漂移。
+
+### 🧠 Lite 本地语义检索
+
+- Lite provider 支持可选语义排序：本地 Ollama `/api/embeddings` 提供 embedding，无新增 npm 依赖。
+- embedding 随 JSONL 记录持久化，但永不离开 provider（get/list/search 返回前剥离）；写入时 embedding 失败不阻塞保存。
+- 检索为混合排序：语义余弦（截断到 [0,1]）0.6 + 词法 0.4；维度不匹配的存量记录按词法参与；Ollama 不可用时自动回退纯词法。
+- 配置：`MEMOS_LITE_EMBED_URL`（默认 `http://127.0.0.1:11434`）、`MEMOS_LITE_EMBED_MODEL`（默认 `bge-m3`）、`MEMOS_LITE_EMBED=off` 显式关闭。
+
+## [3.2.0] - 2026-08-15
+
+### 🐳 Docker 化、GHCR 镜像发布与 Windows→Docker 全量数据迁移
+
+#### 运行架构变更
+
+oh-memos 的**生产部署方式从 Windows 进程切换为 Docker 容器**。迁移前后功能完全等同，所有第三方接入（MCP server、API 调用）继续使用 `localhost:18000`，无需改动。
+
+Windows 进程部署方式**保留**，但定位调整为开发/调试备用，不再是推荐的运行方式。详见 `README_CN.md` 中的「Windows 侧部署」章节。
+
+---
+
+#### 🆕 新增文件
+
+**Docker 镜像**
+
+| 文件 | 说明 |
+|------|------|
+| `docker/Dockerfile` | 生产 CPU 镜像，基于 `python:3.11-slim-bookworm`，正确入口 `oh_memos.api.start_api:app:18000`，非 root uid 10001，read-only 根文件系统 |
+| `docker/requirements.txt` | API + tree_text + Qdrant 运行依赖；torch 从 PyTorch CPU index 单独安装，避免 PyPI 拉入 CUDA wheel |
+| `docker/entrypoint.sh` | 首次启动时仅当 dev_cube 缺失时创建，绝不覆盖已有 cube；cube 名白名单校验（只允许 `[A-Za-z0-9_-]`，防止 sed 渲染被 `&` 等字符破坏） |
+| `docker/dev_cube.config.template` | 无凭证 seed 模板，仅含 placeholder；`apply_env_overrides()` 在加载时以环境变量覆盖 |
+
+**Compose 与配置**
+
+| 文件 | 说明 |
+|------|------|
+| `docker/docker-compose.yml` | 生产栈：API + Neo4j 5.26.4 + Qdrant v1.16.3，真实健康检查，端口默认绑定 `127.0.0.1` |
+| `docker/docker-compose.host-db.yml` | 叠加覆盖：让容器 API 直连 Windows 宿主 Neo4j/Qdrant，迁移过渡期使用 |
+| `docker/docker-compose.migration.yml` | 迁移专用覆盖：Neo4j 固定同版本（5.15.0→已升级至 5.26.4），防止迁移与 store 升级同时发生 |
+| `docker/.env.docker.example` | 标准部署配置模板 |
+| `docker/.env.host-db.example` | 宿主数据库直连模式配置模板 |
+| `docker/.env.migration.example` | 迁移专用配置模板 |
+
+**GHCR 发布**
+
+| 文件 | 说明 |
+|------|------|
+| `.github/workflows/docker-publish.yml` | 公开镜像发布到 `ghcr.io/lsg1103275794/oh-memos`，PR 只构建，`main` push 发 `edge`，`v*.*.*` tag 发完整 semver + `latest`，含 SBOM/provenance，8 个 Action SHA 固定验证 |
+| `.dockerignore` | 排除 `.env`、`data/`、`.venv`、`src/bin`、`node_modules` 等；`COPY src ./src` 曾把 1.9 GB src/bin 带进构建上下文，已改为 `COPY src/oh_memos ./src/oh_memos` |
+
+**迁移工具**
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/migrate/migrate_win_to_docker.ps1` | 分阶段迁移编排：`preflight` / `backup` / `restore` / `verify` / `cleanup`，默认不删数据，`cleanup` 需 `-ConfirmWindowsPurge` |
+| `scripts/migrate/build_migration_env.ps1` | 从 `src/.env` 自动生成 `docker/.env.migration`，`localhost:XXXX` 自动改为 `host.docker.internal:XXXX` |
+| `scripts/migrate/verify_migration.ps1` | 迁移验证：对账 Neo4j 节点/关系数、Qdrant collection 列表、SQLite 用户/cube/关联数 |
+| `scripts/local/start_api_no_bg.bat` | Windows 侧双运行时安全启动脚本：禁用后台归档/重组任务，让 `POST /archive/run` 返回 409，防止双侧并发写入 |
+
+---
+
+#### 🔧 修改
+
+**功能修复**
+
+- `docker/docker-compose.yml` Qdrant 版本 `v1.15.3` → `v1.16.3`（与 Windows 源版本一致；Qdrant 不保证旧版本能打开新版本 storage）
+- `src/oh_memos/api/start_api.py` 新增 `MEMOS_DISABLE_BACKGROUND_WRITERS` 开关：在 `load_dotenv(override=True)` 之后强制置 `MEMOS_AUTO_ARCHIVE=false` 和 `MOS_ENABLE_REORGANIZE=false`，解决 `src/.env` 会覆盖 bat 里 `set` 命令的问题
+
+**安全**
+
+- 修复 Neo4j healthcheck 把密码插值进 shell 命令的问题（特殊字符密码会破坏命令边界）：改为通过 `$$OH_MEMOS_HC_PASSWORD` 延迟到容器 shell 展开
+- `.env.docker.example` 的 `NEO4J_PASSWORD` 改为留空（原来的占位值是可直接运行的已知弱密码）
+- workflow `if: always() && needs.version-check.result != 'failure'` 改为只允许 `success/skipped`，防止 cancelled/超时时仍发布
+- CPU torch 检查从 `torch.cuda.is_available()`（无 GPU runner 上 CUDA wheel 也返回 False）改为 `torch.version.cuda is None`
+
+**文档**
+
+- `README_CN.md` 新增「Docker 部署（推荐）」章节：标准启动、host-db 模式、迁移期直连、端口冲突排查
+- `README_CN.md` 保留「Windows 侧部署」章节，注明需自行配置 `.env`
+
+---
+
+#### 📦 数据迁移记录（2026-08-15）
+
+从 Windows 进程迁移至 Docker 容器，迁移结果（verify 两次通过）：
+
+| 数据 | 量 | 方法 |
+|------|----|------|
+| Neo4j 图谱 | 7708 节点 / 25781 关系 | `neo4j-admin database dump/load`（5.15.0 → 5.15.0 同版本，再升级至 5.26.4） |
+| Qdrant 向量 | 17 collection / 9517 向量点 | 离线 storage 目录复制（1.16.3 → 1.16.3） |
+| SQLite 注册表 | 3 用户 / 69 cube / 82 关联 | 文件复制至 runtime volume 的 `/data/runtime/.memos/memos_users.db` |
+| cube/canvas | 19 文件 | 文件复制，路径回归原有 `data/oh-memos_cubes/` |
+
+Windows 源数据已永久删除，备份保留在 `D:\oh-memos-migration\`。
+
+---
+
+
 
 ### ✨ 新增 `memos_canvas` —— 符号化短期任务记忆
 

@@ -202,6 +202,7 @@ class SimpleStructMemReader(BaseMemReader, ABC):
         type_: str = "fact",
         confidence: float = 0.99,
         project_name: str | None = None,
+        status: str = "activated",
         **kwargs,
     ) -> TextualMemoryItem:
         info_ = info.copy()
@@ -216,7 +217,7 @@ class SimpleStructMemReader(BaseMemReader, ABC):
                 session_id=session_id,
                 project_name=final_project_name,
                 memory_type=memory_type,
-                status="activated",
+                status=status,
                 tags=tags or [],
                 key=key if key is not None else derive_key(value),
                 embedding=self.embedder.embed([value])[0],

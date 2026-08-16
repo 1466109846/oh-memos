@@ -1,0 +1,66 @@
+# Keep the build context to what the image actually needs: pyproject.toml,
+# README.md, src/ and docker/. Everything below is either secret, host-specific,
+# huge, or irrelevant to a Linux runtime image.
+
+# --- secrets & local configuration ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+config/mcp-config*.json
+
+# --- version control & agent state ---
+.git
+.gitattributes
+.githooks
+.claude
+.pre-commit-config.yaml
+
+# --- local Python environments & caches ---
+.venv
+conda_venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+.memos
+
+# --- runtime data (must come from volumes, never from the image) ---
+data
+storage
+logs
+backups
+snapshots
+runtime
+# The API image copies src/oh_memos only, but keep these out of the context so a
+# 2GB local runtime never has to be uploaded to the daemon in the first place.
+src/bin
+src/logs
+src/.memos
+src/.env*
+
+# --- node / MCP server (runs on the host via npx, not in this image) ---
+mcp-server-node
+node_modules
+
+# --- not needed at runtime ---
+tests
+evaluation
+examples
+docs
+tools
+oh-memos-cli
+oh-memos-deploy
+mcp-server
+project-memory
+scripts
+VENV_scripts
+Makefile
+*.bat
+*.cmd
+*.ps1
+*.vbs
+docker/docker-compose*.yml

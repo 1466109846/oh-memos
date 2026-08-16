@@ -40,6 +40,26 @@ import {
 } from "./utils.js";
 
 // ============================================================================
+// memos_admin(action="capabilities")
+// ============================================================================
+
+export function handleMemosCapabilities(): TextContent[] {
+  const mode = process.env.MEMOS_MODE?.toLowerCase() === "lite" ? "lite" : "full";
+  return [{ type: "text", text: [
+    "## MemOS capabilities",
+    "",
+    `**Mode**: ${mode}`,
+    mode === "lite"
+      ? "Lite reuses the configured HTTP API and cube storage; it lowers search limits and filters auto-capture. It is a noise/resource policy, not an offline SQLite backend."
+      : "Full exposes API, graph, vector, BM25, Wiki round-trip, canvas, and skill lifecycle tools.",
+    "",
+    "**tree_text update**: in-place update is unsupported; the API now fails explicitly instead of silently succeeding. Use versioned writes.",
+    "**Skill install**: requires an approved candidate and writes only to `.claude/skills/<slug>/SKILL.md`.",
+    "**Auto-capture**: disabled by default; Lite keeps it disabled.",
+  ].join("\n") }];
+}
+
+// ============================================================================
 // memos_admin(action="list_cubes")
 // ============================================================================
 

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 
 from datetime import datetime
@@ -27,13 +28,24 @@ _driver = None
 _qdrant = None
 
 
+def _prefer_ipv4_loopback(target: str) -> str:
+    """Rewrite a localhost target to 127.0.0.1.
+
+    On Windows 11 "localhost" resolves to ::1 first, but Docker publishes ports
+    on 127.0.0.1 only. Every connection therefore waits out a ~5s IPv6 connect
+    timeout before falling back to IPv4. Measured against this stack: Neo4j
+    connect 21.05s -> 0.00s, Qdrant count() 5.02s -> 0.03s.
+    """
+    return re.sub(r"(?i)(?<=//)localhost(?=[:/]|$)", "127.0.0.1", target)
+
+
 def get_driver():
     global _driver
     if _driver is None:
         from neo4j import GraphDatabase
 
         _driver = GraphDatabase.driver(
-            config.NEO4J_URI,
+            _prefer_ipv4_loopback(config.NEO4J_URI),
             auth=(config.NEO4J_USER, config.NEO4J_PASSWORD),
         )
     return _driver
@@ -46,13 +58,16 @@ def get_qdrant():
 
         if config.QDRANT_URL:
             _qdrant = QdrantClient(
-                url=config.QDRANT_URL,
+                url=_prefer_ipv4_loopback(config.QDRANT_URL),
                 api_key=config.QDRANT_API_KEY,
                 check_compatibility=False,
             )
         else:
+            host = config.QDRANT_HOST
+            if host.lower() == "localhost":
+                host = "127.0.0.1"
             _qdrant = QdrantClient(
-                host=config.QDRANT_HOST,
+                host=host,
                 port=config.QDRANT_PORT,
                 check_compatibility=False,
             )

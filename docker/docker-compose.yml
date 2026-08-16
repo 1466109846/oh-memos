@@ -1,71 +1,198 @@
-name: memos-dev
+name: oh-memos
+
+# oh-memos full stack: API + Neo4j + Qdrant, with Ollama as an opt-in profile.
+#
+# Run from the repository root:
+#   docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
+#
+# Two things are intentionally strict:
+#   * NEO4J_PASSWORD and MEMOS_CUBES_HOST_DIR have no defaults — a missing value
+#     fails `config` instead of silently starting with a known-weak password or
+#     an anonymous volume the host MCP server cannot see.
+#   * Published ports bind to 127.0.0.1 by default. The API has no
+#     authentication layer, so it must not listen on a routable address without
+#     an authenticating TLS proxy in front of it.
 
 services:
   memos:
-    container_name: memos-api-docker
+    image: ${MEMOS_IMAGE:-ghcr.io/lsg1103275794/oh-memos}:${MEMOS_TAG:-latest}
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    ports:
-      - "8000:8000"
+    container_name: oh-memos-api
+    restart: unless-stopped
+    init: true
     env_file:
-      - ../.env
-    depends_on:
-      - neo4j
-      - qdrant
+      # --env-file only feeds compose's own interpolation. This is the channel
+      # that actually carries app config (LLM keys, feature flags) into the
+      # container, so it has to name the same file. Path is relative to this
+      # compose file. Deliberately not MEMOS_ENV_FILE — the MCP server already
+      # uses that name for its own dotenv location (mcp-server-node/src/config.ts).
+      - path: ${OH_MEMOS_DOCKER_ENV_FILE:-./.env.docker}
+        required: false
     environment:
-      - PYTHONPATH=/app/src
-      - HF_ENDPOINT=https://hf-mirror.com
-      - QDRANT_HOST=qdrant-docker
-      - QDRANT_PORT=16333
-      - NEO4J_URI=bolt://neo4j-docker:7687
+      # Container-local paths. These deliberately override whatever the env file
+      # carries: host paths like G:/test/... are meaningless inside a Linux
+      # container, and MEMOS_CUBES_DIR is also the host MCP server's variable.
+      MEMOS_BASE_PATH: /data/runtime
+      MEMOS_CUBES_DIR: /data/cubes
+      MOS_CUBE_PATH: /data/cubes
+      MEMOS_DEFAULT_CUBE: ${MEMOS_DEFAULT_CUBE:-dev_cube}
+      MEMOS_STARTUP_CUBES: ${MEMOS_STARTUP_CUBES:-}
+      # Service discovery on the compose network. Qdrant listens on its own
+      # default 6333 here; 16333 is only a host-side mapping.
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_HTTP_URL: http://neo4j:7474/db/${NEO4J_DB_NAME:-neo4j}/tx/commit
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in your env file}
+      NEO4J_DB_NAME: ${NEO4J_DB_NAME:-neo4j}
+      NEO4J_BACKEND: ${NEO4J_BACKEND:-neo4j-community}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MEMOS_BIND_ADDRESS:-127.0.0.1}:${MEMOS_HOST_PORT:-18000}:18000"
     volumes:
-      - ../src:/app/src
-      - .:/app/docker
+      # Bind mount, not a named volume: the MCP server runs on the host via npx
+      # and reads/writes the same cube files (configs, canvases). A named volume
+      # would give the API and the MCP server two different sources of truth.
+      - type: bind
+        source: ${MEMOS_CUBES_HOST_DIR:?set MEMOS_CUBES_HOST_DIR to your host cubes directory}
+        target: /data/cubes
+      - memos_runtime:/data/runtime
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    extra_hosts:
+      # Lets OLLAMA_API_BASE=http://host.docker.internal:11434 reach a host
+      # Ollama on Linux too, not just Docker Desktop.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      # /health answers 200 even when a critical component is down; the verdict
+      # lives in data.status. Checked with the stdlib so the image needs no curl.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import json,sys,urllib.request
+          with urllib.request.urlopen("http://127.0.0.1:18000/health", timeout=8) as r:
+              sys.exit(0 if json.load(r)["data"]["status"] == "ok" else 1)
+      interval: 30s
+      timeout: 10s
+      # Cold start imports torch, builds the MOS instance and registers cubes;
+      # a few seconds is not enough.
+      start_period: 120s
+      retries: 5
     networks:
-      - memos_network
+      - oh_memos
 
   neo4j:
     image: neo4j:5.26.4
-    container_name: neo4j-docker
-    ports:
-      - "7474:7474"   # HTTP
-      - "7687:7687"   # Bolt
-    healthcheck:
-      test: wget http://localhost:7474 || exit 1
-      interval: 1s
-      timeout: 10s
-      retries: 20
-      start_period: 3s
+    container_name: oh-memos-neo4j
+    restart: unless-stopped
     environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in your env file}
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
-      NEO4J_AUTH: "neo4j/12345678"
+      # Consumed only by the healthcheck below. Passed as variables so the
+      # password is never interpolated into a shell command line, where a quote
+      # or $(...) in a strong password would break or execute.
+      OH_MEMOS_HC_USER: ${NEO4J_USER:-neo4j}
+      OH_MEMOS_HC_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in your env file}
+      OH_MEMOS_HC_DB: ${NEO4J_DB_NAME:-neo4j}
+      NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL:-512m}
+      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-1g}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MEMOS_BIND_ADDRESS:-127.0.0.1}:${NEO4J_HTTP_HOST_PORT:-7474}:7474"
+      - "${MEMOS_BIND_ADDRESS:-127.0.0.1}:${NEO4J_BOLT_HOST_PORT:-7687}:7687"
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
+    healthcheck:
+      # An open 7474 only means Jetty bound the port. Run a real query instead.
+      # $$ defers expansion to the container's shell, so the password reaches
+      # cypher-shell as an argument rather than as compose-substituted text.
+      test:
+        - CMD-SHELL
+        - cypher-shell -u "$$OH_MEMOS_HC_USER" -p "$$OH_MEMOS_HC_PASSWORD" -d "$$OH_MEMOS_HC_DB" "RETURN 1" || exit 1
+      interval: 10s
+      timeout: 10s
+      start_period: 60s
+      retries: 12
     networks:
-      - memos_network
+      - oh_memos
 
   qdrant:
-    image: qdrant/qdrant:v1.15.3
-    container_name: qdrant-docker
+    # Matches the Windows-side Qdrant (1.16.3) that the migration imports from.
+    # A storage directory written by 1.16.x is not guaranteed to open on 1.15.x,
+    # so this must not be pinned lower than the source.
+    image: qdrant/qdrant:v1.16.3
+    container_name: oh-memos-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      TZ: ${TZ:-Asia/Shanghai}
     ports:
-      - "16333:16333"  # REST API
-      - "6334:6334"  # gRPC API
+      # Host 16333 keeps parity with the existing Windows setup; inside the
+      # network the port is 6333.
+      - "${MEMOS_BIND_ADDRESS:-127.0.0.1}:${QDRANT_HTTP_HOST_PORT:-16333}:6333"
+      - "${MEMOS_BIND_ADDRESS:-127.0.0.1}:${QDRANT_GRPC_HOST_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    environment:
-      QDRANT__SERVICE__GRPC_PORT: 6334
-      QDRANT__SERVICE__HTTP_PORT: 16333
-    restart: unless-stopped
+    healthcheck:
+      # The image ships no curl/wget, but it does ship bash — /dev/tcp is the
+      # portable probe here.
+      test:
+        - CMD-SHELL
+        - bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333' || exit 1
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
     networks:
-      - memos_network
+      - oh_memos
+
+  ollama:
+    # Opt-in: docker compose --profile ollama up -d
+    # Without the profile the stack uses cloud APIs, or a host Ollama through
+    # host.docker.internal. Models are never pulled automatically — set
+    # OLLAMA_API_BASE=http://ollama:11434 and run
+    #   docker compose exec ollama ollama pull <model>
+    profiles: ["ollama"]
+    image: ollama/ollama:${OLLAMA_TAG:-0.12.12}
+    container_name: oh-memos-ollama
+    restart: unless-stopped
+    ports:
+      - "${MEMOS_BIND_ADDRESS:-127.0.0.1}:${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 6
+    networks:
+      - oh_memos
 
 volumes:
+  memos_runtime:
   neo4j_data:
   neo4j_logs:
   qdrant_data:
+  ollama_data:
 
 networks:
-  memos_network:
+  oh_memos:
     driver: bridge

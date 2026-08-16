@@ -469,11 +469,18 @@ class Neo4jGraphDB(BaseGraphDB):
     ) -> None:
         """
         Create an edge from source node to target node.
-        Args:
-            source_id: ID of the source node.
-            target_id: ID of the target node.
-            type: Relationship type (e.g., 'RELATE_TO', 'PARENT').
+
+        The relationship type is interpolated directly into the Cypher statement,
+        so this layer enforces an allowlist to block query-injection vectors.
         """
+        ALLOWED_EDGE_TYPES = frozenset(
+            {"CAUSE", "CONDITION", "RELATE", "CONFLICT", "FOLLOWS", "PARENT", "INFERS", "AGGREGATE_TO", "MERGED_TO"}
+        )
+        if type not in ALLOWED_EDGE_TYPES:
+            raise ValueError(
+                f"Unsupported edge type '{type}'; Neo4j driver allows: {sorted(ALLOWED_EDGE_TYPES)}"
+            )
+
         user_name = user_name if user_name else self.config.user_name
         query = """
                 MATCH (a:Memory {id: $source_id})

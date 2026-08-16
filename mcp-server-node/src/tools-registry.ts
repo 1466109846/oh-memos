@@ -1,7 +1,7 @@
 /**
  * MemOS MCP Server - Tools Registry
  *
- * Defines all 11 memos_* tool schemas using Zod (graph/admin operations are
+ * Defines all 15 memos_* tool schemas using Zod (graph/admin operations are
  * consolidated behind mode/action parameters to keep the always-on tool
  * surface small).
  */
@@ -60,7 +60,7 @@ Afterwards use memos tools for ALL memory operations — never mkdir/Write memor
   },
 
   memos_search: {
-    description: `Search project memories. Use PROACTIVELY: on errors (ERROR_PATTERN), before modifying tricky code (GOTCHA), for past decisions (DECISION), when user says "之前/上次/previously", and after context compaction.
+    description: `Search project memories with semantic, lexical, graph, freshness, and source-quality ranking. Lite mode caps results and excludes auto-capture by default. Use PROACTIVELY: on errors (ERROR_PATTERN), before modifying tricky code (GOTCHA), for past decisions (DECISION), when user says "之前/上次/previously", and after context compaction.
 Query may carry a type prefix ("DECISION auth"). Pass context (recent turns) when the query is ambiguous or refers to earlier conversation — enables LLM intent analysis + query expansion.
 Large results are compacted; use memos_get(memory_id) for full details. NEVER create memory files via mkdir/Write — all memories live here.`,
     inputSchema: z.object({
@@ -101,9 +101,21 @@ Default output <project_path>/docs/memory-wiki; re-export replaces only files it
     }),
   },
 
+  memos_import_wiki: {
+    description: `Import a wiki back into its cube — round-trip for memos_export_wiki: creates missing pages, skips unchanged ones, and can version edited pages.
+Use after editing exported pages (fixes, cleanup, migration to a fresh cube). Reads only pages/ with the exporter marker; never deletes; restores type/tags/confidence/status/timestamps, while relation wikilinks remain report-only.`,
+    inputSchema: z.object({
+      project_path: projectPathBrief,
+      cube_id: cubeIdBriefDefault,
+      wiki_dir: z.string().optional().describe("Wiki directory (default: <project_path>/docs/memory-wiki)"),
+      dry_run: z.boolean().optional().default(false).describe("Preview the diff without writing (default false)"),
+      on_edit: z.enum(["skip", "version"]).optional().default("skip").describe("Edited pages: skip (default) or save as new version (old memory kept)"),
+    }),
+  },
+
   memos_save: {
     description: `Save important information to project memory — after fixing a bug, making a decision, finishing a milestone, hitting a gotcha, or changing config.
-🚨 MUST pass memory_type explicitly (decision tree: memos_suggest).
+🚨 MUST pass memory_type explicitly (decision tree: memos_suggest). In Lite mode this remains the primary durable write path.
 This is the ONLY way to persist memories — never mkdir/Write memory files.`,
     inputSchema: z.object({
       content: z.string().describe("Memory content. Be detailed — include context, rationale, relevant code/commands."),
@@ -146,17 +158,49 @@ Use when: unsure what to search for, or unsure which memory_type \`memos_save\` 
     }),
   },
 
+  memos_distill_skill: {
+    description: `Create an inert, reviewable skill candidate from recurring memories. It writes only under <project_path>/skill-candidates and records source memory IDs; it never installs a skill automatically.`,
+    inputSchema: z.object({
+      project_path: projectPathBrief,
+      title: z.string().describe("Candidate skill title"),
+      summary: z.string().describe("Reviewed workflow summary"),
+      memory_ids: z.array(z.string()).min(1).describe("Evidence memory IDs supporting this workflow"),
+    }),
+  },
+
+  memos_list_skill_candidates: {
+    description: `List inert skill candidates under <project_path>/skill-candidates. Does not install or modify them.`,
+    inputSchema: z.object({ project_path: projectPathBrief }),
+  },
+
+  memos_review_skill_candidate: {
+    description: `Approve or reject one skill candidate. This only changes its auditable status; approval does not install it.`,
+    inputSchema: z.object({
+      project_path: projectPathBrief,
+      candidate_id: z.string().describe("Candidate markdown filename"),
+      action: z.enum(["approve", "reject"]),
+      reviewer: z.string().describe("Human reviewer identity"),
+    }),
+  },
+
+  memos_install_skill_candidate: {
+    description: `Install an approved candidate into <project_path>/.claude/skills/<slug>/SKILL.md. Requires explicit action; refuses overwrite, symlinks, malformed candidates, and unapproved status.`,
+    inputSchema: z.object({ project_path: projectPathBrief, candidate_id: z.string() }),
+  },
+
   memos_graph: {
     description: `Knowledge-graph queries; mode selects:
-related = nodes+edges around a query · path = trace between two node ids · impact = forward blast radius of one memory · schema = graph structure & statistics.`,
+related = nodes+edges around a query · path = trace between two node ids · impact = forward blast radius of one memory · schema = graph structure & statistics · import = validate Graphify node-link JSON (dry-run only).`,
     inputSchema: z.object({
-      mode: z.enum(["related", "path", "impact", "schema"]).describe("Query kind"),
+      mode: z.enum(["related", "path", "impact", "schema", "import"]).describe("Query kind"),
       query: z.string().optional().describe("related: search query"),
       source_id: z.string().optional().describe("path: start node id"),
       target_id: z.string().optional().describe("path: end node id"),
       memory_id: z.string().optional().describe("impact: source memory id"),
       max_depth: z.number().int().optional().default(3).describe("path/impact: max hops"),
       sample_size: z.number().int().optional().default(100).describe("schema: nodes sampled"),
+      graph_json: z.string().optional().describe("import: Graphify graph.json contents; validation is dry-run and never writes data"),
+      project_key: z.string().optional().describe("import: stable project namespace label"),
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
     }),
@@ -164,9 +208,9 @@ related = nodes+edges around a query · path = trace between two node ids · imp
 
   memos_admin: {
     description: `Maintenance & diagnostics; action selects:
-list_cubes · register_cube (fix "not loaded") · create_user (fix "user does not exist") · validate_cubes (repair config mismatches) · stats (per-type counts) · calendar (milestone timeline).`,
+list_cubes · register_cube (fix "not loaded") · create_user (fix "user does not exist") · validate_cubes (repair config mismatches) · stats (per-type counts) · calendar (milestone timeline) · capabilities (Full/Lite behavior and unsupported operations).`,
     inputSchema: z.object({
-      action: z.enum(["list_cubes", "register_cube", "create_user", "validate_cubes", "stats", "calendar"]).describe("Operation"),
+      action: z.enum(["list_cubes", "register_cube", "create_user", "validate_cubes", "stats", "calendar", "capabilities"]).describe("Operation"),
       cube_id: cubeIdBrief,
       project_path: projectPathBrief,
       cube_path: z.string().optional().describe("register_cube: cube directory (auto-detected if omitted)"),
@@ -245,7 +289,11 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "memos_delete",
   "memos_admin",       // register_cube / create_user / validate_cubes mutate state
   "memos_export_wiki", // writes: renders wiki .md files into the target project
+  "memos_import_wiki", // writes: creates/versions memories from wiki pages
   "memos_canvas",      // open/update write a .mmd file under the cube
+  "memos_distill_skill", // writes an inert candidate under the project
+  "memos_review_skill_candidate", // auditable status transition
+  "memos_install_skill_candidate", // explicit local install
 ]);
 
 /**
@@ -254,10 +302,12 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
  * Everything else answers from local storage alone.
  */
 const REMOTE_TOOLS: ReadonlySet<string> = new Set([
-  "memos_save",   // LLM extraction + embedding on the way in
-  "memos_search", // embeds the query; with context, adds LLM intent analysis
-  "memos_graph",  // mode=related goes through /search, so it embeds too
-  "memos_think",  // evidence retrieval goes through /search, embeds the query
+  "memos_save",        // LLM extraction + embedding on the way in
+  "memos_import_wiki", // embedding on create/version writes
+  "memos_search",      // embeds the query; with context, adds LLM intent analysis
+  "memos_graph",       // mode=related goes through /search, so it embeds too
+  "memos_think",       // evidence retrieval goes through /search, embeds the query
+  "memos_distill_skill", // creates a local candidate only
 ]);
 
 export interface ToolAnnotations {
