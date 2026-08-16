@@ -40,6 +40,9 @@ from oh_memos.templates.mos_prompts import QUERY_REWRITING_PROMPT
 from oh_memos.types import ChatHistory, MessageList, MOSSearchResult
 
 
+logger = get_logger(__name__)
+
+
 # Relationship types writable through the public API. The Neo4j driver
 # interpolates the relationship type directly into Cypher, so this allowlist is
 # a query-injection boundary, not a cosmetic vocabulary.

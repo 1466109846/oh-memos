@@ -218,6 +218,8 @@ venv.bak/
 !docs/openapi.json
 !docs/architecture/oh-memos.architecture.html
 !docs/architecture/oh-memos.architecture.json
+# deploy bundle must ship the same hooks template as the canonical tree
+!oh-memos-deploy/.claude/skills/project-memory/hooks/settings-template.json
 !README.md
 !WINDOWS_README.md
 !WINDOWS_DEPLOY_CN.md
