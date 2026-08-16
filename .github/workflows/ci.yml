@@ -31,10 +31,22 @@ jobs:
       - run: npm run build
 
       - run: npm test
+        env:
+          # All vitest files are offline; the import-time config only needs
+          # these to exist (no .env is present on a fresh checkout).
+          MEMOS_URL: http://127.0.0.1:18000
+          MEMOS_USER: ci
+          MEMOS_DEFAULT_CUBE: ci_cube
+          MEMOS_CUBES_DIR: /tmp/oh-memos-cubes
 
       # The tool surface is a per-turn token cost; this gate fails when the
       # schema drifts >5% over the frozen baseline without an explicit re-freeze.
       - run: npm run schema:budget
+        env:
+          MEMOS_URL: http://127.0.0.1:18000
+          MEMOS_USER: ci
+          MEMOS_DEFAULT_CUBE: ci_cube
+          MEMOS_CUBES_DIR: /tmp/oh-memos-cubes
 
   python:
     name: Python API (offline pytest contracts)
@@ -54,7 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e .
+          pip install -e . pytest
 
       - name: Run offline tests
         env:
