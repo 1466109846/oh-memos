@@ -1,0 +1,67 @@
+name: CI
+
+# Fast feedback on every push/PR to main. Two independent jobs:
+#   node   — build, vitest suite, and the tool-surface budget gate
+#   python — the offline pytest contracts (write/relation/redact/keyword);
+#            live API tests are excluded because no stack is running here
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  node:
+    name: Node MCP (build · vitest · schema budget)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server-node
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server-node/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      # The tool surface is a per-turn token cost; this gate fails when the
+      # schema drifts >5% over the frozen baseline without an explicit re-freeze.
+      - run: npm run schema:budget
+
+  python:
+    name: Python API (offline pytest contracts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Contract tests import the oh_memos package (torch/transformers chain),
+      # so the runtime deps must be present. The CPU-only torch index keeps the
+      # install roughly 6x smaller than the default CUDA wheels.
+      - name: Install package with CPU torch
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e .
+
+      - name: Run offline tests
+        env:
+          # Live tests (test_search_project, test_graph_data) need a running
+          # API + Neo4j + Qdrant; they are integration smoke tests, not CI.
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          pytest -q \
+            --ignore=tests/test_search_project.py \
+            --ignore=tests/test_graph_data.py
