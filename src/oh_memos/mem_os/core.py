@@ -126,7 +126,9 @@ class MOSCore:
                 raise TypeError(f"Expected GeneralScheduler or None, got {type(value)}")
 
             self._mem_scheduler = value
-            self._mem_scheduler.mem_cubes = self.mem_cubes
+            # None means "disable"; there is no instance to wire up.
+            if value is not None:
+                self._mem_scheduler.mem_cubes = self.mem_cubes
 
             if value:
                 logger.info("Memory scheduler manually set")
@@ -880,7 +882,17 @@ class MOSCore:
                         mode="fast" if sync_mode == "async" else "fine",
                     )
                     memories_flatten = [m for m_list in memories for m in m_list]
-                    mem_ids: list[str] = self.mem_cubes[mem_cube_id].text_mem.add(memories_flatten)
+                    # dialogue_id/turn_index ride through so evaluation
+                    # harnesses can trace results to a source turn without
+                    # relying on text markers the LLM extraction may rewrite.
+                    _dialogue_kwargs = {
+                        key: kwargs[key]
+                        for key in ("dialogue_id", "turn_index")
+                        if kwargs.get(key) is not None
+                    }
+                    mem_ids: list[str] = self.mem_cubes[mem_cube_id].text_mem.add(
+                        memories_flatten, **_dialogue_kwargs
+                    )
                     created_ids.extend(mem_ids)
                     logger.info(
                         f"Added memory user {target_user_id} to memcube {mem_cube_id}: {mem_ids}"
@@ -1015,9 +1027,16 @@ class MOSCore:
                         mode="fast" if sync_mode == "async" else "fine",
                     )
 
+                _dialogue_kwargs = {
+                    key: kwargs[key]
+                    for key in ("dialogue_id", "turn_index")
+                    if kwargs.get(key) is not None
+                }
                 mem_ids = []
                 for mem in memories:
-                    mem_id_list: list[str] = self.mem_cubes[mem_cube_id].text_mem.add(mem)
+                    mem_id_list: list[str] = self.mem_cubes[mem_cube_id].text_mem.add(
+                        mem, **_dialogue_kwargs
+                    )
                     logger.info(
                         f"Added memory user {target_user_id} to memcube {mem_cube_id}: {mem_id_list}"
                     )

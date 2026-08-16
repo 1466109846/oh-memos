@@ -143,6 +143,20 @@ class TreeNodeTextualMemoryMetadata(TextualMemoryMetadata):
         description="The ids of the files associated with the memory.",
     )
 
+    dialogue_id: str | None = Field(
+        default=None,
+        description="Dialogue identifier for evaluation harnesses (e.g., LOCOMO dia_id). "
+        "Lets retrieval results be traced back to their source dialogue without "
+        "relying on markers embedded in the memory text, which LLM extraction may rewrite.",
+    )
+
+    turn_index: int | None = Field(
+        default=None,
+        description="Zero-based turn index within `dialogue_id`. Together with dialogue_id "
+        "this identifies the exact conversation turn a memory came from, which is what "
+        "recall@k computation needs.",
+    )
+
     @field_validator("sources", mode="before")
     @classmethod
     def coerce_sources(cls, v):

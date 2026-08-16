@@ -105,8 +105,17 @@ class TreeTextMemory(BaseTextMemory):
         Args:
             memories: List of TextualMemoryItem objects or dictionaries to add.
             user_name: optional user_name
+            **kwargs: Additional parameters including dialogue_id and turn_index.
         """
-        return self.memory_manager.add(memories, user_name=user_name, mode=self.mode)
+        dialogue_id = kwargs.get("dialogue_id")
+        turn_index = kwargs.get("turn_index")
+        return self.memory_manager.add(
+            memories,
+            user_name=user_name,
+            mode=self.mode,
+            dialogue_id=dialogue_id,
+            turn_index=turn_index
+        )
 
     def replace_working_memory(
         self, memories: list[TextualMemoryItem], user_name: str | None = None

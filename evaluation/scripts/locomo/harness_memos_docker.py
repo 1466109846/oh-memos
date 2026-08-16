@@ -66,6 +66,10 @@ def add(
         "user_id": user_id,
         "mem_cube_id": CUBE_ID,
         "messages": [{"role": "user", "content": marked, "chat_time": timestamp_iso}],
+        # Structured trace: the [Dx:y] marker survives only until LLM
+        # extraction rewrites the text; these fields persist in node metadata.
+        "dialogue_id": dia_id,
+        "turn_index": turn_idx,
     }
 
     start = time()

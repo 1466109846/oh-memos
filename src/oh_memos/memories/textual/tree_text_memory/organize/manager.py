@@ -90,6 +90,8 @@ class MemoryManager:
         user_name: str | None = None,
         mode: str = "sync",
         use_batch: bool = True,
+        dialogue_id: str | None = None,
+        turn_index: int | None = None,
     ) -> list[str]:
         """
         Add new memories to different memory types.
@@ -100,10 +102,20 @@ class MemoryManager:
             mode: "sync" to cleanup and refresh after adding, "async" to skip.
             use_batch: If True, use batch database operations (more efficient for large batches).
                        If False, use parallel single-node operations (original behavior).
+            dialogue_id: Optional dialogue ID to set on all memories.
+            turn_index: Optional turn index to set on all memories.
 
         Returns:
             List of added memory IDs.
         """
+        # Apply dialogue_id and turn_index if provided
+        if dialogue_id is not None or turn_index is not None:
+            for memory in memories:
+                if dialogue_id is not None and not memory.metadata.dialogue_id:
+                    memory.metadata.dialogue_id = dialogue_id
+                if turn_index is not None and memory.metadata.turn_index is None:
+                    memory.metadata.turn_index = turn_index
+
         added_ids: list[str] = []
         if use_batch:
             added_ids = self._add_memories_batch(memories, user_name)
