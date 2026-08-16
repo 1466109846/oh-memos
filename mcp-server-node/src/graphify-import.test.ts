@@ -84,6 +84,23 @@ describe("buildGraphImportPlan", () => {
     })).toThrow(/relative|absolute/i);
   });
 
+  it("rejects invalid confidence values at the import boundary", () => {
+    expect(() => buildGraphImportPlan({
+      ...validGraph,
+      nodes: [{ ...validGraph.nodes[0], confidence_score: 1.2 }, validGraph.nodes[1]],
+    })).toThrow(/confidence.*0.*1/i);
+
+    expect(() => buildGraphImportPlan({
+      ...validGraph,
+      links: [{ ...validGraph.links[0], confidence: "CERTAIN" }],
+    })).toThrow(/confidence.*category/i);
+
+    expect(() => buildGraphImportPlan({
+      ...validGraph,
+      links: [{ ...validGraph.links[0], confidence: -0.1 }],
+    })).toThrow(/confidence.*0.*1/i);
+  });
+
   it("rejects malformed graph roots instead of silently importing partial data", () => {
     expect(() => buildGraphImportPlan({ nodes: [] })).toThrow(/nodes.*array/i);
     expect(() => buildGraphImportPlan({ nodes: validGraph.nodes, links: "bad" })).toThrow(/links|edges.*array/i);

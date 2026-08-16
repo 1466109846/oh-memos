@@ -7,6 +7,7 @@
  */
 
 import {
+  EVIDENCE_KINDS,
   normalizeProjectRelativePath,
   normalizeProvenance,
   stableCodeNodeId,
@@ -93,6 +94,32 @@ function safeCount(value: number | undefined, fallback: number): number {
   return value;
 }
 
+function validateImportConfidence(record: UnknownRecord, label: string): void {
+  const score = record.confidence_score;
+  if (score !== undefined) {
+    if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1) {
+      throw new Error(`${label} confidence_score must be a number from 0 to 1`);
+    }
+  }
+
+  const confidence = record.confidence;
+  if (confidence === undefined) return;
+  if (typeof confidence === "number") {
+    if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+      throw new Error(`${label} confidence must be a number from 0 to 1`);
+    }
+    return;
+  }
+  if (typeof confidence === "string") {
+    const category = confidence.trim().toUpperCase();
+    if (!(EVIDENCE_KINDS as readonly string[]).includes(category)) {
+      throw new Error(`${label} confidence category must be one of ${EVIDENCE_KINDS.join(", ")}`);
+    }
+    return;
+  }
+  throw new Error(`${label} confidence must be a category or a number from 0 to 1`);
+}
+
 function normalizeRelation(value: unknown): string {
   const raw = typeof value === "string" && value.trim() ? value.trim() : "RELATED_TO";
   return raw.normalize("NFKC").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "RELATED_TO";
@@ -145,6 +172,7 @@ export function buildGraphImportPlan(input: unknown, options: GraphImportOptions
     const externalId = requiredString(node.id, "node id");
     if (seenIds.has(externalId)) throw new Error(`duplicate node id '${externalId}'`);
     seenIds.add(externalId);
+    validateImportConfidence(node, `node '${externalId}'`);
 
     const sourceFile = node.source_file === undefined
       ? undefined
@@ -177,6 +205,7 @@ export function buildGraphImportPlan(input: unknown, options: GraphImportOptions
     const link = asRecord(rawLink) as GraphifyLink;
     const source = requiredString(link.source ?? link._src, "edge source");
     const target = requiredString(link.target ?? link._tgt, "edge target");
+    validateImportConfidence(link, `edge '${source}' -> '${target}'`);
     if (!nodeByExternalId.has(source)) throw new Error(`unknown source node '${source}'`);
     if (!nodeByExternalId.has(target)) throw new Error(`unknown target node '${target}'`);
     const relation = normalizeRelation(link.relation ?? link.type);
