@@ -50,7 +50,7 @@ export function handleMemosCapabilities(): TextContent[] {
     "",
     `**Mode**: ${mode}`,
     mode === "lite"
-      ? "Lite reuses the configured HTTP API and cube storage; it lowers search limits and filters auto-capture. It is a noise/resource policy, not an offline SQLite backend."
+      ? "Lite uses the Node JSONL provider with lexical search (optional local Ollama embeddings); it does not require the HTTP API, Qdrant, or Neo4j. Full-only graph, Wiki, and remote admin operations are unavailable."
       : "Full exposes API, graph, vector, BM25, Wiki round-trip, canvas, and skill lifecycle tools.",
     "",
     "**tree_text update**: in-place update is unsupported; the API now fails explicitly instead of silently succeeding. Use versioned writes.",

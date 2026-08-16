@@ -54,6 +54,35 @@ AI 助手在一次对话里可以很好地推理，但真实项目远比一个�
 | **本地优先部署** | FastAPI、Qdrant、Neo4j 均可本地运行；模型既可使用 Ollama，也可使用 OpenAI 兼容 API |
 | **本地 Lite provider** | `MEMOS_MODE=lite` 或 `MEMOS_PROVIDER=local` 使用每 cube JSONL；默认词法检索，可选接本地 Ollama embedding 做混合语义排序，不需要 Python API 或 Neo4j |
 
+## 选择部署架构
+
+oh-memos 有两种记忆部署架构。**Lite 轻部署**是独立运行的 Node.js 本地
+provider，适合快速、离线和个人开发；**Full 重部署**通过 Node MCP 连接
+FastAPI/MOS、Qdrant 和 Neo4j，提供语义检索、关系图谱和 LLM 抽取。原生
+Windows 和 host-db Docker 都属于 Full 的运行变体，不是第三种架构。
+
+| 选择 | 需要 | 提供 |
+|---|---|---|
+| **Lite 轻部署** | Node.js 18+ | 本地 JSONL 记忆、typed save/list/get/search、canvas、词法检索，可选本地 Ollama embedding |
+| **Full 重部署** | Docker Compose，或 Python + Qdrant + Neo4j | API、语义/向量检索、关系图谱、LLM 抽取、Wiki 回灌、图谱和管理操作 |
+
+最小 Lite 配置如下（放入 MCP 客户端的 `env`）：
+
+```json
+{
+  "MEMOS_MODE": "lite",
+  "MEMOS_PROVIDER": "local",
+  "MEMOS_USER": "dev_user",
+  "MEMOS_DEFAULT_CUBE": "dev_cube",
+  "MEMOS_CUBES_DIR": "C:/work/oh-memos/data/oh-memos_cubes",
+  "MEMOS_LITE_EMBED": "off"
+}
+```
+
+Lite 不需要 `MEMOS_URL`、Python、FastAPI、Neo4j 或 Qdrant。删除
+`MEMOS_LITE_EMBED=off` 后可以尝试使用本地 Ollama embedding。团队协作和
+图谱感知检索请选择 Full。详见[部署架构对比](docs/DEPLOYMENT_MODES.md)。
+
 ## 快速开始
 
 ### 前置条件
@@ -313,8 +342,9 @@ flowchart LR
 |---|---|
 | [架构说明](ARCHITECTURE.md) | 运行边界、数据流、模块与修改导航 |
 | [交互式架构图](https://lsg1103275794.github.io/oh-memos/architecture/) · [源 JSON](docs/architecture/oh-memos.architecture.json) | 浏览并导出完整系统图 |
-| [MCP 配置指南](docs/MCP_GUIDE.md) | 各类客户端的 MCP 配置 |
-| [部署（中文）](docs/DEPLOY_CN.md) · [Deployment (EN)](docs/DEPLOY_EN.md) | 完整安装、运维和其他运行模式 |
+| [MCP 配置指南](docs/MCP_GUIDE.md) | Lite 与 Full 的客户端 stdio 配置 |
+| [部署架构对比](docs/DEPLOYMENT_MODES.md) | 选择 Lite/Full、查看能力边界和迁移说明 |
+| [部署（中文）](docs/DEPLOY_CN.md) · [Deployment (EN)](docs/DEPLOY_EN.md) | Full 部署、运维和其他运行模式 |
 | [API 参考](docs/product-api-tests.md) | HTTP 接口示例 |
 | [Memory Wiki 示例](docs/memory-wiki/index.md) | 适合 Git 管理的项目知识导出 |
 | [运行截图](docs/ScreenShot/README.md) | 真实客户端与知识图谱效果 |

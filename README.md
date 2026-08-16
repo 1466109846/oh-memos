@@ -57,6 +57,66 @@ reconstructed from files.
 | **Local-first deployment** | FastAPI, Qdrant, and Neo4j run locally; models can be local through Ollama or remote through an OpenAI-compatible API |
 | **Local Lite provider** | `MEMOS_MODE=lite` or `MEMOS_PROVIDER=local` stores typed memories in per-cube JSONL; lexical search by default, optional hybrid semantic ranking via a local Ollama embedding model — no Python API or Neo4j required |
 
+## Choose a deployment architecture
+
+oh-memos has two deployment architectures. **Lite** is a standalone Node.js
+provider for fast, local, or offline work. **Full** connects the Node MCP server
+to FastAPI/MOS, Qdrant, and Neo4j for semantic retrieval, graph context, and LLM
+extraction. Native Windows and host-database Docker are Full-mode variants.
+
+| Choose | Requires | Provides |
+|---|---|---|
+| **Lite** | Node.js 18+ | Local JSONL memory, typed save/list/get/search, canvas, lexical search, optional local Ollama embeddings |
+| **Full** | Docker Compose or native Python + Qdrant + Neo4j | API, semantic/vector search, graph relations, LLM extraction, Wiki round-trip, graph/admin operations |
+
+For the smallest setup, configure the MCP client with the `env` block below:
+
+```json
+{
+  "MEMOS_MODE": "lite",
+  "MEMOS_PROVIDER": "local",
+  "MEMOS_USER": "dev_user",
+  "MEMOS_DEFAULT_CUBE": "dev_cube",
+  "MEMOS_CUBES_DIR": "/absolute/path/to/oh-memos/data/oh-memos_cubes",
+  "MEMOS_LITE_EMBED": "off"
+}
+```
+
+Lite does not require `MEMOS_URL`, Python, FastAPI, Neo4j, or Qdrant. Remove
+`MEMOS_LITE_EMBED=off` to allow optional local Ollama embeddings. Full remains
+the recommended choice for team use and graph-aware retrieval. See the full
+[deployment mode comparison](docs/DEPLOYMENT_MODES.md) before choosing.
+
+## Choose a deployment architecture
+
+oh-memos has two deployment architectures. **Lite** is a standalone Node.js
+provider for fast, local, or offline work. **Full** connects the Node MCP server
+to FastAPI/MOS, Qdrant, and Neo4j for semantic retrieval, graph context, and LLM
+extraction. Native Windows and host-database Docker are Full-mode variants.
+
+| Choose | Requires | Provides |
+|---|---|---|
+| **Lite** | Node.js 18+ | Local JSONL memory, typed save/list/get/search, canvas, lexical search, optional local Ollama embeddings |
+| **Full** | Docker Compose or native Python + Qdrant + Neo4j | API, semantic/vector search, graph relations, LLM extraction, Wiki round-trip, graph/admin operations |
+
+For the smallest setup, configure the MCP client with the `env` block below:
+
+```json
+{
+  "MEMOS_MODE": "lite",
+  "MEMOS_PROVIDER": "local",
+  "MEMOS_USER": "dev_user",
+  "MEMOS_DEFAULT_CUBE": "dev_cube",
+  "MEMOS_CUBES_DIR": "/absolute/path/to/oh-memos/data/oh-memos_cubes",
+  "MEMOS_LITE_EMBED": "off"
+}
+```
+
+Lite does not require `MEMOS_URL`, Python, FastAPI, Neo4j, or Qdrant. Remove
+`MEMOS_LITE_EMBED=off` to allow optional local Ollama embeddings. Full remains
+the recommended choice for team use and graph-aware retrieval. See the full
+[deployment mode comparison](docs/DEPLOYMENT_MODES.md) before choosing.
+
 ## Quick start
 
 ### Prerequisites
@@ -281,7 +341,8 @@ Important boundaries:
 |---|---|
 | [Architecture](ARCHITECTURE.md) | Runtime boundaries, data flows, modules, and change navigation |
 | [Interactive architecture](https://lsg1103275794.github.io/oh-memos/architecture/) · [source JSON](docs/architecture/oh-memos.architecture.json) | Explore and export the system diagram |
-| [MCP guide](docs/MCP_GUIDE.md) | Client-specific MCP configuration |
+| [MCP guide](docs/MCP_GUIDE.md) | Client-specific stdio configuration for Lite and Full |
+| [Deployment modes](docs/DEPLOYMENT_MODES.md) | Choose Lite vs. Full, compare capabilities, and understand the migration boundary |
 | [Deployment (EN)](docs/DEPLOY_EN.md) · [部署（中文）](docs/DEPLOY_CN.md) | Full setup, operations, and alternate modes |
 | [API reference](docs/product-api-tests.md) | HTTP endpoint examples |
 | [Memory wiki example](docs/memory-wiki/index.md) | Git-friendly exported project knowledge |

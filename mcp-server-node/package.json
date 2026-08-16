@@ -18,6 +18,7 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
+    "test:lite-smoke": "npm run build && node scripts/lite-smoke-test.mjs",
     "test:watch": "vitest",
     "schema:budget": "npm run build && node scripts/schema-budget.mjs --check",
     "schema:budget:freeze": "npm run build && node scripts/schema-budget.mjs --write",

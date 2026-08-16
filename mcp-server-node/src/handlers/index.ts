@@ -31,7 +31,11 @@ export async function dispatchTool(
   arguments_: Record<string, unknown>
 ): Promise<TextContent[]> {
   if (MEMOS_PROVIDER === "local" && ["memos_think", "memos_graph", "memos_export_wiki", "memos_import_wiki", "memos_admin", "memos_delete"].includes(name)) {
-    return errorResponse(`LOCAL_PROVIDER_UNSUPPORTED: ${name} requires the Full HTTP/graph provider`);
+    return errorResponse(
+      `Lite mode: ${name} is unavailable because it requires the Full HTTP/graph provider. ` +
+      "Available Lite paths include memos_save, memos_list_v2, memos_get, memos_search, memos_suggest, memos_context_resume, and memos_canvas. " +
+      "Set MEMOS_MODE=full and start the backend for Full-only operations."
+    );
   }
   switch (name) {
     // Memory tools

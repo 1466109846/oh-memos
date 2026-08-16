@@ -25,18 +25,57 @@ MCP lets the AI **proactively invoke** memory, instead of waiting to be told.
 
 ---
 
-## 🚀 快速配置 | Quick Setup
+## Lite mode | Lite 轻部署
+
+Lite runs the Node MCP server with its local JSONL provider. It does **not**
+need the oh-memos API, Python, Neo4j, or Qdrant, so do not start
+`scripts/local/start.bat` first. Use this configuration when you need local,
+offline, or single-developer memory:
+
+```json
+{
+  "mcpServers": {
+    "oh-memos": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "oh-memos-mcp"],
+      "env": {
+        "MEMOS_MODE": "lite",
+        "MEMOS_PROVIDER": "local",
+        "MEMOS_USER": "dev_user",
+        "MEMOS_DEFAULT_CUBE": "dev_cube",
+        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes",
+        "MEMOS_LITE_EMBED": "off"
+      }
+    }
+  }
+}
+```
+
+`MEMOS_URL` is required for Full mode, but not for Lite. Lite stores records
+under `<MEMOS_CUBES_DIR>/<cube>/memories.jsonl` and provides typed save/list/get,
+search, context resume, and canvas operations. Search is lexical by default.
+Remove `MEMOS_LITE_EMBED=off` to allow optional Ollama embeddings, or set
+`MEMOS_LITE_EMBED_URL` and `MEMOS_LITE_EMBED_MODEL` explicitly. Graph, think,
+Wiki round-trip, remote admin, and delete operations are Full-only.
+
+For the Full configuration below, start the backend first and keep the four
+Full env variables (`MEMOS_URL`, `MEMOS_USER`, `MEMOS_DEFAULT_CUBE`, and
+`MEMOS_CUBES_DIR`) configured.
+
+---
+
 
 MCP server 以 [`oh-memos-mcp`](https://www.npmjs.com/package/oh-memos-mcp) 发布到 npm，**不需要 Python**，通过 `npx` 运行。
 
 The MCP server ships to npm as [`oh-memos-mcp`](https://www.npmjs.com/package/oh-memos-mcp). **No Python required** — it runs via `npx`.
 
-**前置条件 | Prerequisites**
+## Full mode prerequisites | Full 重部署前置条件
 
 - Node.js ≥ 18
-- oh-memos 后端在运行 | the oh-memos backend running (`scripts/local/start.bat` → `http://localhost:18000`)
+- For Full mode only: oh-memos backend running | the oh-memos backend running (`scripts/local/start.bat` → `http://localhost:18000`)
 
-**通用配置 | Canonical config**
+**Full configuration | Full 配置**
 
 以下 JSON 适用于所有遵循 MCP 协议的客户端，仅**配置文件位置**不同（见下节）。
 
