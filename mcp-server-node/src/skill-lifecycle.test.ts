@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join, sep } from "path";
 import { parseCandidateFrontMatter, transitionCandidate, installTargetPath } from "./skill-lifecycle.js";
 
 describe("skill candidate lifecycle", () => {
@@ -27,7 +30,12 @@ describe("skill candidate lifecycle", () => {
   });
 
   it("confines installation to project .claude/skills", () => {
-    expect(installTargetPath("G:/project", "migration-locking").replace(/\\/g, "/")).toBe("G:/project/.claude/skills/migration-locking/SKILL.md");
-    expect(() => installTargetPath("G:/project", "../escape")).toThrow();
+    // A real absolute root (not a Windows-style literal) so the assertion
+    // holds on posix runners too, where "G:/project" is a relative path.
+    const root = mkdtempSync(join(tmpdir(), "skill-target-"));
+    const target = installTargetPath(root, "migration-locking");
+    expect(target.startsWith(root + sep)).toBe(true);
+    expect(target.endsWith(join(".claude", "skills", "migration-locking", "SKILL.md"))).toBe(true);
+    expect(() => installTargetPath(root, "../escape")).toThrow();
   });
 });
