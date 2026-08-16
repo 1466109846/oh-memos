@@ -1,7 +1,7 @@
 /**
  * MemOS MCP Server - Tools Registry
  *
- * Defines all 11 memos_* tool schemas using Zod (graph/admin operations are
+ * Defines all 12 memos_* tool schemas using Zod (graph/admin operations are
  * consolidated behind mode/action parameters to keep the always-on tool
  * surface small).
  */
@@ -148,15 +148,17 @@ Use when: unsure what to search for, or unsure which memory_type \`memos_save\` 
 
   memos_graph: {
     description: `Knowledge-graph queries; mode selects:
-related = nodes+edges around a query · path = trace between two node ids · impact = forward blast radius of one memory · schema = graph structure & statistics.`,
+related = nodes+edges around a query · path = trace between two node ids · impact = forward blast radius of one memory · schema = graph structure & statistics · import = validate Graphify node-link JSON (dry-run only).`,
     inputSchema: z.object({
-      mode: z.enum(["related", "path", "impact", "schema"]).describe("Query kind"),
+      mode: z.enum(["related", "path", "impact", "schema", "import"]).describe("Query kind"),
       query: z.string().optional().describe("related: search query"),
       source_id: z.string().optional().describe("path: start node id"),
       target_id: z.string().optional().describe("path: end node id"),
       memory_id: z.string().optional().describe("impact: source memory id"),
       max_depth: z.number().int().optional().default(3).describe("path/impact: max hops"),
       sample_size: z.number().int().optional().default(100).describe("schema: nodes sampled"),
+      graph_json: z.string().optional().describe("import: Graphify graph.json contents; validation is dry-run and never writes data"),
+      project_key: z.string().optional().describe("import: stable project namespace label"),
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
     }),

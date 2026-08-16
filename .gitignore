@@ -213,6 +213,8 @@ venv.bak/
 # but do not ignore important files
 
 !docs/openapi.json
+!docs/architecture/oh-memos.architecture.html
+!docs/architecture/oh-memos.architecture.json
 !README.md
 !WINDOWS_README.md
 !WINDOWS_DEPLOY_CN.md

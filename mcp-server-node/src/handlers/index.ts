@@ -7,7 +7,7 @@
 
 import { handleMemosSave, handleMemosList, handleMemosGet, handleMemosGetStats } from "./memory.js";
 import { handleMemosSearch, handleMemosSuggest, handleMemosContextResume } from "./search.js";
-import { handleMemosTracePath, handleMemosGetGraph, handleMemosExportSchema, handleMemosImpact } from "./graph.js";
+import { handleMemosTracePath, handleMemosGetGraph, handleMemosExportSchema, handleMemosImpact, handleMemosGraphifyImport } from "./graph.js";
 import { handleMemosCalendar } from "./calendar.js";
 import { handleMemosThink } from "./think.js";
 import { handleMemosExportWiki } from "./wiki-export.js";
@@ -55,6 +55,8 @@ export async function dispatchTool(
           return handleMemosImpact(arguments_);
         case "schema":
           return handleMemosExportSchema(arguments_);
+        case "import":
+          return handleMemosGraphifyImport(arguments_);
         default:
           return handleMemosGetGraph(arguments_);
       }

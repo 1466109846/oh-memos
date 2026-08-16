@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Architecture-aware graph provenance and Graphify adapter
+
+- Added a normalized provenance contract for graph nodes and relationships:
+  `EXTRACTED`, `INFERRED`, `AMBIGUOUS`, or `UNKNOWN`, plus confidence,
+  evidence references, source location, extractor version, and verification time.
+- `memos_graph` related/path/impact results now explain available evidence and
+  safely degrade legacy graph data to `UNKNOWN`.
+- Added `memos_graph(mode="import")` for strict Graphify/NetworkX node-link
+  validation and deterministic dry-run planning. The mode never writes Neo4j,
+  Qdrant, or cube data.
+- README, Chinese README, architecture documentation, and this changelog share
+  the same tested layered topology:
+
+<!-- architecture-aware-memory:start -->
+```mermaid
+flowchart LR
+    CLIENT["AI Clients<br/>Claude · Codex · DSH"]
+    MCP["Node MCP Server<br/>memos_* · stdio"]
+
+    subgraph CODE_LAYER["Code structure layer / 代码结构层"]
+        REPO["Source Repository<br/>code · docs · git diff"]
+        ADAPTER["Graphify Adapter<br/>validate · stable ID · dry-run"]
+        CODE_GRAPH[("Code Graph<br/>FILE · SYMBOL · CALLS")]
+    end
+
+    subgraph MEMORY_LAYER["Project memory layer / 项目记忆层"]
+        API["FastAPI<br/>HTTP JSON · :18000"]
+        CORE["MOS / MOSCore<br/>project Cube orchestration"]
+        QDRANT[("Qdrant<br/>semantic memory")]
+        MEMORY_GRAPH[("Neo4j Memory Graph<br/>DECISION · BUGFIX · CAUSE")]
+        FILES[("Cube Files<br/>config · Canvas · Wiki")]
+    end
+
+    CLIENT -->|"MCP / stdio"| MCP
+    MCP -->|"HTTP / JSON"| API
+    API -->|"memory operations"| CORE
+    CORE -->|"embedding + recall"| QDRANT
+    CORE -->|"typed relations"| MEMORY_GRAPH
+    CORE -->|"durable state"| FILES
+
+    REPO -. "Graphify graph.json" .-> ADAPTER
+    MCP -. "memos_graph import" .-> ADAPTER
+    ADAPTER -->|"validated symbols"| CODE_GRAPH
+    CODE_GRAPH -->|"RELATED_TO + provenance"| MEMORY_GRAPH
+```
+<!-- architecture-aware-memory:end -->
+
 ## [3.1.0] - 2026-08-13
 
 ### ✨ 新增 `memos_canvas` —— 符号化短期任务记忆

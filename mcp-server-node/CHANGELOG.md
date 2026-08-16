@@ -10,6 +10,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Explainable graph provenance.** `memos_graph(mode="related"|"path"|"impact")`
+  now reports normalized evidence categories (`EXTRACTED`, `INFERRED`,
+  `AMBIGUOUS`, or `UNKNOWN`) and includes confidence, evidence references,
+  source file/location, extractor version, and verification time when present.
+  Legacy graph data remains readable and degrades to `UNKNOWN`.
+
+- **`memos_graph(mode="import")` Graphify boundary.** Accepts up to 5 MB of
+  Graphify/NetworkX node-link JSON, validates `nodes` plus `links` (or `edges`),
+  and produces a deterministic plan with portable stable Code Graph ids.
+  Duplicate ids, dangling edges, unsafe paths, invalid confidence values, and
+  oversized graphs are rejected. This mode is dry-run only and never writes to
+  Neo4j, Qdrant, or a memory cube.
+
 - **`memos_canvas`** — a symbolic task canvas: short-term task state that survives
   context compaction. One Mermaid file per task under
   `{MEMOS_CUBES_DIR}/{cube_id}/canvas/`, whose nodes carry a greppable id

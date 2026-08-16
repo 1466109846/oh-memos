@@ -11,6 +11,46 @@
 
 ## 架构
 
+<!-- architecture-aware-memory:start -->
+```mermaid
+flowchart LR
+    CLIENT["AI Clients<br/>Claude · Codex · DSH"]
+    MCP["Node MCP Server<br/>memos_* · stdio"]
+
+    subgraph CODE_LAYER["Code structure layer / 代码结构层"]
+        REPO["Source Repository<br/>code · docs · git diff"]
+        ADAPTER["Graphify Adapter<br/>validate · stable ID · dry-run"]
+        CODE_GRAPH[("Code Graph<br/>FILE · SYMBOL · CALLS")]
+    end
+
+    subgraph MEMORY_LAYER["Project memory layer / 项目记忆层"]
+        API["FastAPI<br/>HTTP JSON · :18000"]
+        CORE["MOS / MOSCore<br/>project Cube orchestration"]
+        QDRANT[("Qdrant<br/>semantic memory")]
+        MEMORY_GRAPH[("Neo4j Memory Graph<br/>DECISION · BUGFIX · CAUSE")]
+        FILES[("Cube Files<br/>config · Canvas · Wiki")]
+    end
+
+    CLIENT -->|"MCP / stdio"| MCP
+    MCP -->|"HTTP / JSON"| API
+    API -->|"memory operations"| CORE
+    CORE -->|"embedding + recall"| QDRANT
+    CORE -->|"typed relations"| MEMORY_GRAPH
+    CORE -->|"durable state"| FILES
+
+    REPO -. "Graphify graph.json" .-> ADAPTER
+    MCP -. "memos_graph import" .-> ADAPTER
+    ADAPTER -->|"validated symbols"| CODE_GRAPH
+    CODE_GRAPH -->|"RELATED_TO + provenance"| MEMORY_GRAPH
+```
+<!-- architecture-aware-memory:end -->
+
+Graphify 适配器当前只校验 node-link JSON 并生成确定性 dry-run 计划，
+不会把代码符号写入 Neo4j、Qdrant 或 memory cube；项目记忆仍保持独立语义层。
+
+[详细架构说明](ARCHITECTURE.md) ·
+[交互式架构图](https://htmlpreview.github.io/?https://github.com/lsg1103275794/oh-memos/blob/main/docs/architecture/oh-memos.architecture.html)
+
 记忆不是一件事。**持久事实**与**进行中的任务状态**生命周期不同、变更频率不同，因此存放位置也不同：
 
 | | **长期记忆** | **短期画布** |
