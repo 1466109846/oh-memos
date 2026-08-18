@@ -26,7 +26,7 @@
     "prepublishOnly": "npm run build"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "keywords": [
     "mcp",
@@ -48,14 +48,14 @@
   },
   "homepage": "https://github.com/xigou/oh-memos/tree/main/mcp-server-node",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "dotenv": "^16.0.0",
-    "zod": "^3.25.0"
+    "zod": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
+    "tsx": "^4.23.12",
     "typescript": "^5.5.0",
-    "vitest": "3.2.4"
+    "vitest": "3.2.7"
   }
 }

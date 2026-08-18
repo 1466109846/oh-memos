@@ -396,6 +396,18 @@ async function runConditionalDeleteContract() {
     validateInitialize("Delete-enabled", await client.initialize());
     const listed = await client.rpc("tools/list", {});
     validateTools("Delete-enabled", listed.result?.tools ?? [], EXPECTED_TOOL_ORDER);
+
+    const deleteResult = textContent(
+      await client.rpc("tools/call", {
+        name: "memos_delete",
+        arguments: { memory_id: "not-used-in-lite", cube_id: cube },
+      })
+    );
+    check(
+      "delete-enabled tool is callable without mutating the Lite fixture",
+      deleteResult.includes("Lite mode: memos_delete is unavailable"),
+      deleteResult
+    );
   } catch (error) {
     check(
       "delete-enabled harness completes",

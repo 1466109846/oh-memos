@@ -39,6 +39,10 @@ jobs:
           MEMOS_DEFAULT_CUBE: ci_cube
           MEMOS_CUBES_DIR: /tmp/oh-memos-cubes
 
+      # Raw JSON-RPC coverage protects the initialize-era stdio contract across
+      # SDK upgrades, including conditional tools and client argument quirks.
+      - run: npm run test:protocol
+
       # The tool surface is a per-turn token cost; this gate fails when the
       # schema drifts >5% over the frozen baseline without an explicit re-freeze.
       - run: npm run schema:budget

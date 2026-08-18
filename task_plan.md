@@ -180,11 +180,11 @@
 
 ## 目标
 
-按 `docs/plans/2026-08-18-mcp-sdk-v2-migration-and-evolution.md` 的分期策略实施 SDK 与协议迁移。当前执行范围是可独立回滚的 Phase 0：更新到 SDK v1.30 并冻结 legacy 行为；不提前修改 Node、Zod、server entry 或协议 era。
+按 `docs/plans/2026-08-18-mcp-sdk-v2-migration-and-evolution.md` 的分期策略实施 SDK 与协议迁移。本次已完成可独立回滚的 Phase 0，以及保持 legacy wire 的 Phase 1（SDK v2、Zod 4、Node 20）；Phase 2 及之后的 modern era 激活仍作为后续独立阶段。
 
 ## 当前阶段
 
-Phase 0 已完成，等待该检查点审阅后进入 Phase 1（SDK v2 + Node 20 + Zod 4，仍保持 direct-connect legacy wire）。
+Phase 0 已提交并推送；Phase 1 已完成；Phase 2 及之后暂不启用 `serveStdio` 或 `2026-07-28` modern era。
 
 ## 工作阶段
 
@@ -192,7 +192,7 @@ Phase 0 已完成，等待该检查点审阅后进入 Phase 1（SDK v2 + Node 20
 - [x] Phase 0.2：先增加 21 个 protocol contract 测试和 raw JSON-RPC stdio smoke，锁定 tools/list、tools/call、Full/Lite 与参数兼容行为
 - [x] Phase 0.3：将 `@modelcontextprotocol/sdk` 升到 `^1.30.0`，lockfile 固定 `1.30.0`，并通过同一套门禁
 - [x] Phase 0.4：记录验证结果、已知兼容边界与回滚点
-- [ ] Phase 1：迁移 server v2 / Zod 4 / Node 20，仍用 direct `server.connect(new StdioServerTransport())`
+- [x] Phase 1：迁移 server v2 / Zod 4 / Node 20，仍用 direct `server.connect(new StdioServerTransport())`
 - [ ] Phase 2：引入 `serveStdio(buildServer, { legacy: "serve" })` 和受测 transport decorator
 - [ ] Phase 3：扩大 protocol/host/OS 矩阵并接入 CI
 - [ ] Phase 4-5：next canary、观察窗口、稳定版文档与发布
@@ -211,3 +211,38 @@ Phase 0 已完成，等待该检查点审阅后进入 Phase 1（SDK v2 + Node 20
 | Full search fixture 在 API 不可达前先触发 cube fallback config，并因缺少 `MOS_CHAT_MODEL` 返回 `CUBE_REGISTRATION_FAILED` | 1 | 改用不依赖 cube 注册的 `memos_admin(action="create_user")` 请求，稳定锁定真实 `API_ERROR` 文本 |
 | 并行 preflight 中 Windows `rg` 路径 glob 无效 | 1 | 改为对 `src` 使用 `-g '*.test.ts'` |
 | 通过 PowerShell stdin 调用 `apply_patch` 被 Windows wrapper 拒绝 | 1 | 改用带绝对路径的 Codex `apply_patch` API；未写入错误 patch |
+
+## Phase 1 执行批次
+
+- [x] Phase 1.0：恢复上下文、确认隔离 worktree 清洁，并复验 Phase 0 的 build / 175 tests / schema budget / protocol smoke / Lite smoke
+- [x] Phase 1.1：运行官方 codemod dry-run 与正式迁移，升级到 server v2 / Zod 4 / Node 20，并清零旧 SDK import
+- [x] Phase 1.2：迁移真实 `tools/list` schema budget 与 semantic contract，保持 17 工具业务约束不变
+- [x] Phase 1.3：完成 Node 20 / Node 22、legacy wire、Full/Lite、条件工具和回滚门禁复验
+
+## 错误记录（Phase 1 实施）
+
+| 错误 | 次数 | 处理 |
+|---|---:|---|
+| Windows Store `python.exe` 运行 `session-catchup.py` 退出码 1 且无输出 | 1 | 改用系统 `py.exe`，脚本成功退出且无未同步上下文 |
+| 首次并行 import 审计的 `rg` 正则被 PowerShell 转义截断 | 1 | 改用单引号简化 pattern 后成功完成全仓审计 |
+| 聚焦 Vitest 未完整设置仓库 CI fixture，收集阶段先后报 `MEMOS_URL` / `MEMOS_USER` required | 2 | 两次均未进入 schema 断言；读取 CI 后改为一次性设置 `MEMOS_URL`、`MEMOS_USER`、`MEMOS_DEFAULT_CUBE`、`MEMOS_CUBES_DIR` |
+| schema-budget 与 hash 的复合 patch 中一个旧哈希锚点抄写错误 | 1 | `apply_patch` 整体拒绝且未写入；拆分为独立小补丁并使用文件中的精确旧值 |
+| schema budget 首次使用过长的内部 cube fixture，导致字节数受默认值长度影响 | 1 | 固定预算进程使用 CI 同长 `ci_cube`，重新 freeze 后跨外部 cube 环境检查均为 0.0% 漂移 |
+
+## Phase 1 结果
+
+- `@modelcontextprotocol/server@2.0.0`、Zod 4、Node `>=20.0.0` 已落地；`tsx` 更新到 `4.23.12`，消除开发链 `esbuild` 低危审计项；Vitest 固定为 `3.2.7`。
+- `src/server.ts` 保持 direct `server.connect(new StdioServerTransport())`、`2025-11-25` legacy 协议、字符串化 arguments 兼容和 unknown-key 非致命行为；未引入 `serveStdio`、`server/discover` 或 `2026-07-28`。
+- 真实 Phase 0/Phase 1 `tools/list` 逐字段审阅通过：17 个工具的名称、顺序、描述、annotations 和业务约束不变；仅接受 JSON Schema dialect、SDK metadata、Zod strip 表达和 safe-integer 边界的预期 wire 差异。
+- Node 版本 gate 在动态加载 SDK/config 前拒绝 Node 18，并新增 3 项单测；CI Node 20 job 已加入 `npm run test:protocol`。
+
+## Phase 1 最终门禁
+
+| 检查 | 结果 |
+|---|---|
+| Node 24.12.0 | build、21 files / 178 tests、schema 0.0%、protocol/Lite smoke 通过 |
+| Node 20.19.4 | build、21 files / 178 tests、schema 0.0%、protocol/Lite smoke 通过 |
+| Node 22.18.0 | build、21 files / 178 tests、schema 0.0%、protocol/Lite smoke 通过 |
+| Node 18.20.8 | 按预期退出码 1，并输出 Node `>=20.0.0` 升级提示 |
+| npm audit | production 与完整依赖均 0 vulnerabilities |
+| import/marker audit | 无旧 SDK import、codemod marker、`serveStdio` 或 modern-era 标记 |

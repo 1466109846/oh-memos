@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-
-import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { describe, expect, it } from "vitest";
 
 import { checkArgContract, recordRawArgKeys } from "./handlers/arg-contract.js";
@@ -56,23 +54,23 @@ const EXPECTED_ANNOTATIONS: Record<
  * different cube ids while preserving the same defaulting behavior.
  */
 const EXPECTED_SCHEMA_HASHES: Record<(typeof EXPECTED_TOOL_ORDER)[number], string> = {
-  memos_context_resume: "d778d859b9e88857f8c03141bb48229225e4aacf06e8c34b00aa7195ab998c08",
-  memos_search: "a0ec4c7fcce39718d2b75e921aba939903e8975e4eb9308ff801f9a62d9813a2",
-  memos_think: "5f6290b22adf0bb212165537466791fd9f4f67d4ede56c64940b6302bff03f77",
-  memos_export_wiki: "4d50550bd0882559ebffb7b39e48249dbb03ac604ecde04c4393a85430a65c93",
-  memos_import_wiki: "c35085786715cf263f379e650592ef1f2528fb896bdc50dc32a733e13d6c0a6d",
-  memos_save: "f4954330769aaa72c64d619ae5cf0fbda421580c6c3edf1386f10753acf6d1a5",
-  memos_list_v2: "cf71f2468b8bbdaf8d442469e37fa689074baf35fbafe50e4e436ca22ea3277b",
-  memos_get: "fbbcac269a905f8be330636e9aff371ec8b51397542baff7368e1c5691ec9cda",
-  memos_suggest: "ea389005ebb186887b42e932c52090a88fdd5caa425cd3ef76a60e0d17fb5e32",
-  memos_distill_skill: "e245aece467ca39bca29a650c252c6e0f86ac92e7977b3b6d066cd3faa87efc4",
-  memos_list_skill_candidates: "96947ed6cd5b00eeed852d4c070a34399c1f07f1eadd0f869bd28de301793f69",
-  memos_review_skill_candidate: "4d200cf79d10360c5b3c85998873b8bf7f2264a64b66de0ebb10662c4982753d",
-  memos_install_skill_candidate: "26b3830037ce208828b27d711e1d154c0c44758365f0886665d17b675da0a7f1",
-  memos_graph: "761de3f70bfb08392485ae3323a84aa8e5d1f947477de1c6a05168daaa8f7cf9",
-  memos_admin: "9b18756a8dfad31c0a7c3b7afa46be2aa59341f5b03152c858b7007f66265c82",
-  memos_canvas: "d81423acc877437d719d181723fbefa93ba4115adf6efe05617d973a2adbe288",
-  memos_delete: "08cb11b7b7a5649f98acd6e8d90b4ba524d1db4eb25c5d2956af0932cf54d3b7",
+  memos_context_resume: "1b045846428afb958807d15244c6875e8badd5a9da0b64e802fa586b42ef0618",
+  memos_search: "9090ee896f43e5a27ff2345c8adfb7c9594b7f856c0533d45e54dbf36af09c4e",
+  memos_think: "6ae80d34b1353ff9d6c252ef51ae0a2a421ffe1293d12419ebfafd11399c5c40",
+  memos_export_wiki: "ca2cd9cd6b74949cfaf98e0e17ff89e73c1bd78eec3fdfc96931b8963e96c264",
+  memos_import_wiki: "44a530cb35590e7422c367ecca94cd6fbed66067d1e40c549e2795bda31205b0",
+  memos_save: "6d55694e7440cbc1f81d1acb95c034534cc3c02c7f2487e10be4127cde8883f5",
+  memos_list_v2: "6ee747b16e3dbf03636482dc0388ae236b8b26d7eecd256dd46f9e579229b9ea",
+  memos_get: "33d79ce41fea8684466f0cbe5ee72defc8900f1d8d998206f2b56272d741f9b4",
+  memos_suggest: "bd36b15903ae30cb175fe0655d9b0e48e88e83755cd70bddcde278ce37d71d36",
+  memos_distill_skill: "daa0b3562b2825fcca1da38ad1f36916461e71b6fb8ea4cc25597793c389a04a",
+  memos_list_skill_candidates: "bd360f077f39f7b62d37a51b24fc7519c64515799a0c5e5538c879c4fe1f511f",
+  memos_review_skill_candidate: "83f005e615d02031a4c4990439aad23871ec51985eb6c607d2433076df63c862",
+  memos_install_skill_candidate: "3af1fa6643c15036c360984d09c44c4da09aec3ab7f5c513b942539fd9bb14aa",
+  memos_graph: "0da0f41e93edbf9fa140bcdf7a0c84cd22d23f68e9ea30b48240c467439914d6",
+  memos_admin: "295e28686f39889ad0a28dcccbfac5eaf5123dd0836f79fae08282b71fb3711e",
+  memos_canvas: "4d8da6ad1a5d951c176d20f631eae893ec22cf6ad5d270ff87217b3733bc0097",
+  memos_delete: "1873d01592e481d388068f49d859d21e47f969e8fe3b30019e04d6bc8465dfa7",
 };
 
 type JsonObject = Record<string, unknown>;
@@ -104,6 +102,27 @@ const SEMANTIC_KEYS = [
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type StandardJsonSchema = {
+  "~standard"?: {
+    jsonSchema?: {
+      input: (options: { target: "draft-2020-12" }) => unknown;
+    };
+  };
+};
+
+function toInputJsonSchema(schema: unknown): JsonObject {
+  const standard = (schema as StandardJsonSchema)["~standard"];
+  const jsonSchema = standard?.jsonSchema;
+  if (!jsonSchema) {
+    throw new Error("Tool schema does not implement StandardJSONSchemaV1");
+  }
+  const result = jsonSchema.input({ target: "draft-2020-12" });
+  if (!isObject(result)) {
+    throw new Error("Tool schema converter returned a non-object root");
+  }
+  return result.type === undefined ? { type: "object", ...result } : result;
 }
 
 function resolvePointer(root: JsonObject, ref: string): unknown {
@@ -191,10 +210,7 @@ describe("legacy MCP protocol contract", () => {
 
   for (const name of EXPECTED_TOOL_ORDER) {
     it("keeps " + name + " schema semantics stable", () => {
-      const rawSchema = toJsonSchemaCompat(toolSchemas[name].inputSchema, {
-        strictUnions: true,
-        pipeStrategy: "input",
-      }) as JsonObject;
+      const rawSchema = toInputJsonSchema(toolSchemas[name].inputSchema);
       expect(semanticHash(rawSchema)).toBe(EXPECTED_SCHEMA_HASHES[name]);
     });
   }

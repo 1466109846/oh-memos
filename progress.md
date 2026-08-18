@@ -74,3 +74,32 @@
 - 升级后完整验证：`npm run build` 通过；20 files / 175 tests 通过；schema budget 17 tools / 18033 B、较冻结值 -0.1%；protocol smoke 通过；Lite smoke 通过。
 - 发现并记录：`recordRawArgKeys` 已接 transport，但 `checkArgContract` 无生产调用点；当前 unknown-key wire 行为是非致命且无警告，不在 Phase 0 改变。
 - 当前检查点未 commit、未 push、未发布，也未移动 npm dist-tag。
+
+## 2026-08-18 MCP SDK v2 迁移实施 — Phase 1
+
+- 用户确认继续后，复用已推送的 `docs/mcp-v2-migration-plan` 分支与全局隔离 worktree；目标 worktree 清洁，主工作区 7 个无关未跟踪路径保持不变。
+- 重新读取迁移计划、`task_plan.md`、`findings.md`、`progress.md` 和 MCP/交付/TDD 工作流；本阶段明确不启用 `serveStdio` 或 `2026-07-28` modern era。
+- 会话恢复脚本通过 Windows Store `python.exe` 无输出退出码 1；改用 `py.exe` 后成功完成检查，没有发现未同步上下文。
+- Phase 1 变更前基线：`npm run build` 通过；20 files / 175 tests 通过；schema budget 17 tools / 18033 B；protocol smoke 和 Lite smoke 通过。
+- 本机 Node 为 `v24.12.0`、npm `11.4.2`；CI 当前固定 Node 20，后续仍需显式验证 Node 20 与 Node 22。
+- 当前代码残留 SDK v1 import 仅位于 `src/server.ts`、`src/protocol-contract.test.ts`、`scripts/schema-budget.mjs` 及 package/lock；`tools-registry.ts` 已全部使用 `z.object()`。
+- 官方 `@modelcontextprotocol/codemod@2.0.0` dry-run 报告：自动改动 1 个文件 / 2 处 import，并计划把 runtime SDK 替换为 server 包；schema-budget 与 protocol contract 的私有 v1 converter 需手工迁移。
+- codemod 对 `inputSchema` 发出无法跨文件确认 Standard Schema 的 warning；实际 registry 已确认每个条目都是 `z.object()`，不需要改为 raw shape。
+- 恢复会话后的两次聚焦 Vitest 未完整带上 CI fixture，测试在收集阶段分别因缺少 `MEMOS_URL`、`MEMOS_USER` 退出；均未触发 schema 合同断言。已读取 workflow，后续统一设置四个必填变量。
+- 使用完整 CI fixture 后复现 Phase 1 schema Red：`protocol-contract.test.ts` 共 21 项，工具顺序、annotations、unknown-key 两项共 4 项通过，17 个工具的业务语义哈希均与 Phase 0 冻结值不同；尚未更新哈希。
+- 新建 detached Phase 0 基线 worktree，按旧 lockfile 安装并构建；随后从 Phase 0 / Phase 1 两个真实 stdio server 抓取 `initialize` + `tools/list` 并完成逐字段 diff。未发现 required/default/enum/description/nested property 漂移，差异仅为 SDK entry 元数据、JSON Schema dialect、unknown-key 表达和 JS safe-integer 边界。
+- 已按真实 wire 重写 `scripts/schema-budget.mjs`：通过 legacy `initialize` + `tools/list` 启动 16/17 工具两次测量，删除 v1 私有 converter 与 codemod marker；固定 `ci_cube` 预算 fixture 后 freeze 为 17 tools / 17981 B / 16581 B always-on，跨外部 cube 环境 `--check` 为 0.0%。
+- 已将经字段级审阅的 17 个 v2 schema hashes 更新到 protocol contract；聚焦合同测试 21/21 通过。
+- Node runtime gate 按 TDD 完成：新增测试先因模块不存在 Red，随后 `runtime-version.ts` 3/3 Green；`index.ts` 在动态加载 SDK/config 前检查 Node 主版本。真实 Node 18.20.8 运行 `dist/index.js` 以退出码 1 输出明确的 Node >=20 升级提示。
+- `protocol-smoke.mjs` 已补条件工具实际 `tools/call`：delete-enabled Lite fixture 可调用 `memos_delete`，并安全返回 Full-only/Lite unavailable 文本；完整 legacy protocol smoke 通过。
+- `.github/workflows/ci.yml` 的现有 Node 20 job 已加入 `npm run test:protocol` 门禁；未引入 modern era 或额外发布行为。
+- Node 20.19.4 发布矩阵通过：TypeScript build、21 files / 178 tests、schema budget 17981 B / 0.0%、完整 legacy protocol smoke 与 Lite smoke 均为 exit 0。
+- Node 22.18.0 重复同一矩阵同样通过：21 files / 178 tests、budget 0.0%、protocol 与 Lite smoke 全绿。
+
+## 2026-08-18 MCP SDK v2 / Phase 1 收尾
+
+- 将开发依赖 `tsx` 从锁定的 4.21.0 更新到 4.23.12，使 `esbuild` 进入已修复范围；`npm audit`（生产与完整依赖）均为 0 vulnerabilities。
+- 从干净 `npm ci` 重新验证 Node 24.12.0：build、21 files / 178 tests、schema budget 17 tools / 17981 B / 0.0%、legacy protocol smoke 和 Lite smoke 全部通过。
+- 使用 Node 20.19.4 与 Node 22.18.0 重新跑同一矩阵，结果全部通过；Node 18.20.8 在 SDK/config 动态加载前退出码 1，并输出可执行升级提示。
+- 最终 import/marker audit 未发现旧 `@modelcontextprotocol/sdk`、`@mcp-codemod-error`、`serveStdio` 或 `2026-07-28`/`server/discover` 残留。
+- Phase 1 已完成；本次只提交 SDK v2/运行时和 legacy 合同门禁，不启用 modern era，不发布 npm，不移动 dist-tag，不合并 base 分支。

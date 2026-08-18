@@ -11,10 +11,31 @@
  * See README.md for full documentation.
  */
 
-import { runServer } from "./server.js";
-import { logger } from "./config.js";
+import { unsupportedNodeMessage } from "./runtime-version.js";
 
-runServer().catch((err) => {
-  logger.error(`Fatal error: ${err}`);
-  process.exit(1);
-});
+const runtimeError = unsupportedNodeMessage(process.versions.node);
+
+if (runtimeError) {
+  process.stderr.write(`${runtimeError}\n`);
+  process.exitCode = 1;
+} else {
+  void startServer();
+}
+
+async function startServer(): Promise<void> {
+  try {
+    // Keep SDK v2 and config loading behind the Node version gate so an older
+    // runtime gets an actionable message instead of an import-time crash.
+    const [{ runServer }, { logger }] = await Promise.all([
+      import("./server.js"),
+      import("./config.js"),
+    ]);
+    await runServer().catch((err) => {
+      logger.error(`Fatal error: ${err}`);
+      process.exitCode = 1;
+    });
+  } catch (err) {
+    process.stderr.write(`Fatal error: ${String(err)}\n`);
+    process.exitCode = 1;
+  }
+}

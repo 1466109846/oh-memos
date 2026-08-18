@@ -136,3 +136,42 @@
 ## Phase 0 回滚点
 
 - 只需将 package 与 lockfile 的 SDK 版本退回 `1.27.1` 即可恢复原 direct-connect 行为；新增合同测试和 smoke 脚本不依赖 v2 API，可继续用于回归比较。
+
+---
+
+# MCP SDK v2 Phase 1 实施发现 — 2026-08-18
+
+## 当前迁移面
+
+- Phase 0 分支已推送且 worktree 清洁，可以在同一隔离分支继续演进，不需要新建或切换 worktree。
+- 当前本机运行时为 Node `24.12.0`，只能作为额外兼容信号；计划要求的发布门禁仍是 Node 20 与 Node 22。
+- CI 已固定 Node 20，但尚未执行 protocol smoke；Phase 1 如修改 workflow，只应补现有脚本门禁，不提前增加 modern era 测试。
+- 旧 SDK import 只剩 server entry、protocol semantic test 和 schema budget 三处；业务 handler 与 17 个工具 schema 没有直接依赖 MCP raw spec 类型。
+- 本地 `mcp-builder` TypeScript 参考仍使用 monolithic SDK / Node 18 / Zod 3 示例，因此只能提供通用 stdio 与工具设计原则，不能覆盖本阶段的 v2 package split 细节。
+- 在完整 CI fixture 下，Zod 4 的 Standard Schema 2020-12 转换会让 17 个 schema 的当前语义哈希全部变化；顺序、annotations 和 arg-contract 断言保持绿色。必须先对 Phase 0 / Phase 1 的真实 `tools/list` 做逐字段 diff，再决定 rebaseline。
+- 从 Phase 0 提交 `175f8eb` 与当前 Phase 1 分别启动真实 stdio server 后，17 个工具的名称、顺序、描述、annotations、required/optional、enum/default、字段描述和嵌套 properties 均一致。
+- 真实 wire 差异限定为四类：旧 v1 entry 的 `execution.taskSupport: "forbidden"` 在 server v2 direct-connect 输出中消失；`$schema` 从 draft-07 切到 2020-12；Zod object 不再输出根级 `additionalProperties: false`（`memos_search.context.items` 同样如此）；无显式范围的 `z.number().int()` 新增 `Number.MIN_SAFE_INTEGER` / `MAX_SAFE_INTEGER` 边界。
+- `additionalProperties` 的 wire 放宽与现有运行时相符：这些 `z.object()` 一直采用 strip 行为，Phase 0 smoke 已冻结 unknown key 非致命且无 wire warning。若为恢复 `false` 改用 `.strict()`，反而会破坏已冻结运行时合同。
+
+## Phase 1 不变项
+
+- 保持 direct `server.connect(new StdioServerTransport())`，不引入 `serveStdio`、`server/discover` 或每请求版本协商。
+- 保持 stringified `arguments` normalization、raw key 捕获和 unknown-key 非致命且无 wire warning 的既有行为。
+- 不新增 structured output、cache hints、MRTR、Tasks、HTTP/OAuth 或业务工具变更。
+- Node 版本提示必须在 `@modelcontextprotocol/server` 与配置模块加载前执行；`index.ts` 因此只静态导入无依赖的版本判断模块，并动态导入 server/config。
+- 条件删除工具的 Phase 1 call smoke 使用 Lite provider：它能证明 v2 注册/验证/dispatch 链可调用，同时在触达任何删除 API 前由现有 Full-only 边界安全返回。
+
+## Codemod dry-run
+
+- 使用官方 `@modelcontextprotocol/codemod@2.0.0` 从 `mcp-server-node/` 包根执行。
+- 自动迁移范围只有 `src/server.ts` 两处 import；package 计划删除 monolithic SDK 并新增 server 角色包。
+- `scripts/schema-budget.mjs` 与 `src/protocol-contract.test.ts` 依赖 v1 私有 `zod-json-schema-compat`，codemod 明确要求手工迁移。
+- `inputSchema` warning 是 codemod 无法跨 `toolSchemas` 注册表证明 schema object；代码审计已确认 17 个 schema 均由 `z.object()` 构造。
+
+## Phase 1 最终收尾 — 2026-08-18
+
+- `tsx@4.21.0` 引入的 `esbuild@0.27.3` 低危 Windows 开发服务告警已通过升级 `tsx@4.23.12` 清除；生产依赖审计和完整审计均为 0 vulnerabilities。
+- 干净安装后 Node 24、20、22 的 build、178 项测试、真实 legacy `tools/list` schema budget、Lite/Full/条件删除 protocol smoke 全部通过；预算固定为 17 tools / 17981 B / 16581 B always-on，漂移 0.0%。
+- Node 18.20.8 运行入口时在导入 SDK/config 之前退出码 1，并输出 `oh-memos-mcp requires Node.js >=20.0.0`；这使 breaking runtime requirement 可诊断而非隐式模块错误。
+- 最终全仓审计无旧 monolithic SDK import、codemod marker、`serveStdio` 或 `2026-07-28` modern-era 标记。Phase 1 明确保持 direct-connect `2025-11-25` legacy wire，Phase 2 的双时代 serving 仍未启动。
+- Windows worktree 的 `git diff --check` 需使用 `core.whitespace=cr-at-eol` 解读 CRLF；提交前仍须检查 staged diff，避免把行尾提示误判为真实空白。

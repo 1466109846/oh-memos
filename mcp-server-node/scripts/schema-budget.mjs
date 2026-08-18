@@ -9,9 +9,8 @@
  *
  * Two notes on method:
  *
- * - The JSON Schema is produced with the SDK's own converter
- *   (`toJsonSchemaCompat`), so the bytes counted are the bytes actually put on
- *   the wire — not an approximation of them.
+ * - The script starts the built stdio server and requests `tools/list`, so the
+ *   bytes counted are the actual wire entries emitted by the installed SDK.
  * - Tokens are approximated from bytes rather than measured with a tokenizer.
  *   Installing tiktoken for a housekeeping script is a poor trade, and the
  *   number that matters here is *relative drift*, which bytes track faithfully.
@@ -23,14 +22,18 @@
  *   node scripts/schema-budget.mjs --write    # freeze current numbers as the baseline
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const BASELINE_PATH = join(ROOT, "schema-baseline.json");
-const DIST_REGISTRY = join(ROOT, "dist", "tools-registry.js");
+const DIST_ENTRY = join(ROOT, "dist", "index.js");
+const LEGACY_PROTOCOL_VERSION = "2025-11-25";
+const SCHEMA_DEFAULT_CUBE = "ci_cube";
 
 const BYTES_PER_TOKEN = 3.2;
 const DRIFT_THRESHOLD = 0.05; // +5% over baseline total fails --check
@@ -43,48 +46,168 @@ const bytes = (s) => Buffer.byteLength(s, "utf8");
 const tokens = (b) => Math.round(b / BYTES_PER_TOKEN);
 const pct = (n) => `${n >= 0 ? "+" : ""}${(n * 100).toFixed(1)}%`;
 
+function listTools(enableDelete) {
+  const tempRoot = mkdtempSync(join(tmpdir(), "oh-memos-schema-budget-"));
+  const env = {
+    ...process.env,
+    MEMOS_MODE: "lite",
+    MEMOS_PROVIDER: "local",
+    MEMOS_URL: "",
+    MEMOS_USER: "schema-budget",
+    // Keep the fixture length stable: schema defaults are part of wire bytes.
+    MEMOS_DEFAULT_CUBE: SCHEMA_DEFAULT_CUBE,
+    MEMOS_CUBES_DIR: tempRoot,
+    MEMOS_ENV_FILE: join(tempRoot, "missing.env"),
+    MEMOS_LITE_EMBED: "off",
+    MEMOS_ENABLE_DELETE: String(enableDelete),
+    NEO4J_HTTP_URL: "",
+  };
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [DIST_ENTRY], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env,
+    });
+    const pending = new Map();
+    let stdoutBuffer = "";
+    let stderr = "";
+    let settled = false;
+
+    const cleanup = () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+      rmSync(tempRoot, { recursive: true, force: true });
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      cleanup();
+      reject(error);
+    };
+
+    const timeout = setTimeout(() => {
+      fail(new Error(`Timed out waiting for tools/list.\nstderr:\n${stderr.slice(0, 1600)}`));
+    }, 10000);
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdoutBuffer += chunk;
+      let newline = stdoutBuffer.indexOf("\n");
+      while (newline !== -1) {
+        const line = stdoutBuffer.slice(0, newline).trim();
+        stdoutBuffer = stdoutBuffer.slice(newline + 1);
+        if (line) {
+          try {
+            const message = JSON.parse(line);
+            const handler = pending.get(String(message.id));
+            if (handler) {
+              pending.delete(String(message.id));
+              handler(message);
+            }
+          } catch {
+            stderr += `\n[non-json stdout] ${line}`;
+          }
+        }
+        newline = stdoutBuffer.indexOf("\n");
+      }
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", fail);
+    child.on("exit", (code, signal) => {
+      if (!settled && pending.size > 0) {
+        fail(
+          new Error(
+            `Server exited before tools/list (code=${String(code)}, signal=${String(signal)}).\n` +
+              `stderr:\n${stderr.slice(0, 1600)}`
+          )
+        );
+      }
+    });
+
+    const rpc = (id, method, params) =>
+      new Promise((resolveRpc) => {
+        pending.set(String(id), resolveRpc);
+        child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+      });
+
+    (async () => {
+      const initialized = await rpc(1, "initialize", {
+        protocolVersion: LEGACY_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: "schema-budget", version: "1.0.0" },
+      });
+      if (initialized.error) {
+        throw new Error(`initialize failed: ${JSON.stringify(initialized.error)}`);
+      }
+
+      child.stdin.write(
+        `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })}\n`
+      );
+      const listed = await rpc(2, "tools/list", {});
+      if (listed.error) {
+        throw new Error(`tools/list failed: ${JSON.stringify(listed.error)}`);
+      }
+      if (!Array.isArray(listed.result?.tools)) {
+        throw new Error("tools/list returned no tools array");
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      child.stdin.end();
+      cleanup();
+      resolve(listed.result.tools);
+    })().catch(fail);
+  });
+}
+
 async function measure() {
-  if (!existsSync(DIST_REGISTRY)) {
-    console.error(`✗ ${DIST_REGISTRY} not found — run \`npm run build\` first.`);
+  if (!existsSync(DIST_ENTRY)) {
+    console.error(`✗ ${DIST_ENTRY} not found — run \`npm run build\` first.`);
     process.exit(2);
   }
 
-  const { toolSchemas, toolAnnotations } = await import(`file://${DIST_REGISTRY}`);
-  const { toJsonSchemaCompat } = await import(
-    "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js"
-  );
+  const [alwaysOnEntries, allEntries] = await Promise.all([listTools(false), listTools(true)]);
+  const alwaysOnNames = new Set(alwaysOnEntries.map((tool) => tool.name));
 
   const tools = {};
-  for (const [name, schema] of Object.entries(toolSchemas)) {
-    const jsonSchema = toJsonSchemaCompat(schema.inputSchema, {
-      strictUnions: true,
-      pipeStrategy: "input",
-    });
-    // Mirrors the shape the SDK emits per tool in tools/list.
-    const wireEntry = {
-      name,
-      description: schema.description,
-      inputSchema: jsonSchema,
-      annotations: toolAnnotations?.[name],
-    };
-    tools[name] = {
-      descriptionBytes: bytes(schema.description ?? ""),
-      schemaBytes: bytes(JSON.stringify(jsonSchema)),
+  for (const wireEntry of allEntries) {
+    const conditional = !alwaysOnNames.has(wireEntry.name);
+    tools[wireEntry.name] = {
+      descriptionBytes: bytes(wireEntry.description ?? ""),
+      schemaBytes: bytes(JSON.stringify(wireEntry.inputSchema ?? {})),
       totalBytes: bytes(JSON.stringify(wireEntry)),
-      conditional: CONDITIONAL_TOOLS.has(name) || undefined,
+      conditional: conditional || undefined,
     };
   }
 
+  const conditionalNames = new Set(
+    Object.entries(tools)
+      .filter(([, tool]) => tool.conditional)
+      .map(([name]) => name)
+  );
+  if (
+    conditionalNames.size !== CONDITIONAL_TOOLS.size ||
+    [...CONDITIONAL_TOOLS].some((name) => !conditionalNames.has(name))
+  ) {
+    throw new Error(
+      `Conditional tool set changed: expected ${[...CONDITIONAL_TOOLS].join(", ")}; ` +
+        `received ${[...conditionalNames].join(", ")}`
+    );
+  }
+
   const totalBytes = Object.values(tools).reduce((a, t) => a + t.totalBytes, 0);
-  const conditionalBytes = Object.entries(tools)
-    .filter(([n]) => CONDITIONAL_TOOLS.has(n))
-    .reduce((a, [, t]) => a + t.totalBytes, 0);
+  const alwaysOnBytes = Object.values(tools)
+    .filter((tool) => !tool.conditional)
+    .reduce((a, tool) => a + tool.totalBytes, 0);
 
   return {
     bytesPerTokenAssumed: BYTES_PER_TOKEN,
     toolCount: Object.keys(tools).length,
     totalBytes,
-    alwaysOnBytes: totalBytes - conditionalBytes,
+    alwaysOnBytes,
     tools,
   };
 }

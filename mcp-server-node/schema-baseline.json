@@ -1,93 +1,93 @@
 {
   "bytesPerTokenAssumed": 3.2,
   "toolCount": 17,
-  "totalBytes": 18043,
-  "alwaysOnBytes": 16618,
+  "totalBytes": 17981,
+  "alwaysOnBytes": 16581,
   "tools": {
     "memos_context_resume": {
       "descriptionBytes": 205,
-      "schemaBytes": 330,
-      "totalBytes": 657
+      "schemaBytes": 305,
+      "totalBytes": 632
     },
     "memos_search": {
       "descriptionBytes": 673,
-      "schemaBytes": 1306,
-      "totalBytes": 2097
+      "schemaBytes": 1307,
+      "totalBytes": 2098
     },
     "memos_think": {
       "descriptionBytes": 249,
-      "schemaBytes": 623,
-      "totalBytes": 986
+      "schemaBytes": 708,
+      "totalBytes": 1071
     },
     "memos_export_wiki": {
       "descriptionBytes": 216,
-      "schemaBytes": 537,
-      "totalBytes": 873
+      "schemaBytes": 512,
+      "totalBytes": 848
     },
     "memos_import_wiki": {
       "descriptionBytes": 376,
-      "schemaBytes": 700,
-      "totalBytes": 1195
+      "schemaBytes": 675,
+      "totalBytes": 1170
     },
     "memos_save": {
       "descriptionBytes": 353,
-      "schemaBytes": 1285,
-      "totalBytes": 1751
+      "schemaBytes": 1260,
+      "totalBytes": 1726
     },
     "memos_list_v2": {
       "descriptionBytes": 72,
-      "schemaBytes": 676,
-      "totalBytes": 862
+      "schemaBytes": 706,
+      "totalBytes": 892
     },
     "memos_get": {
       "descriptionBytes": 90,
-      "schemaBytes": 436,
-      "totalBytes": 636
+      "schemaBytes": 411,
+      "totalBytes": 611
     },
     "memos_suggest": {
       "descriptionBytes": 180,
-      "schemaBytes": 233,
-      "totalBytes": 529
+      "schemaBytes": 209,
+      "totalBytes": 505
     },
     "memos_distill_skill": {
       "descriptionBytes": 193,
-      "schemaBytes": 535,
-      "totalBytes": 848
+      "schemaBytes": 511,
+      "totalBytes": 824
     },
     "memos_list_skill_candidates": {
       "descriptionBytes": 99,
-      "schemaBytes": 227,
-      "totalBytes": 454
+      "schemaBytes": 203,
+      "totalBytes": 430
     },
     "memos_review_skill_candidate": {
       "descriptionBytes": 108,
-      "schemaBytes": 476,
-      "totalBytes": 714
+      "schemaBytes": 452,
+      "totalBytes": 690
     },
     "memos_install_skill_candidate": {
       "descriptionBytes": 181,
-      "schemaBytes": 288,
-      "totalBytes": 600
+      "schemaBytes": 264,
+      "totalBytes": 576
     },
     "memos_graph": {
       "descriptionBytes": 261,
-      "schemaBytes": 1102,
-      "totalBytes": 1475
+      "schemaBytes": 1187,
+      "totalBytes": 1560
     },
     "memos_admin": {
       "descriptionBytes": 302,
-      "schemaBytes": 1329,
-      "totalBytes": 1749
+      "schemaBytes": 1360,
+      "totalBytes": 1780
     },
     "memos_canvas": {
       "descriptionBytes": 250,
-      "schemaBytes": 826,
-      "totalBytes": 1192
+      "schemaBytes": 802,
+      "totalBytes": 1168
     },
     "memos_delete": {
       "descriptionBytes": 570,
-      "schemaBytes": 726,
-      "totalBytes": 1425,
+      "schemaBytes": 701,
+      "totalBytes": 1400,
       "conditional": true
     }
   }
