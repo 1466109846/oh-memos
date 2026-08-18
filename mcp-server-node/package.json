@@ -18,7 +18,8 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
-    "test:protocol": "npm run build && node scripts/protocol-smoke.mjs",
+    "test:protocol": "npm run build && node scripts/protocol-smoke.mjs && node scripts/protocol-v2-smoke.mjs",
+    "test:protocol:v2": "npm run build && node scripts/protocol-v2-smoke.mjs",
     "test:lite-smoke": "npm run build && node scripts/lite-smoke-test.mjs",
     "test:watch": "vitest",
     "schema:budget": "npm run build && node scripts/schema-budget.mjs --check",
@@ -53,6 +54,7 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.23.12",
     "typescript": "^5.5.0",

@@ -1,8 +1,9 @@
 /**
- * MemOS MCP Server — McpServer setup + background init
+ * MemOS MCP Server — factory, dual-era stdio serving, and background init
  */
-import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { McpServer } from "@modelcontextprotocol/server";
+import { serveStdio, StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import type { StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -12,8 +13,9 @@ import { waitForApiReady } from "./api-client.js";
 import { ensureCubeRegistered } from "./cube-manager.js";
 import { toolSchemas, toolAnnotations } from "./tools-registry.js";
 import { dispatchTool, handleApiUnreachable } from "./handlers/index.js";
-import { recordRawArgKeys } from "./handlers/arg-contract.js";
 import type { TextContent } from "./types.js";
+import { createOnceFireAndForget } from "./server-lifecycle.js";
+import { NormalizingStdioTransport } from "./stdio-compat-transport.js";
 
 // ============================================================================
 // Register All Tools
@@ -40,6 +42,7 @@ function registerTools(server: McpServer): void {
         annotations: toolAnnotations[name],
       },
       async (args: Record<string, unknown>) => {
+        startBackgroundInitOnce();
         try {
           const result = await dispatchTool(name, args);
           return {
@@ -77,6 +80,11 @@ function registerTools(server: McpServer): void {
     logger.debug("Delete tool enabled (MEMOS_ENABLE_DELETE=true)");
   }
 }
+
+const startBackgroundInitOnce = createOnceFireAndForget(
+  () => backgroundInit(),
+  (error) => logger.error(`Background init error: ${String(error)}`),
+);
 
 // ============================================================================
 // Background Init
@@ -117,37 +125,6 @@ async function backgroundInit(): Promise<void> {
 // Run Server
 // ============================================================================
 
-/**
- * Some MCP clients JSON-encode `params.arguments` instead of sending an object,
- * which the SDK rejects during validation ("expected record, received string")
- * before any tool handler runs. Normalize those requests at the transport
- * boundary so a client quirk doesn't make every tool call fail.
- *
- * This is also the last point where the arguments are still intact: zod strips
- * undeclared keys immediately after, without a trace. So the keys are recorded
- * here (by request id) for `checkArgContract` to report on later.
- */
-function tolerateStringArguments(transport: StdioServerTransport): void {
-  const downstream = transport.onmessage?.bind(transport);
-  if (!downstream) return;
-  transport.onmessage = (msg: unknown): void => {
-    try {
-      const m = msg as { id?: unknown; method?: string; params?: { arguments?: unknown } };
-      if (m?.method === "tools/call") {
-        if (typeof m.params?.arguments === "string") {
-          const raw = m.params.arguments.trim();
-          m.params.arguments = raw ? JSON.parse(raw) : {};
-          logger.warning("Client sent tools/call arguments as a JSON string; parsed it into an object");
-        }
-        recordRawArgKeys(m.id, m.params?.arguments);
-      }
-    } catch (err) {
-      logger.warning(`Could not normalize string tools/call arguments: ${err}`);
-    }
-    downstream(msg as never);
-  };
-}
-
 // serverInfo 从 package.json 读取,而非硬编码 —— 硬编码会在每次发版后
 // 悄悄漂移(2.0.0 发布时这里仍报 1.0.1)。dist/server.js 的上一级即包根。
 const pkg: { name: string; version: string } = JSON.parse(
@@ -157,29 +134,47 @@ const pkg: { name: string; version: string } = JSON.parse(
   ),
 );
 
-export async function runServer(): Promise<void> {
+export function buildServer(): McpServer {
   const server = new McpServer({
     name: pkg.name,
     version: pkg.version,
   });
-
   registerTools(server);
+  return server;
+}
 
-  const transport = new StdioServerTransport();
-
-  // Connect FIRST (completes MCP handshake immediately),
-  // then do background init to prevent Claude Code timeout.
-  await server.connect(transport);
-  // Must run after connect(): the SDK installs its own onmessage there, and we
-  // wrap it so malformed-but-recoverable requests are fixed before validation.
-  tolerateStringArguments(transport);
-
-  // Background init — don't await
-  backgroundInit().catch((err) => {
-    logger.error(`Background init error: ${err}`);
+export async function runServer(): Promise<StdioServerHandle> {
+  const transport = new NormalizingStdioTransport(new StdioServerTransport());
+  const handle = serveStdio(buildServer, {
+    legacy: "serve",
+    transport,
+    onerror: (error) => logger.error(`MCP transport error: ${String(error)}`),
   });
 
+  let closing: Promise<void> | undefined;
+  let onSignal: (() => void) | undefined;
+  const close = (): Promise<void> => {
+    if (!closing) {
+      closing = handle.close().catch((error) => {
+        logger.error(`MCP transport close failed: ${String(error)}`);
+      }).finally(() => {
+        if (onSignal) {
+          process.off("SIGINT", onSignal);
+          process.off("SIGTERM", onSignal);
+        }
+      });
+    }
+    return closing;
+  };
+
+  onSignal = (): void => {
+    void close();
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+
   logger.debug("MemOS MCP Server (Node.js) started");
+  return { close };
 }
 
 function sleep(ms: number): Promise<void> {

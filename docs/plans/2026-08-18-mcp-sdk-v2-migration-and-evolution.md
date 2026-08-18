@@ -1,6 +1,6 @@
 # MCP SDK v2 与协议 2026-07-28 迁移及能力演进计划
 
-> 2026-08-18 · 状态：Phase 0 已完成；下一检查点为 SDK v2 legacy-wire 迁移
+> 2026-08-18 · 状态：Phase 2 已完成；下一检查点为协议/客户端/部署矩阵
 
 ## 决策摘要
 
@@ -247,6 +247,14 @@
 ### 回滚
 
 保留 SDK v2 依赖，只把入口恢复为 direct `server.connect(StdioServerTransport)`，即可立即退回 legacy-only wire behavior。若问题在 v2 本身，再回退 Phase 1。
+
+### 执行结果（2026-08-18）
+
+- 新增 `buildServer()`、`NormalizingStdioTransport` 和进程级 `startBackgroundInitOnce()`；factory 只构造并注册工具，API/cube 初始化延后到第一次真实 `tools/call`，probe 不触发副作用。
+- `runServer()` 已切换为 `serveStdio(buildServer, { legacy: "serve", transport, onerror })`，保留 SIGINT/SIGTERM 幂等关闭；旧的 direct-connect monkey-patch 改为 transport decorator，因此 legacy 与 modern 都在 schema 校验前归一化字符串化 arguments。
+- 开发依赖加入 `@modelcontextprotocol/client@2.0.0`，新增 v2 client smoke：legacy、auto (`server/discover`)、pin `2026-07-28`、双路径字符串参数、probe/fallback、4.8 MB stdio 边界和信号关闭。
+- `npm run test:protocol`（raw legacy + v2 matrix）、`npm test`（24 个文件/184 tests）、Lite smoke、schema budget（17981 B，0.0% drift）、Node 20/22 build + v2 smoke、生产/完整 `npm audit` 均通过。
+- 尚未发布或移动 npm dist-tag；包版本保持 `2.1.0`。Phase 3 负责跨 OS/host 矩阵，Phase 4 再发布 `3.0.0-next`。
 
 ## Phase 3：协议/客户端/部署矩阵
 
