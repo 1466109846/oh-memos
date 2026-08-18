@@ -1,6 +1,6 @@
 # MCP SDK v2 与协议 2026-07-28 迁移及能力演进计划
 
-> 2026-08-18 · 状态：Phase 3 自动化矩阵已完成；真实 host canary 待人工执行
+> 2026-08-19 · 状态：Phase 3 自动化矩阵与真实 host canary 已完成；Phase 4 发布门禁待执行
 
 ## 决策摘要
 
@@ -306,7 +306,17 @@
 - 新增 `pack-contract.mjs` 与 `npm run test:pack`：在 `npm pack --dry-run --json` 上确认 94 个发布文件，开发 client、scripts、源码和测试不会进入 tarball。
 - CI Node job 已改为 Node 20/22 matrix，并新增 semantic snapshot、pack contract；Windows Node 20 job 执行 build、protocol smoke、snapshot 和 pack contract。
 - 本地证据：`npm run test:protocol`、`npm test`（24 files/184 tests）、`npm run schema:budget`（17981 B/0.0%）、`npm run schema:semantic`、Lite smoke、`npm audit` 和 pack contract 均通过。
-- 当前机器检测到 Claude Code 2.1.220、Codex 0.147.0、Qwen 0.21.13；三者已有 `oh-memos` 注册并能在各自的 `mcp list` 健康检查中连接主工作区服务。未把迁移 worktree 注入真实 host，也未发起模型 API 调用或写入 host 配置，因此 Phase 3.3 仍是发布前人工门禁。
+- 当前机器检测到 Claude Code 2.1.220、Codex 0.147.0、Qwen 0.21.13；真实 host canary 已在隔离配置、临时 Lite cube 和 relay 审计下完成。既有 host 配置未修改，Phase 3.3 不再是未执行项；Phase 4 仍需单独满足 next 发布、观察窗口和 npm 门禁。
+
+### 真实 host canary 结果（2026-08-19）
+
+| Host | 实际 initialize 协商 | tools/list | 首次业务闭环 | 独立进程重连 | 结果 |
+|---|---|---:|---|---|---|
+| Claude Code 2.1.220 | `2025-11-25` | 16 | `memos_suggest` → `memos_save` → `memos_search` → `memos_get` | search/get 命中同一临时记录 `16f86199-4bb2-44ee-ba65-9cbe52d2b896` | 通过 |
+| Codex 0.147.0 | `2025-06-18` | 16 | `memos_suggest` → `memos_save` → `memos_search` → `memos_get` | search/get 命中同一临时记录 `3539b73c-8800-4437-8c4d-a4ca005553c2` | 通过 |
+| Qwen 0.21.13 | `2025-11-25` | 16 | 首次进程完成 suggest/save/search；独立进程完成 search/get | search/get 命中同一临时记录 `b506ae07-a523-40d3-acb5-e37d21ea5e2b` | 通过 |
+
+补充边界：三类真实 host 目前都以 legacy 2025-era initialize 连接，不能据此宣称 host 已使用 `2026-07-28` modern wire；modern era 证据仍来自仓库内 v2 client/协议矩阵。所有写入均使用 `MEMOS_MODE=lite` 的临时目录，未触碰生产 cube。Codex 的首次 `--ignore-user-config` 尝试因 provider 返回 401 未进入工具调用，随后使用现有 provider、临时 MCP 覆盖成功；Qwen 首次模型运行超过墙钟预算但已完成 save/search，第二进程补齐 get。canary server 必须显式提供 `MEMOS_USER`，否则会在握手前退出。
 
 ## Phase 4：`3.0.0-next` canary 发布
 

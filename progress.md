@@ -118,4 +118,13 @@
 - `package.json` 新增 `schema:semantic`、`schema:semantic:freeze`、`test:pack`；`.gitignore` 保留语义基线文件。
 - `.github/workflows/ci.yml` 改为 Ubuntu Node 20/22 matrix，并新增 Windows Node 20 protocol/snapshot/pack job。
 - 当前 Node 24.12.0 验证：build、protocol smoke、24 files/184 tests、schema budget 17981 B/0.0%、semantic snapshot、Lite smoke、pack dry-run、完整/生产 npm audit 全部通过。
-- host CLI 版本已盘点，但未执行真实模型 API canary；Phase 3.3 保留为 Phase 4 发布前人工门禁。
+- 自动化矩阵收尾时仅盘点了 host CLI，真实模型 API canary 当时仍待 Phase 3.3；后续 canary 结果见下节。
+
+## 2026-08-19 MCP SDK v2 / Phase 3.3 真实 host canary
+
+- 在隔离的临时 MCP 配置和 `MEMOS_MODE=lite` 临时 cube 中完成 Claude Code 2.1.220、Codex 0.147.0、Qwen 0.21.13 的真实 host 验证；既有 host 配置未修改，relay 只记录脱敏协议元数据。
+- Claude：实际协商 `2025-11-25`，`tools/list` 返回 16 个工具；`memos_suggest`、`memos_save`、`memos_search`、`memos_get` 全部成功。第二个独立进程 search/get 命中 ID `16f86199-4bb2-44ee-ba65-9cbe52d2b896`。
+- Codex：实际协商 `2025-06-18`，`tools/list` 返回 16 个工具；在临时 approval/provider 覆盖下完成 suggest/save/search/get。第二个独立进程 search/get 命中 ID `3539b73c-8800-4437-8c4d-a4ca005553c2`。
+- Qwen：实际协商 `2025-11-25`，`tools/list` 返回 16 个工具；首进程完成 suggest/save/search，第二个独立进程完成 search/get，命中 ID `b506ae07-a523-40d3-acb5-e37d21ea5e2b`。首进程超过墙钟预算的 get 由第二进程补齐。
+- 三个真实 host 当前都使用 legacy 2025-era initialize；这不等同于 host 已启用 `2026-07-28` modern wire，后者仍由仓库内 v2 client/协议矩阵证明。
+- 发现并修正 canary 环境陷阱：Node server 即使使用 local provider 也要求显式 `MEMOS_USER`；缺失时会在握手前退出。Codex 的一次隔离 provider 401 已通过保留现有 provider、只覆盖临时 MCP 配置恢复。

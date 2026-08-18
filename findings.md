@@ -112,6 +112,18 @@
 
 ---
 
+# MCP SDK v2 Phase 3.3 真实 host canary 发现 — 2026-08-19
+
+- Claude Code `2.1.220` 在隔离 `--mcp-config` 下协商 `2025-11-25`，返回 16 个默认工具；完整 Lite suggest/save/search/get 与第二进程 search/get 均成功。
+- Codex `0.147.0` 在临时命令行 MCP 覆盖下协商 `2025-06-18`，返回 16 个默认工具；完整 Lite suggest/save/search/get 与第二进程 search/get 均成功。Codex 的 `--ignore-user-config` 独立尝试因 API 401 未进入工具调用，不能作为服务端失败证据。
+- Qwen `0.21.13` 在临时 `QWEN_HOME`、OAuth 凭据副本和去掉 `mcpServers` 的 settings 下协商 `2025-11-25`，返回 16 个默认工具；首进程 save/search 成功，第二进程 search/get 成功。首进程模型墙钟超时只影响后续 get，未影响持久化。
+- 三个 host 的真实协议版本均为 legacy 2025-era；仓库已验证的 modern `2026-07-28` 能力来自 v2 client/协议矩阵，不能从 host canary 推断现代 host 已普遍升级。
+- 所有 canary 写入均落在临时 Lite cube，relay 只输出 direction/method/id/protocolVersion/toolName/toolCount/error flags；未把 prompt、arguments、结果或凭据写入日志。第二进程回读是持久性证据，不依赖向量索引延迟。
+- Node server 的 local provider 仍要求 `MEMOS_USER`；缺失时日志为 `MEMOS_USER is required` 并在 initialize 前退出。发布/人工 canary runbook 必须把该变量列为必填。
+- Qwen 的一次 `qwen mcp list` 仅在隔离 `QWEN_HOME` 执行；主配置未再次列出。此前主配置输出曾暴露第三方 API key，后续审计应轮换/检查该 key，且不得把它写入仓库、记忆或报告。
+
+---
+
 # MCP SDK v1.30 Phase 0 实施发现 — 2026-08-18
 
 ## 依赖与锁定

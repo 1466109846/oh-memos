@@ -184,7 +184,7 @@
 
 ## 当前阶段
 
-Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵已完成，3.3 真实 host canary 保留为发布前人工门禁。当前分支已通过 SDK v2 `serveStdio` 双时代 serving，下一检查点是 Phase 4 canary 发布条件。
+Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵与 3.3 真实 host canary 已完成。当前分支已通过 SDK v2 `serveStdio` 双时代 serving，下一检查点是 Phase 4 canary 发布条件。
 
 ## 工作阶段
 
@@ -196,7 +196,7 @@ Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵已完�
 - [x] Phase 2：引入 `serveStdio(buildServer, { legacy: "serve" })` 和受测 transport decorator
 - [x] Phase 3.1：补齐协议/客户端/Provider/输入/生命周期矩阵
 - [x] Phase 3.2：接入 Node 20/22、schema snapshot、pack dry-run 与 Windows CI
-- [ ] Phase 3.3：记录真实 host canary 能力与不可用条件
+- [x] Phase 3.3：记录真实 host canary 能力与不可用条件
 - [ ] Phase 4-5：next canary、观察窗口、稳定版文档与发布
 
 ## Phase 0 结果
@@ -261,14 +261,24 @@ Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵已完�
 - [x] 先写并运行矩阵合同：默认/条件工具、Full/Lite、普通/stringified/unknown/empty/large 输入、probe/fallback/close/signal。
 - [x] 实现最小 harness 变化并完成 Green，保留现有 v2 smoke 的兼容行为。
 - [x] 更新 CI Node 20/22 matrix、semantic schema snapshot、`npm pack --dry-run` 和 Windows smoke job。
-- [x] 运行最终 staged 验证，更新项目记忆，再提交并推送本阶段；真实 host canary 作为发布前人工门禁保留。
+- [x] 运行最终 staged 验证，更新项目记忆，再提交并推送本阶段；真实 host canary 结果已补录，Phase 4 发布门禁仍保留。
 
 ## Phase 3 自动化结果
 
 - `npm run test:protocol`：raw legacy + v2 legacy/auto/modern pin，Full/Lite，16/17 tools，普通/stringified/unknown/empty/large 输入，probe/fallback、pipe close、SIGINT/SIGTERM 全部通过。
 - `npm test`：24 个 test files / 184 tests；`npm run schema:budget`：17981 B / 0.0% drift；`npm run schema:semantic`：17-tool snapshot 匹配；Lite smoke、`npm audit`、`npm run test:pack` 均通过。
 - CI：Ubuntu Node 20/22 matrix；Windows Node 20 protocol/snapshot/pack job。
-- host canary：CLI 可用性已盘点，真实 list/call/reconnect 尚未在隔离 host 配置中执行，不能作为 Phase 4 退出条件的已完成证据。
+- host canary：Claude/Codex/Qwen 均在隔离配置中完成真实 initialize、tools/list、Lite 写读和独立进程重连；三者实际协商仍是 legacy 2025-era，modern `2026-07-28` 只由仓库 v2 client 矩阵覆盖。
+
+## Phase 3.3 真实 host canary 结果（2026-08-19）
+
+| Host | initialize | tools/list | 业务调用与重连 | 临时记录 |
+|---|---|---:|---|---|
+| Claude Code 2.1.220 | `2025-11-25` | 16 | suggest/save/search/get；新进程 search/get 成功 | `16f86199-4bb2-44ee-ba65-9cbe52d2b896` |
+| Codex 0.147.0 | `2025-06-18` | 16 | suggest/save/search/get；新进程 search/get 成功 | `3539b73c-8800-4437-8c4d-a4ca005553c2` |
+| Qwen 0.21.13 | `2025-11-25` | 16 | 首进程 suggest/save/search，第二进程 search/get 成功 | `b506ae07-a523-40d3-acb5-e37d21ea5e2b` |
+
+证据约束：relay 只记录方向、方法、ID、协议版本、工具名和工具数量，不记录参数、结果或凭据；所有数据写入临时 Lite cube。Codex 的一次隔离 provider 401 和 Qwen 首次墙钟超时均已恢复，不构成服务端协议失败。临时 server 环境必须显式设置 `MEMOS_USER`，否则进程会在 initialize 前退出。
 
 ## Phase 3 错误记录
 
@@ -277,4 +287,6 @@ Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵已完�
 | 并行 `npm test` 未传 CI fixture，收集阶段报 `MEMOS_URL is required` | 1 | 按 workflow 补齐四个环境变量后重跑，24 files / 184 tests 通过 |
 | Windows `spawnSync npm.cmd` 返回 `EINVAL` | 1 | 改用 `%ComSpec% /d /s /c` 调用 npm，pack dry-run 通过 |
 | 全局 `*.json` 忽略规则隐藏 semantic baseline | 1 | `.gitignore` 增加明确例外并确认 checkout 可见 |
-| host canary 需要真实模型 API/外部 host 配置 | 1 | 不假设授权；记录 CLI/既有连接状态，保留人工发布门禁 |
+| host canary 初始环境缺少 `MEMOS_USER` | 1 | 补充临时用户变量后重跑，三宿主均完成握手和业务闭环 |
+| Codex `--ignore-user-config` provider 返回 401 | 1 | 保留登录态，仅覆盖临时 MCP server；后续 canary 全部通过 |
+| Qwen 首次 headless 运行超过墙钟预算 | 1 | 保留已完成的 save/search，第二个进程补做 search/get 并通过 |
