@@ -1,0 +1,182 @@
+{
+  "snapshotVersion": 1,
+  "protocolVersion": "2025-11-25",
+  "toolOrder": [
+    "memos_context_resume",
+    "memos_search",
+    "memos_think",
+    "memos_export_wiki",
+    "memos_import_wiki",
+    "memos_save",
+    "memos_list_v2",
+    "memos_get",
+    "memos_suggest",
+    "memos_distill_skill",
+    "memos_list_skill_candidates",
+    "memos_review_skill_candidate",
+    "memos_install_skill_candidate",
+    "memos_graph",
+    "memos_admin",
+    "memos_canvas",
+    "memos_delete"
+  ],
+  "alwaysOnTools": [
+    "memos_context_resume",
+    "memos_search",
+    "memos_think",
+    "memos_export_wiki",
+    "memos_import_wiki",
+    "memos_save",
+    "memos_list_v2",
+    "memos_get",
+    "memos_suggest",
+    "memos_distill_skill",
+    "memos_list_skill_candidates",
+    "memos_review_skill_candidate",
+    "memos_install_skill_candidate",
+    "memos_graph",
+    "memos_admin",
+    "memos_canvas"
+  ],
+  "conditionalTools": [
+    "memos_delete"
+  ],
+  "tools": {
+    "memos_context_resume": {
+      "description": "Recover project context after context compaction or at session start: returns recent memories (24h) + project state.\nAfterwards use memos tools for ALL memory operations — never mkdir/Write memory files.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "1b045846428afb958807d15244c6875e8badd5a9da0b64e802fa586b42ef0618"
+    },
+    "memos_search": {
+      "description": "Search project memories with semantic, lexical, graph, freshness, and source-quality ranking. Lite mode caps results and excludes auto-capture by default. Use PROACTIVELY: on errors (ERROR_PATTERN), before modifying tricky code (GOTCHA), for past decisions (DECISION), when user says \"之前/上次/previously\", and after context compaction.\nQuery may carry a type prefix (\"DECISION auth\"). Pass context (recent turns) when the query is ambiguous or refers to earlier conversation — enables LLM intent analysis + query expansion.\nLarge results are compacted; use memos_get(memory_id) for full details. NEVER create memory files via mkdir/Write — all memories live here.",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "9090ee896f43e5a27ff2345c8adfb7c9594b7f856c0533d45e54dbf36af09c4e"
+    },
+    "memos_think": {
+      "description": "Evidence pack for a question: retrieves memories, flags contradiction/staleness candidates and coverage gaps.\nYOU synthesize the answer from it, citing [n]; persist valuable syntheses via memos_save(memory_type=\"SYNTHESIS\") keeping the [n]→id map.",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "6ae80d34b1353ff9d6c252ef51ae0a2a421ffe1293d12419ebfafd11399c5c40"
+    },
+    "memos_export_wiki": {
+      "description": "Export a cube as an interlinked markdown wiki (page per memory + index.md + graph.md), git-friendly.\nDefault output <project_path>/docs/memory-wiki; re-export replaces only files it generated, foreign files are kept.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "ca2cd9cd6b74949cfaf98e0e17ff89e73c1bd78eec3fdfc96931b8963e96c264"
+    },
+    "memos_import_wiki": {
+      "description": "Import a wiki back into its cube — round-trip for memos_export_wiki: creates missing pages, skips unchanged ones, and can version edited pages.\nUse after editing exported pages (fixes, cleanup, migration to a fresh cube). Reads only pages/ with the exporter marker; never deletes; restores type/tags/confidence/status/timestamps, while relation wikilinks remain report-only.",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "44a530cb35590e7422c367ecca94cd6fbed66067d1e40c549e2795bda31205b0"
+    },
+    "memos_save": {
+      "description": "Save important information to project memory — after fixing a bug, making a decision, finishing a milestone, hitting a gotcha, or changing config.\n🚨 MUST pass memory_type explicitly (decision tree: memos_suggest). In Lite mode this remains the primary durable write path.\nThis is the ONLY way to persist memories — never mkdir/Write memory files.",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "6d55694e7440cbc1f81d1acb95c034534cc3c02c7f2487e10be4127cde8883f5"
+    },
+    "memos_list_v2": {
+      "description": "List memories from a cube (compacted when large; memos_get for details).",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "6ee747b16e3dbf03636482dc0388ae236b8b26d7eecd256dd46f9e579229b9ea"
+    },
+    "memos_get": {
+      "description": "Get full details of one memory by ID (after compacted memos_search/memos_list_v2 results).",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "33d79ce41fea8684466f0cbe5ee72defc8900f1d8d998206f2b56272d741f9b4"
+    },
+    "memos_suggest": {
+      "description": "Suggest search queries for the current context, and return the memory_type decision tree.\n\nUse when: unsure what to search for, or unsure which memory_type `memos_save` should use.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "bd36b15903ae30cb175fe0655d9b0e48e88e83755cd70bddcde278ce37d71d36"
+    },
+    "memos_distill_skill": {
+      "description": "Create an inert, reviewable skill candidate from recurring memories. It writes only under <project_path>/skill-candidates and records source memory IDs; it never installs a skill automatically.",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "daa0b3562b2825fcca1da38ad1f36916461e71b6fb8ea4cc25597793c389a04a"
+    },
+    "memos_list_skill_candidates": {
+      "description": "List inert skill candidates under <project_path>/skill-candidates. Does not install or modify them.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "bd360f077f39f7b62d37a51b24fc7519c64515799a0c5e5538c879c4fe1f511f"
+    },
+    "memos_review_skill_candidate": {
+      "description": "Approve or reject one skill candidate. This only changes its auditable status; approval does not install it.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "83f005e615d02031a4c4990439aad23871ec51985eb6c607d2433076df63c862"
+    },
+    "memos_install_skill_candidate": {
+      "description": "Install an approved candidate into <project_path>/.claude/skills/<slug>/SKILL.md. Requires explicit action; refuses overwrite, symlinks, malformed candidates, and unapproved status.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "3af1fa6643c15036c360984d09c44c4da09aec3ab7f5c513b942539fd9bb14aa"
+    },
+    "memos_graph": {
+      "description": "Knowledge-graph queries; mode selects:\nrelated = nodes+edges around a query · path = trace between two node ids · impact = forward blast radius of one memory · schema = graph structure & statistics · import = validate Graphify node-link JSON (dry-run only).",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "schemaSha256": "0da0f41e93edbf9fa140bcdf7a0c84cd22d23f68e9ea30b48240c467439914d6"
+    },
+    "memos_admin": {
+      "description": "Maintenance & diagnostics; action selects:\nlist_cubes · register_cube (fix \"not loaded\") · create_user (fix \"user does not exist\") · validate_cubes (repair config mismatches) · stats (per-type counts) · calendar (milestone timeline) · capabilities (Full/Lite behavior and unsupported operations).",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "295e28686f39889ad0a28dcccbfac5eaf5123dd0836f79fae08282b71fb3711e"
+    },
+    "memos_canvas": {
+      "description": "Task canvas — short-term task state that survives context compaction.\naction: open (needs goal) · update (append node; node_id edits one) · show · list.\nNode ids are greppable (000-N1); ref anchors evidence: mem:<id> / file:<path> / note:<text>.",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "4d8da6ad1a5d951c176d20f631eae893ec22cf6ad5d270ff87217b3733bc0097"
+    },
+    "memos_delete": {
+      "description": "⚠️ DELETE memories from project memory. USE WITH CAUTION!\n\nThis tool is DISABLED by default. User must explicitly enable it via MEMOS_ENABLE_DELETE=true.\n\nONLY use this tool when the user EXPLICITLY requests deletion.\nNEVER use this tool proactively or without user confirmation.\n\nOperations:\n- Delete a single memory by ID\n- Delete multiple memories by IDs\n- Delete ALL memories in a cube (requires delete_all=true)\n\nBefore deleting, always:\n1. Confirm with the user what will be deleted\n2. Show the memory content that will be deleted\n3. Get explicit user approval",
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "schemaSha256": "1873d01592e481d388068f49d859d21e47f969e8fe3b30019e04d6bc8465dfa7"
+    }
+  }
+}

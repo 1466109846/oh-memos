@@ -180,11 +180,11 @@
 
 ## 目标
 
-按 `docs/plans/2026-08-18-mcp-sdk-v2-migration-and-evolution.md` 的分期策略实施 SDK 与协议迁移。本次已完成可独立回滚的 Phase 0，以及保持 legacy wire 的 Phase 1（SDK v2、Zod 4、Node 20）；Phase 2 及之后的 modern era 激活仍作为后续独立阶段。
+按 `docs/plans/2026-08-18-mcp-sdk-v2-migration-and-evolution.md` 的分期策略实施 SDK 与协议迁移。本轮继续完成 Phase 3 的协议/客户端/部署矩阵，并把可重复的合同接入 CI；不发布 npm、不移动 dist-tag、不合并 base 分支。
 
 ## 当前阶段
 
-Phase 0 已提交并推送；Phase 1 已完成；Phase 2 及之后暂不启用 `serveStdio` 或 `2026-07-28` modern era。
+Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵已完成，3.3 真实 host canary 保留为发布前人工门禁。当前分支已通过 SDK v2 `serveStdio` 双时代 serving，下一检查点是 Phase 4 canary 发布条件。
 
 ## 工作阶段
 
@@ -193,8 +193,10 @@ Phase 0 已提交并推送；Phase 1 已完成；Phase 2 及之后暂不启用 `
 - [x] Phase 0.3：将 `@modelcontextprotocol/sdk` 升到 `^1.30.0`，lockfile 固定 `1.30.0`，并通过同一套门禁
 - [x] Phase 0.4：记录验证结果、已知兼容边界与回滚点
 - [x] Phase 1：迁移 server v2 / Zod 4 / Node 20，仍用 direct `server.connect(new StdioServerTransport())`
-- [ ] Phase 2：引入 `serveStdio(buildServer, { legacy: "serve" })` 和受测 transport decorator
-- [ ] Phase 3：扩大 protocol/host/OS 矩阵并接入 CI
+- [x] Phase 2：引入 `serveStdio(buildServer, { legacy: "serve" })` 和受测 transport decorator
+- [x] Phase 3.1：补齐协议/客户端/Provider/输入/生命周期矩阵
+- [x] Phase 3.2：接入 Node 20/22、schema snapshot、pack dry-run 与 Windows CI
+- [ ] Phase 3.3：记录真实 host canary 能力与不可用条件
 - [ ] Phase 4-5：next canary、观察窗口、稳定版文档与发布
 
 ## Phase 0 结果
@@ -246,3 +248,33 @@ Phase 0 已提交并推送；Phase 1 已完成；Phase 2 及之后暂不启用 `
 | Node 18.20.8 | 按预期退出码 1，并输出 Node `>=20.0.0` 升级提示 |
 | npm audit | production 与完整依赖均 0 vulnerabilities |
 | import/marker audit | 无旧 SDK import、codemod marker、`serveStdio` 或 modern-era 标记 |
+
+## Phase 2 结果（已推送）
+
+- `buildServer()` 只构造 server/注册工具；`NormalizingStdioTransport` 在 era classification 和 schema validation 前保留字符串参数兼容与 raw key capture。
+- `runServer()` 使用 `serveStdio(buildServer, { legacy: "serve", transport, onerror })`；background init 延迟到第一次真实 `tools/call`，SIGINT/SIGTERM 关闭幂等。
+- v2 client legacy/auto/pin、raw legacy、probe/fallback、4.8 MB stdio boundary 和 signal close 已由 `npm run test:protocol` 覆盖。
+- Commit `d8081e28e99b18c6c15cf7a4df6d43ed9efb8c42` 已推送到 `origin/docs/mcp-v2-migration-plan`；包版本仍为 `2.1.0`。
+
+## Phase 3 执行批次
+
+- [x] 先写并运行矩阵合同：默认/条件工具、Full/Lite、普通/stringified/unknown/empty/large 输入、probe/fallback/close/signal。
+- [x] 实现最小 harness 变化并完成 Green，保留现有 v2 smoke 的兼容行为。
+- [x] 更新 CI Node 20/22 matrix、semantic schema snapshot、`npm pack --dry-run` 和 Windows smoke job。
+- [x] 运行最终 staged 验证，更新项目记忆，再提交并推送本阶段；真实 host canary 作为发布前人工门禁保留。
+
+## Phase 3 自动化结果
+
+- `npm run test:protocol`：raw legacy + v2 legacy/auto/modern pin，Full/Lite，16/17 tools，普通/stringified/unknown/empty/large 输入，probe/fallback、pipe close、SIGINT/SIGTERM 全部通过。
+- `npm test`：24 个 test files / 184 tests；`npm run schema:budget`：17981 B / 0.0% drift；`npm run schema:semantic`：17-tool snapshot 匹配；Lite smoke、`npm audit`、`npm run test:pack` 均通过。
+- CI：Ubuntu Node 20/22 matrix；Windows Node 20 protocol/snapshot/pack job。
+- host canary：CLI 可用性已盘点，真实 list/call/reconnect 尚未在隔离 host 配置中执行，不能作为 Phase 4 退出条件的已完成证据。
+
+## Phase 3 错误记录
+
+| 错误 | 次数 | 处理 |
+|---|---:|---|
+| 并行 `npm test` 未传 CI fixture，收集阶段报 `MEMOS_URL is required` | 1 | 按 workflow 补齐四个环境变量后重跑，24 files / 184 tests 通过 |
+| Windows `spawnSync npm.cmd` 返回 `EINVAL` | 1 | 改用 `%ComSpec% /d /s /c` 调用 npm，pack dry-run 通过 |
+| 全局 `*.json` 忽略规则隐藏 semantic baseline | 1 | `.gitignore` 增加明确例外并确认 checkout 可见 |
+| host canary 需要真实模型 API/外部 host 配置 | 1 | 不假设授权；记录 CLI/既有连接状态，保留人工发布门禁 |

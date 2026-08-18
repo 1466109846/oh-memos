@@ -12,8 +12,12 @@ on:
 
 jobs:
   node:
-    name: Node MCP (build · vitest · schema budget)
+    name: Node MCP (Node ${{ matrix.node }} · build · vitest · protocol)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
     defaults:
       run:
         working-directory: mcp-server-node
@@ -22,7 +26,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: mcp-server-node/package-lock.json
 
@@ -51,6 +55,44 @@ jobs:
           MEMOS_USER: ci
           MEMOS_DEFAULT_CUBE: ci_cube
           MEMOS_CUBES_DIR: /tmp/oh-memos-cubes
+
+      # Semantic schema snapshots ignore JSON Schema dialect/ref layout while
+      # freezing business constraints, descriptions, annotations, and order.
+      - run: npm run schema:semantic
+        env:
+          MEMOS_URL: http://127.0.0.1:18000
+          MEMOS_USER: ci
+          MEMOS_DEFAULT_CUBE: ci_cube
+          MEMOS_CUBES_DIR: /tmp/oh-memos-cubes
+
+      # The v2 client harness is dev-only; keep it out of the published tarball.
+      - run: npm run test:pack
+
+  windows-protocol:
+    name: Windows Node MCP (protocol · package boundary)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: mcp-server-node
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server-node/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:protocol
+      - run: npm run schema:semantic
+        env:
+          MEMOS_URL: http://127.0.0.1:18000
+          MEMOS_USER: ci
+          MEMOS_DEFAULT_CUBE: ci_cube
+          MEMOS_CUBES_DIR: ${{ runner.temp }}\oh-memos-cubes
+      - run: npm run test:pack
 
   python:
     name: Python API (offline pytest contracts)

@@ -63,21 +63,33 @@ function negotiation(mode) {
 }
 
 async function closeQuietly(client, transport) {
+  if (!client && !transport) return;
   try {
-    await client.close();
+    await client?.close();
   } catch {
     // The server may already have closed its pipe; cleanup remains best effort.
   }
   try {
-    await transport.close();
+    await transport?.close();
   } catch {
     // StdioClientTransport.close() is idempotent for the smoke's purposes.
   }
 }
 
-async function runClientContract(mode, { stringifyArguments = false, root, cube }) {
+async function runClientContract(
+  mode,
+  {
+    stringifyArguments = false,
+    root,
+    cube,
+    envOverrides = {},
+    expectedToolCount = 16,
+    call = { name: "memos_suggest", arguments: { context: `${mode} default call` } },
+    assertResult = () => true,
+  },
+) {
   const label = mode === "pin" ? "modern pin" : `v2 ${mode}`;
-  const env = baseEnv(root, cube);
+  const env = baseEnv(root, cube, envOverrides);
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [DIST_ENTRY],
@@ -119,17 +131,31 @@ async function runClientContract(mode, { stringifyArguments = false, root, cube 
   try {
     await client.connect(transport);
     const listed = await client.listTools();
-    check(`${label} connects and lists tools`, listed.tools.length === 16, String(listed.tools.length));
+    check(
+      `${label} connects and lists ${expectedToolCount} tools`,
+      listed.tools.length === expectedToolCount,
+      String(listed.tools.length),
+    );
 
-    const result = await client.callTool({
-      name: "memos_suggest",
-      arguments: { context: `${label} stringified=${stringifyArguments}` },
-    });
+    const result = await client.callTool(call);
     const text = textContent(result);
     check(`${label} calls a tool`, text.length > 0, text.slice(0, 180));
+    check(`${label} representative result contract`, assertResult(result, text), text.slice(0, 240));
     if (stringifyArguments) {
       check(`${label} accepts stringified arguments`, !result.isError, text.slice(0, 180));
     }
+
+    const unknown = await client.callTool({
+      name: "memos_suggest",
+      arguments: {
+        context: `${label} unknown key`,
+        extra_contract_key: "ignored",
+      },
+    });
+    check(`${label} ignores unknown keys without failing`, !unknown.isError, textContent(unknown).slice(0, 180));
+
+    const empty = await client.callTool({ name: "memos_suggest", arguments: {} });
+    check(`${label} rejects an empty required-argument object`, empty.isError === true, textContent(empty).slice(0, 180));
     return { stderr, client, transport };
   } catch (error) {
     check(`${label} client contract`, false, `${String(error)}\nstderr:\n${stderr.slice(0, 1600)}`);
@@ -243,11 +269,46 @@ async function runLargeMessageContract() {
 
 async function runSignalContract() {
   console.log("\nSignal close contract");
-  const root = mkdtempSync(join(tmpdir(), "oh-memos-protocol-v2-signal-"));
+  for (const signalName of ["SIGINT", "SIGTERM"]) {
+    const root = mkdtempSync(join(tmpdir(), `oh-memos-protocol-v2-${signalName.toLowerCase()}-`));
+    const child = spawn(process.execPath, [DIST_ENTRY], {
+      cwd: PACKAGE_ROOT,
+      env: baseEnv(root, `protocol_${signalName.toLowerCase()}_cube`, { MEMOS_LOG_LEVEL: "DEBUG" }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      try {
+        child.kill(signalName);
+      } catch (error) {
+        check(`${signalName} can be delivered`, false, String(error));
+        continue;
+      }
+      const [code, signal] = await Promise.race([
+        once(child, "exit"),
+        new Promise((resolve) => setTimeout(() => resolve([null, "timeout"]), 2500)),
+      ]);
+      check(`${signalName} closes the server`, code !== null || signal !== "timeout", `${code}/${signal}`);
+      check(`${signalName} close has no unhandled rejection`, !/unhandled promise rejection|unhandledpromiserejection/i.test(stderr), stderr.slice(0, 600));
+    } finally {
+      if (child.exitCode === null) child.kill();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+}
+
+async function runClientPipeCloseContract() {
+  console.log("\nClient pipe close contract");
+  const root = mkdtempSync(join(tmpdir(), "oh-memos-protocol-v2-pipe-close-"));
   const child = spawn(process.execPath, [DIST_ENTRY], {
     cwd: PACKAGE_ROOT,
-    env: baseEnv(root, "protocol_signal_cube", { MEMOS_LOG_LEVEL: "DEBUG" }),
-    stdio: ["ignore", "pipe", "pipe"],
+    env: baseEnv(root, "protocol_pipe_close_cube"),
+    stdio: ["pipe", "pipe", "pipe"],
   });
   let stderr = "";
   child.stderr.setEncoding("utf8");
@@ -255,16 +316,70 @@ async function runSignalContract() {
     stderr += chunk;
   });
   try {
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    child.kill("SIGTERM");
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "pipe-close", version: "0" },
+      },
+    })}\n`);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    child.stdin.end();
     const [code, signal] = await Promise.race([
       once(child, "exit"),
       new Promise((resolve) => setTimeout(() => resolve([null, "timeout"]), 2500)),
     ]);
-    check("SIGTERM closes the server", code !== null || signal !== "timeout", `${code}/${signal}`);
-    check("signal close has no unhandled rejection", !/unhandled promise rejection|unhandledpromiserejection/i.test(stderr), stderr.slice(0, 600));
+    check("client pipe close releases the server", code !== null || signal !== "timeout", `${code}/${signal}`);
+    check("client pipe close has no unhandled rejection", !/unhandled promise rejection|unhandledpromiserejection/i.test(stderr), stderr.slice(0, 600));
+  } catch (error) {
+    check("client pipe close contract", false, `${String(error)}\nstderr:\n${stderr.slice(0, 1200)}`);
   } finally {
     if (child.exitCode === null) child.kill();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function runConditionalToolMatrix() {
+  console.log("\nConditional tool matrix");
+  for (const mode of ["legacy", "auto", "pin"]) {
+    const root = mkdtempSync(join(tmpdir(), `oh-memos-protocol-v2-delete-${mode}-`));
+    const result = await runClientContract(mode, {
+      root,
+      cube: `protocol_v2_delete_${mode}_cube`,
+      expectedToolCount: 17,
+      envOverrides: { MEMOS_ENABLE_DELETE: "true" },
+      call: {
+        name: "memos_delete",
+        arguments: { memory_id: "not-used-in-lite" },
+      },
+      assertResult: (_result, text) => text.includes("Lite mode: memos_delete is unavailable"),
+    });
+    await closeQuietly(result.client, result.transport);
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function runProviderMatrix() {
+  console.log("\nProvider matrix");
+  for (const mode of ["legacy", "auto", "pin"]) {
+    const root = mkdtempSync(join(tmpdir(), `oh-memos-protocol-v2-full-${mode}-`));
+    const result = await runClientContract(mode, {
+      root,
+      cube: `protocol_v2_full_${mode}_cube`,
+      envOverrides: {
+        MEMOS_MODE: "full",
+        MEMOS_PROVIDER: "api",
+        MEMOS_URL: "http://127.0.0.1:1",
+        MEMOS_API_WAIT_MAX: "0",
+        MEMOS_TIMEOUT_HEALTH: "1",
+      },
+      call: { name: "memos_admin", arguments: { action: "capabilities" } },
+      assertResult: (_result, text) => text.includes("**Mode**: full") && text.includes("Full exposes API"),
+    });
+    await closeQuietly(result.client, result.transport);
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -309,6 +424,9 @@ for (const mode of ["legacy", "auto", "pin"]) {
 
 await runProbeSideEffectContract();
 await runLargeMessageContract();
+await runConditionalToolMatrix();
+await runProviderMatrix();
+await runClientPipeCloseContract();
 await runSignalContract();
 
 console.log(

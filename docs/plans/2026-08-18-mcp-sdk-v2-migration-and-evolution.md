@@ -1,6 +1,6 @@
 # MCP SDK v2 与协议 2026-07-28 迁移及能力演进计划
 
-> 2026-08-18 · 状态：Phase 2 已完成；下一检查点为协议/客户端/部署矩阵
+> 2026-08-18 · 状态：Phase 3 自动化矩阵已完成；真实 host canary 待人工执行
 
 ## 决策摘要
 
@@ -298,6 +298,15 @@
 - semantic schema snapshot；
 - `npm pack --dry-run`，确认 dev-only client harness 不进入发布包；
 - Windows protocol smoke（至少 release 分支必须跑）。
+
+### 执行结果（2026-08-18）
+
+- `protocol-v2-smoke.mjs` 现覆盖 Full/Lite、16/17 工具面、legacy/auto/modern pin、普通与字符串化 arguments、unknown key、空对象、4.8 MB stdio boundary、probe/fallback、client pipe close、SIGINT/SIGTERM。
+- 新增 `schema-semantic-snapshot.mjs` 与 `schema-semantic-baseline.json`：冻结 17 个工具的顺序、16 个 always-on/`memos_delete` 条件集合、描述、annotations 和业务 schema hash；忽略 JSON Schema dialect/ref 布局。
+- 新增 `pack-contract.mjs` 与 `npm run test:pack`：在 `npm pack --dry-run --json` 上确认 94 个发布文件，开发 client、scripts、源码和测试不会进入 tarball。
+- CI Node job 已改为 Node 20/22 matrix，并新增 semantic snapshot、pack contract；Windows Node 20 job 执行 build、protocol smoke、snapshot 和 pack contract。
+- 本地证据：`npm run test:protocol`、`npm test`（24 files/184 tests）、`npm run schema:budget`（17981 B/0.0%）、`npm run schema:semantic`、Lite smoke、`npm audit` 和 pack contract 均通过。
+- 当前机器检测到 Claude Code 2.1.220、Codex 0.147.0、Qwen 0.21.13；三者已有 `oh-memos` 注册并能在各自的 `mcp list` 健康检查中连接主工作区服务。未把迁移 worktree 注入真实 host，也未发起模型 API 调用或写入 host 配置，因此 Phase 3.3 仍是发布前人工门禁。
 
 ## Phase 4：`3.0.0-next` canary 发布
 

@@ -240,6 +240,8 @@ venv.bak/
 # schema budget 基线：npm run schema:budget --check 的对比基准，
 # 不入库则该 token 预算纪律只在作者本机成立
 !mcp-server-node/schema-baseline.json
+# Semantic MCP tools/list contract; keep the v2 business-schema snapshot reviewable
+!mcp-server-node/schema-semantic-baseline.json
 !vite.config.ts
 !pyproject.toml
 !poetry.lock

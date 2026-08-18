@@ -103,3 +103,19 @@
 - 使用 Node 20.19.4 与 Node 22.18.0 重新跑同一矩阵，结果全部通过；Node 18.20.8 在 SDK/config 动态加载前退出码 1，并输出可执行升级提示。
 - 最终 import/marker audit 未发现旧 `@modelcontextprotocol/sdk`、`@mcp-codemod-error`、`serveStdio` 或 `2026-07-28`/`server/discover` 残留。
 - Phase 1 已完成；本次只提交 SDK v2/运行时和 legacy 合同门禁，不启用 modern era，不发布 npm，不移动 dist-tag，不合并 base 分支。
+
+## 2026-08-18 MCP SDK v2 / Phase 2 收尾与 Phase 3 开始
+
+- 已恢复 `docs/mcp-v2-migration-plan` worktree，HEAD `d8081e2` 与远端一致，主工作区无关未跟踪路径未触碰。
+- 已通过 `memos_context_resume` 与 `memos_search` 恢复 Phase 2 里程碑和架构决策；Phase 2 已将 raw legacy 与 v2 legacy/auto/pin 统一到 `serveStdio` 双时代入口。
+- Phase 3 先落实可自动运行的协议/客户端/部署矩阵；真实 Claude Code/Codex/Qwen canary 仅在当前环境确实可用时记录，不假设登录态或外部 host 存在。
+- 当前待做：矩阵合同测试、CI Node 20/22、semantic schema snapshot、`npm pack --dry-run`、Windows protocol smoke。
+
+## 2026-08-18 MCP SDK v2 / Phase 3 自动化矩阵完成
+
+- 扩展 `scripts/protocol-v2-smoke.mjs`：每个 v2 era 覆盖默认 16 工具、条件 17 工具、Full/Lite provider、普通/字符串化/unknown/empty arguments；补充 4.8 MB boundary、probe/fallback、client pipe close、SIGINT/SIGTERM。
+- 新增 `scripts/schema-semantic-snapshot.mjs` 和 `schema-semantic-baseline.json`，通过真实 legacy `tools/list` 冻结 17 个工具的语义合同；新增 `scripts/pack-contract.mjs` 检查 npm dry-run 发布边界。
+- `package.json` 新增 `schema:semantic`、`schema:semantic:freeze`、`test:pack`；`.gitignore` 保留语义基线文件。
+- `.github/workflows/ci.yml` 改为 Ubuntu Node 20/22 matrix，并新增 Windows Node 20 protocol/snapshot/pack job。
+- 当前 Node 24.12.0 验证：build、protocol smoke、24 files/184 tests、schema budget 17981 B/0.0%、semantic snapshot、Lite smoke、pack dry-run、完整/生产 npm audit 全部通过。
+- host CLI 版本已盘点，但未执行真实模型 API canary；Phase 3.3 保留为 Phase 4 发布前人工门禁。

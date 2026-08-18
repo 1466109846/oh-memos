@@ -175,3 +175,21 @@
 - Node 18.20.8 运行入口时在导入 SDK/config 之前退出码 1，并输出 `oh-memos-mcp requires Node.js >=20.0.0`；这使 breaking runtime requirement 可诊断而非隐式模块错误。
 - 最终全仓审计无旧 monolithic SDK import、codemod marker、`serveStdio` 或 `2026-07-28` modern-era 标记。Phase 1 明确保持 direct-connect `2025-11-25` legacy wire，Phase 2 的双时代 serving 仍未启动。
 - Windows worktree 的 `git diff --check` 需使用 `core.whitespace=cr-at-eol` 解读 CRLF；提交前仍须检查 staged diff，避免把行尾提示误判为真实空白。
+
+---
+
+# MCP SDK v2 Phase 3 实施发现 — 2026-08-18
+
+- 当前迁移 worktree 清洁，分支 `docs/mcp-v2-migration-plan` 的 HEAD/远端均为 `d8081e2`；主工作区 `G:\test\oh-memos` 的无关未跟踪文件必须保持原样。
+- Phase 3 计划要求的多数行为已经存在于 `protocol-v2-smoke.mjs`，但现有脚本主要固定 Lite + 16 工具，尚未系统断言 Full 配置、条件 `memos_delete`、空/未知参数、语义 schema snapshot、打包文件边界和 CI Node matrix。
+- `package.json` 的 `@modelcontextprotocol/client` 是 devDependency，`files` 白名单只包含 dist/README/CHANGELOG/.env.example；`npm pack --dry-run` 应验证 client harness 不进入 tarball。
+- 当前 CI 只有 Ubuntu Node 20；Phase 3 可用一个 Node 20/22 matrix 保持 Python job 独立，再加 Windows release/branch smoke，避免重复安装 Python 依赖。
+- 真实 host canary 不能在未确认 Claude Code/Codex/Qwen 可执行入口或登录态时伪造通过结果；自动化矩阵应先成为可审计门禁，host 结果单独记录为可用/不可用。
+
+## Phase 3 验证与错误记录
+
+- 首次并行运行 `npm test` 未传 CI fixture，5 个 suite 在收集阶段因 `MEMOS_URL is required` 失败；按 workflow 传入 `MEMOS_URL`、`MEMOS_USER`、`MEMOS_DEFAULT_CUBE`、`MEMOS_CUBES_DIR` 后重跑为 24 files / 184 tests 通过。
+- Windows 首次运行 pack contract 时 `spawnSync npm.cmd` 返回 `EINVAL`；改为通过 `%ComSpec% /d /s /c` 调用 `npm.cmd`，随后 dry-run 94 files 通过且不再出现 Node shell 参数弃用警告。
+- 语义 snapshot 基线必须加入 `.gitignore` 例外；仓库有全局 `*.json` 忽略规则，已新增 `!mcp-server-node/schema-semantic-baseline.json`，否则 CI checkout 会缺基线。
+- 当前本机 Node 24.12.0 可直接运行全部门禁；Node 20/22 由 CI matrix 覆盖，本轮未改动其安装器或本机默认 Node。
+- Claude Code 2.1.220、Codex 0.147.0、Qwen 0.21.13 均可执行，现有 `oh-memos` 主工作区注册在三者 health/list 检查中连接；迁移 worktree 的真实 host list/call/reconnect 需要隔离配置和模型 API 调用，保留为人工发布门禁。
