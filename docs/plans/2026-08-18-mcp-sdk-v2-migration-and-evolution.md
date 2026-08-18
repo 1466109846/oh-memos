@@ -1,6 +1,6 @@
 # MCP SDK v2 与协议 2026-07-28 迁移及能力演进计划
 
-> 2026-08-19 · 状态：Phase 3 自动化矩阵与真实 host canary 已完成；Phase 4 发布门禁待执行
+> 2026-08-19 · 状态：Phase 3 自动化矩阵与真实 host canary 已完成；Phase 4 本地 tarball 门禁已通过，registry `next` 发布与观察窗口待执行
 
 ## 决策摘要
 
@@ -326,6 +326,16 @@
 - 命令目标：npm `next` dist-tag，不移动 `latest`。
 - 从 registry 安装到全新临时目录，用 `npx -y oh-memos-mcp@next` 做 smoke，不能只测工作区 build。
 - release notes 置顶三件事：Node 20 minimum、双时代支持、无数据迁移。
+
+### 本地发布包门禁结果（2026-08-19）
+
+- 重新运行 `npm run build`，退出码为 0；随后执行真实 `npm pack --json`，生成 `oh-memos-mcp-2.1.0.tgz`（117254 bytes）。
+- 在全新临时目录执行 `npm install --ignore-scripts --no-audit --no-fund`，安装后的 `package.json`、`engines.node >=20.0.0`、`oh-memos-mcp -> dist/index.js` bin 和 dist 入口均正确；源码目录未进入安装包。
+- 以安装目录中的 `dist/index.js` 运行 Lite smoke：16 工具广告、Lite save/search、JSONL 持久化、Full-only 边界均通过。
+- 另起独立 raw JSON-RPC 进程，完成 initialize、`tools/list`（16 个工具）、`memos_save`、`memos_search` 和 `memos_get`；读取同一临时 JSONL 记录确认跨调用 ID 与内容一致。
+- 临时 pack/install/cube 目录已按精确路径清理；本次未发布 npm、未修改 `latest`/`next` dist-tag，包版本仍为 `2.1.0`。
+
+这证明工作区生成的发布产物可在干净安装环境运行，但不替代从 registry 安装 `oh-memos-mcp@next` 的门禁。Phase 4 仍需维护者明确发布授权、执行 `3.0.0-next.0`/后续 patch、运行 registry smoke，并开始至少 7 天观察窗口；在这些条件满足前不得进入 Phase 5 stable。
 
 ### Canary 退出条件
 

@@ -184,7 +184,7 @@
 
 ## 当前阶段
 
-Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵与 3.3 真实 host canary 已完成。当前分支已通过 SDK v2 `serveStdio` 双时代 serving，下一检查点是 Phase 4 canary 发布条件。
+Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵与 3.3 真实 host canary 已完成。Phase 4 的本地 tarball 安装门禁已通过，下一检查点是 registry `next` 发布和观察窗口。
 
 ## 工作阶段
 
@@ -197,7 +197,9 @@ Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵与 3.3 
 - [x] Phase 3.1：补齐协议/客户端/Provider/输入/生命周期矩阵
 - [x] Phase 3.2：接入 Node 20/22、schema snapshot、pack dry-run 与 Windows CI
 - [x] Phase 3.3：记录真实 host canary 能力与不可用条件
-- [ ] Phase 4-5：next canary、观察窗口、稳定版文档与发布
+- [x] Phase 4.1：真实 `npm pack`、全新目录安装、安装包 Lite smoke 与 raw RPC save/search/get
+- [ ] Phase 4.2：发布 `3.0.0-next` 到 npm `next`，执行 registry 安装 smoke 并开始观察窗口
+- [ ] Phase 5：稳定版文档、兼容承诺与 `3.0.0` 发布
 
 ## Phase 0 结果
 
@@ -290,3 +292,22 @@ Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵与 3.3 
 | host canary 初始环境缺少 `MEMOS_USER` | 1 | 补充临时用户变量后重跑，三宿主均完成握手和业务闭环 |
 | Codex `--ignore-user-config` provider 返回 401 | 1 | 保留登录态，仅覆盖临时 MCP server；后续 canary 全部通过 |
 | Qwen 首次 headless 运行超过墙钟预算 | 1 | 保留已完成的 save/search，第二个进程补做 search/get 并通过 |
+
+## Phase 4.1 本地发布包门禁（2026-08-19）
+
+- [x] 重新 build 并生成真实 `oh-memos-mcp-2.1.0.tgz`；检查实际包边界和产物大小。
+- [x] 在全新临时目录安装 tarball，核对 version、Node `>=20.0.0` engine、bin 入口、dist 文件和源码未泄漏。
+- [x] 从安装后的 `dist/index.js` 运行 Lite smoke，并用独立 raw JSON-RPC 进程完成 initialize、16-tool list、save/search/get 和 JSONL 持久化回读。
+- [x] 精确清理临时 pack/install/cube 目录；未发布 npm、未移动 dist-tag、未改动持久化 Host 配置。
+
+### Phase 4 未完成项
+
+- registry `next` tarball 安装和 `npx -y oh-memos-mcp@next` smoke 尚未执行；当前包版本仍为 `2.1.0`。
+- 7 天 canary 观察窗口、release notes、Phase 5 文档同步和 stable `3.0.0` 发布均保持 pending。
+
+## Phase 4 错误记录
+
+| 错误 | 次数 | 处理 |
+|---|---:|---|
+| 首次安装包 Lite smoke 在 install 根目录运行，脚本按 cwd 查找 `dist/index.js` 而超时 | 1 | 改在 `node_modules/oh-memos-mcp` 包目录运行同一脚本；随后所有 Lite 检查通过 |
+| PowerShell 临时命令中的脚本路径变量被单引号保留为字面量 | 1 | 改用已解析的绝对路径重跑；未改变包内容 |

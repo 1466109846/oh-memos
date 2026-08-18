@@ -205,3 +205,13 @@
 - 语义 snapshot 基线必须加入 `.gitignore` 例外；仓库有全局 `*.json` 忽略规则，已新增 `!mcp-server-node/schema-semantic-baseline.json`，否则 CI checkout 会缺基线。
 - 当前本机 Node 24.12.0 可直接运行全部门禁；Node 20/22 由 CI matrix 覆盖，本轮未改动其安装器或本机默认 Node。
 - Claude Code 2.1.220、Codex 0.147.0、Qwen 0.21.13 均可执行，现有 `oh-memos` 主工作区注册在三者 health/list 检查中连接；迁移 worktree 的真实 host list/call/reconnect 需要隔离配置和模型 API 调用，保留为人工发布门禁。
+
+---
+
+# MCP SDK v2 Phase 4.1 本地发布包门禁发现 — 2026-08-19
+
+- 真实 `npm pack --json` 生成的 `oh-memos-mcp-2.1.0.tgz` 大小为 117254 bytes；全新目录安装后，`engines.node`、bin、dist 入口和 files 边界与 package 合同一致，源码没有进入安装包。
+- 安装包目录中的 `dist/index.js` 在 Lite 模式下可独立完成 initialize、16-tool `tools/list`、`memos_save`、`memos_search` 和 `memos_get`；JSONL 中同一 ID 的跨调用回读证明发布包没有依赖工作区源码或开发依赖。
+- `scripts/lite-smoke-test.mjs` 使用相对路径 `dist/index.js`，执行已安装包时 cwd 必须是 `node_modules/oh-memos-mcp`，而不是 npm install 的父目录；这条约束应写入未来 registry smoke runbook。
+- 本地 tarball 证据不等于 registry canary：当前没有发布 `3.0.0-next`，因此不能声称 `npx @next` 或 npm `next` dist-tag 已验证；7 天观察窗口也仍是 pending。
+- 临时目录已精确清理。之前诊断阶段曾有凭据出现在终端输出，未进入提交或项目记忆；维护者仍应立即撤销/轮换受影响凭据，后续报告不得复述具体值。

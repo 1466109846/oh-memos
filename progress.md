@@ -128,3 +128,12 @@
 - Qwen：实际协商 `2025-11-25`，`tools/list` 返回 16 个工具；首进程完成 suggest/save/search，第二个独立进程完成 search/get，命中 ID `b506ae07-a523-40d3-acb5-e37d21ea5e2b`。首进程超过墙钟预算的 get 由第二进程补齐。
 - 三个真实 host 当前都使用 legacy 2025-era initialize；这不等同于 host 已启用 `2026-07-28` modern wire，后者仍由仓库内 v2 client/协议矩阵证明。
 - 发现并修正 canary 环境陷阱：Node server 即使使用 local provider 也要求显式 `MEMOS_USER`；缺失时会在握手前退出。Codex 的一次隔离 provider 401 已通过保留现有 provider、只覆盖临时 MCP 配置恢复。
+
+## 2026-08-19 MCP SDK v2 / Phase 4.1 本地发布包门禁
+
+- 重新执行 `npm run build` 后生成真实 `oh-memos-mcp-2.1.0.tgz`，没有调用 npm publish，也没有移动任何 dist-tag。
+- 在全新临时目录用 `npm install --ignore-scripts --no-audit --no-fund` 安装 tarball；安装包版本为 `2.1.0`，`engines.node` 为 `>=20.0.0`，bin 指向 `dist/index.js`，源码目录未泄漏。
+- 让工作区 Lite smoke 指向安装包目录，16 工具广告、save/search、JSONL 持久化和 Full-only 边界全部通过。
+- 使用独立 raw JSON-RPC 进程直接启动安装后的 `dist/index.js`，initialize、`tools/list`、`memos_save`、`memos_search`、`memos_get` 和同一记录 ID 回读全部通过。
+- 临时 pack/install/cube 路径已精确清理。首次 smoke 失败仅由 cwd 解析错误引起，修正后重跑通过。
+- Phase 4 registry `next` 发布、`npx @next` smoke 和至少 7 天观察窗口仍未执行；当前版本和 latest/next 状态保持不变。
