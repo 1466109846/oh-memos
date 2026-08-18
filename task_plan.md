@@ -115,3 +115,99 @@
 | `npm run schema:budget` | 15 tools，16650 B，较基线 +0.0% |
 | 文档链接 / 代码围栏 | 4 份展示文档本地链接有效；6 份相关 Markdown 围栏成对 |
 | Archify 冻结产物 | JSON/HTML SHA-256 与最终交付回执一致 |
+
+---
+
+# 2026-08-18 MCP SDK v2 与协议 2026-07-28 迁移/演进计划
+
+## 目标
+
+基于官方 MCP 规范、TypeScript SDK v2 迁移文档和本仓库真实实现，形成一份可逐阶段执行、验证和回滚的升级计划；本轮只交付计划文档，不修改 MCP 代码、依赖或发布版本。
+
+## 当前阶段
+
+协议调研、仓库映射、迁移/演进计划和文档复验均已完成；等待用户评审并决定是否进入 Phase 0 实施。
+
+## 工作阶段
+
+- [x] 阶段 1：确认官方协议/SDK v2 变化和仓库约束
+- [x] 阶段 2：确定迁移策略、兼容边界和版本策略
+- [x] 阶段 3：编写 `docs/plans/2026-08-18-mcp-sdk-v2-migration-and-evolution.md`
+- [x] 阶段 4：核对文件清单、验收门禁、链接、围栏与 Git 差异
+- [x] 阶段 5：完成计划记录并交付用户评审
+
+## 已定原则
+
+| 决策 | 原因 |
+|---|---|
+| 迁移对象只包含活跃的 `mcp-server-node/` | Python `mcp-server/` 已明确标记 deprecated |
+| 先迁 SDK/运行时，再启用新协议 | 降低依赖升级与 wire behavior 同时变化的排障复杂度 |
+| 首次启用采用 `legacy: "serve"` 双时代兼容 | 保留旧客户端连接能力，并允许新客户端协商 `2026-07-28` |
+| 建议以 `3.0.0-next` 开始 canary | Node 18 → 20 是对现有用户的 breaking change |
+| 首轮保持工具名、输入 schema 和文本结果不变 | 把协议迁移与产品合同演进解耦，控制回归面 |
+
+## 错误记录（本任务）
+
+| 错误 | 次数 | 处理 |
+|---|---:|---|
+| 首次 PowerShell worktree 条件表达式语法无效 | 1 | 拆分为 `$pathExists` / `$branchExists` 两个布尔值后成功创建隔离 worktree |
+| 首次 `apply_patch` 使用了不存在的 `findings.md` EOF 锚点 | 1 | 重新读取文件尾部，并使用真实末行作为追加锚点 |
+| 并行恢复命令中一个子命令失败导致 `Promise.all` 整体退出 | 1 | 改为逐项 `try/catch`，其余恢复检查均成功完成 |
+| `session-catchup.py` 无输出退出码 1 | 1 | 不重复执行；通过 Git 状态、完整计划文件和会话摘要手动恢复上下文 |
+| 登录 PowerShell profile 在非交互终端设置光标/预测功能时报错 | 1 | 后续命令使用 `login: false`，不影响仓库内容 |
+| 复合 patch 将 Markdown 列表的 `-` 误作删除标记 | 3 | replacement 必须使用 `-- 原列表项`；三次失败均未写入文件，后续避免对列表做 removal，优先使用非列表锚点 |
+| SDK migration URL 未加 `.md`，返回超长 VitePress HTML 并被截断 | 1 | 使用页面 `<link rel="alternate" type="text/markdown">` 指向的 `.md` 地址重新读取正文 |
+| PowerShell `ConvertFrom-Json` 解析 lockfile 时遇到空字符串属性名 | 1 | 改用 `ConvertFrom-Json -AsHashTable` 或 Node JSON parser 读取结构化版本字段 |
+| 推导的 `serveStdio` TypeDoc URL 返回 v1 站点 404 | 1 | 以官方 `v2/serving/stdio.md` 的完整行为说明为准；不重复猜测 API 路径 |
+| URL-encode `@` 后 TypeDoc 地址仍返回同一 404 | 1 | 停止尝试该文档路由；如需签名细节改查已发布 npm 包内容 |
+| 首轮 Markdown audit 只取 `git diff --name-only`，漏掉 untracked 新计划 | 1 | 合并 tracked diff 与 `git ls-files --others --exclude-standard` 后重跑 |
+| 计划结构检查末尾 `rg` pattern 被 PowerShell 引号截断 | 1 | 必需项检查本身已通过；改用 `Select-String -SimpleMatch` 输出证据 |
+| 在 JavaScript orchestration 中直接使用 PowerShell here-string 语法 | 1 | JS parser 在调用 shell 前拒绝；改为 JavaScript 字符串数组 `join("\n")` 组装命令 |
+
+## 最终复验（本任务）
+
+| 检查 | 结果 |
+|---|---|
+| `git diff --check` | 通过 |
+| 变更路径范围 | 仅 `task_plan.md`、`findings.md`、`progress.md` 和新计划文档 |
+| Markdown | 4 个文件代码围栏、尾随空白、末尾换行和本地链接检查通过 |
+| 计划要求 | 必需章节和关键词检查通过；计划正文 434 行 |
+| 主工作区保护 | 原有 7 个未跟踪路径保持不变 |
+
+---
+
+# 2026-08-18 MCP SDK v2 迁移实施
+
+## 目标
+
+按 `docs/plans/2026-08-18-mcp-sdk-v2-migration-and-evolution.md` 的分期策略实施 SDK 与协议迁移。当前执行范围是可独立回滚的 Phase 0：更新到 SDK v1.30 并冻结 legacy 行为；不提前修改 Node、Zod、server entry 或协议 era。
+
+## 当前阶段
+
+Phase 0 已完成，等待该检查点审阅后进入 Phase 1（SDK v2 + Node 20 + Zod 4，仍保持 direct-connect legacy wire）。
+
+## 工作阶段
+
+- [x] Phase 0.1：在 SDK v1.27.1 上运行 build、154 个 Vitest、schema budget 与 Lite smoke，记录 legacy 基线
+- [x] Phase 0.2：先增加 21 个 protocol contract 测试和 raw JSON-RPC stdio smoke，锁定 tools/list、tools/call、Full/Lite 与参数兼容行为
+- [x] Phase 0.3：将 `@modelcontextprotocol/sdk` 升到 `^1.30.0`，lockfile 固定 `1.30.0`，并通过同一套门禁
+- [x] Phase 0.4：记录验证结果、已知兼容边界与回滚点
+- [ ] Phase 1：迁移 server v2 / Zod 4 / Node 20，仍用 direct `server.connect(new StdioServerTransport())`
+- [ ] Phase 2：引入 `serveStdio(buildServer, { legacy: "serve" })` 和受测 transport decorator
+- [ ] Phase 3：扩大 protocol/host/OS 矩阵并接入 CI
+- [ ] Phase 4-5：next canary、观察窗口、稳定版文档与发布
+
+## Phase 0 结果
+
+- 新增 `mcp-server-node/src/protocol-contract.test.ts`，覆盖 17 个工具顺序、annotations、schema 业务语义，以及已存在 raw-key 审计辅助函数。
+- 新增 `mcp-server-node/scripts/protocol-smoke.mjs` 和 `npm run test:protocol`，以 raw JSON-RPC child process 验证 `2025-11-25` initialize、默认 16 工具和 delete-enabled 17 工具、Lite 写读、stringified arguments、unknown-key 非致命、非法参数、Full capability 结果与 API failure 文本。
+- 当前 package 仍是 `oh-memos-mcp@2.1.0`、Node `>=18.0.0`、Zod 3；因此本检查点不声称支持 `2026-07-28`。
+- 可回滚范围：将 `mcp-server-node/package.json` 和 `package-lock.json` 的 SDK 版本恢复到 v1.27.1；合同测试可保留用于比较。
+
+## 错误记录（Phase 0 实施）
+
+| 错误 | 次数 | 处理 |
+|---|---:|---|
+| Full search fixture 在 API 不可达前先触发 cube fallback config，并因缺少 `MOS_CHAT_MODEL` 返回 `CUBE_REGISTRATION_FAILED` | 1 | 改用不依赖 cube 注册的 `memos_admin(action="create_user")` 请求，稳定锁定真实 `API_ERROR` 文本 |
+| 并行 preflight 中 Windows `rg` 路径 glob 无效 | 1 | 改为对 `src` 使用 `-g '*.test.ts'` |
+| 通过 PowerShell stdin 调用 `apply_patch` 被 Windows wrapper 拒绝 | 1 | 改用带绝对路径的 Codex `apply_patch` API；未写入错误 patch |

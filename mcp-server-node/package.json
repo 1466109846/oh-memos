@@ -18,6 +18,7 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
+    "test:protocol": "npm run build && node scripts/protocol-smoke.mjs",
     "test:lite-smoke": "npm run build && node scripts/lite-smoke-test.mjs",
     "test:watch": "vitest",
     "schema:budget": "npm run build && node scripts/schema-budget.mjs --check",
@@ -47,7 +48,7 @@
   },
   "homepage": "https://github.com/xigou/oh-memos/tree/main/mcp-server-node",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "dotenv": "^16.0.0",
     "zod": "^3.25.0"
   },
