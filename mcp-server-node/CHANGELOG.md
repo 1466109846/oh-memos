@@ -6,6 +6,38 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.0.0-next.0] - 2026-08-19
+
+### Breaking
+
+- **Node.js 20 is now the minimum runtime.** Node 18 users must remain on
+  `oh-memos-mcp@2.1.0` until they can upgrade their runtime.
+- The MCP runtime now uses the role-split `@modelcontextprotocol/server@2` and
+  Zod 4 instead of the monolithic v1 SDK and Zod 3.
+
+### Added
+
+- **Dual-era stdio serving.** The same package accepts legacy 2025-era
+  initialize clients and clients pinned to MCP `2026-07-28` through
+  `serveStdio(..., { legacy: "serve" })`.
+- Stringified `tools/call` arguments are normalized before era classification
+  and schema validation, preserving the existing client compatibility path.
+- Protocol, lifecycle, semantic-schema and package-boundary release gates now
+  cover legacy/auto/modern clients, Full/Lite providers, 16/17 tools, large
+  requests, probe fallback and graceful process shutdown.
+
+### Migration
+
+- Install this canary with `npx -y oh-memos-mcp@3.0.0-next.0` or use the npm
+  `next` dist-tag. The `latest` tag remains on `2.1.0` during observation.
+- No memory, cube or Lite JSONL migration is required. Existing Full and Lite
+  data formats and tool names remain unchanged.
+
+### Rollback
+
+- Pin Agent configurations to `npx -y oh-memos-mcp@2.1.0`. No data rollback is
+  necessary because this release does not change persisted formats.
+
 ## [2.1.0] - 2026-08-16
 
 ### Fixed
