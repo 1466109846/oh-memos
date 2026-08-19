@@ -147,6 +147,27 @@ flowchart LR
 - 检索为混合排序：语义余弦（截断到 [0,1]）0.6 + 词法 0.4；维度不匹配的存量记录按词法参与；Ollama 不可用时自动回退纯词法。
 - 配置：`MEMOS_LITE_EMBED_URL`（默认 `http://127.0.0.1:11434`）、`MEMOS_LITE_EMBED_MODEL`（默认 `bge-m3`）、`MEMOS_LITE_EMBED=off` 显式关闭。
 
+## [3.0.1] - 2026-08-19
+
+### 🩹 修复 3.0.0 打包出的多余依赖与失效仓库链接
+
+3.0.0 的 npm 包声明了两个与运行时无关的依赖，并且 npm 页面上的仓库链接全部指向一个不存在的仓库。
+功能没有受影响，但每个用户都要多下载约 17 MB，且 issue/homepage 链接是死链。
+
+#### 修复
+
+- **移除 `ci@^2.3.0` 与 `npm@^11.19.0`**。两者都不被 `dist/` 里的任何代码 import，属纯安装期膨胀：
+  `npm` 是完整的 npm CLI（16 MB），`ci` 是无关的第三方工具（17 KB）。安装体积从约 30 MB 回到约 13 MB。
+  根因是发布前工作区里未提交的依赖漂移被打进了 tarball；仓库提交本身一直只有三个依赖。
+- **`repository` / `bugs` / `homepage` 从 `github.com/xigou/oh-memos` 改为 `github.com/lsg1103275794/oh-memos`**。
+  前者返回 404，导致 npm 页面上的仓库、issue 和主页链接全部失效。`mcp-server-node/README.md`
+  里的 clone 命令与仓库链接同步修正。
+
+#### 不变
+
+运行时行为、工具名、输入 schema、协议协商和持久化格式与 3.0.0 完全一致，仅包元数据与依赖清单变化。
+从 3.0.0 升级只需重新安装，无需任何迁移。
+
 ## [3.0.0] - 2026-08-19
 
 ### 💥 BREAKING — Node MCP 升级到 SDK v2 与双时代协议，运行时最低 Node.js 20

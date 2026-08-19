@@ -1,6 +1,6 @@
 {
   "name": "oh-memos-mcp",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "MCP Server for oh-memos — Intelligent Memory Management (Node.js, no Python required)",
   "type": "module",
   "main": "dist/index.js",
@@ -44,13 +44,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xigou/oh-memos.git",
+    "url": "https://github.com/lsg1103275794/oh-memos.git",
     "directory": "mcp-server-node"
   },
   "bugs": {
-    "url": "https://github.com/xigou/oh-memos/issues"
+    "url": "https://github.com/lsg1103275794/oh-memos/issues"
   },
-  "homepage": "https://github.com/xigou/oh-memos/tree/main/mcp-server-node",
+  "homepage": "https://github.com/lsg1103275794/oh-memos/tree/main/mcp-server-node",
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
     "dotenv": "^16.0.0",

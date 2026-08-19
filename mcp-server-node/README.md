@@ -29,7 +29,7 @@ oh-memos backend API must be running before connecting this MCP server:
 - **Neo4j** on `localhost:7687` (Knowledge Graph)
 - **Qdrant** on `localhost:6333` (Vector Search)
 
-> Start all services: run `scripts\local\start.bat` from the [oh-memos repo](https://github.com/xigou/oh-memos).
+> Start all services: run `scripts\local\start.bat` from the [oh-memos repo](https://github.com/lsg1103275794/oh-memos).
 
 ---
 
@@ -256,7 +256,7 @@ The automatic file search never overrides explicit MCP/launcher environment valu
 ## Development
 
 ```bash
-git clone https://github.com/xigou/oh-memos.git
+git clone https://github.com/lsg1103275794/oh-memos.git
 cd oh-memos/mcp-server-node
 npm install
 npm run dev    # Run with tsx (no build needed)
