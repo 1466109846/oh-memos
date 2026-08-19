@@ -66,7 +66,7 @@ host.
 
 ## Lite quick start | Lite 快速开始
 
-Only Node.js 18+ is required. Configure the MCP server with the same `npx`
+Only Node.js 20+ is required. Configure the MCP server with the same `npx`
 command used by Full, but set the local provider and omit `MEMOS_URL`:
 
 ```json

@@ -198,8 +198,29 @@ Phase 0、Phase 1、Phase 2 已提交并推送；Phase 3 自动化矩阵与 3.3 
 - [x] Phase 3.2：接入 Node 20/22、schema snapshot、pack dry-run 与 Windows CI
 - [x] Phase 3.3：记录真实 host canary 能力与不可用条件
 - [x] Phase 4.1：真实 `npm pack`、全新目录安装、安装包 Lite smoke 与 raw RPC save/search/get
-- [ ] Phase 4.2：发布 `3.0.0-next` 到 npm `next`，执行 registry 安装 smoke 并开始观察窗口
-- [ ] Phase 5：稳定版文档、兼容承诺与 `3.0.0` 发布
+- [~] Phase 4.2：**由维护者决定跳过** npm `next` canary 与 7 天观察窗口，直接发布 stable `3.0.0` 到 `latest`
+- [x] Phase 5：稳定版文档、兼容承诺与 `3.0.0` 发布
+
+## Phase 4.2/5 发布决策（2026-08-19，维护者指示）
+
+维护者明确选择直接发布 stable `3.0.0` 到 npm `latest`，并同步 Python 版本与 GHCR 镜像 tag，
+因此本轮**不执行**原计划的 `3.0.0-next.0` → npm `next` → 7 天观察窗口路径。
+
+| 项目 | 原计划 | 实际执行 |
+|---|---|---|
+| npm 版本/标签 | `3.0.0-next.0` → `next` | `3.0.0` → `latest` |
+| 观察窗口 | 至少 7 天 | 跳过；以已通过的自动化矩阵 + Phase 3.3 host canary + Phase 4.1 tarball 门禁为依据 |
+| Python / 镜像 | 不在本阶段 | `pyproject.toml`、`__init__.py` 同步 `3.0.0`，打 `v3.0.0` 触发 GHCR `3.0.0/3.0/3/latest` |
+| Agent 配置 | canary 期间不改持久化配置 | 三个 host 改为 `npx -y oh-memos-mcp@3.0.0` |
+
+未被这次决定覆盖的风险，如实记录而不是宣称已消除：
+
+- 没有 registry `next` tarball 安装证据，也没有跨天的真实使用观察；`latest` 一旦移动，Node 18 用户
+  的 `npx -y oh-memos-mcp` 会立即失败，缓解手段是文档中已给出的 `oh-memos-mcp@2` 固定方式。
+- 三类 host 的真实握手在 Phase 3.3 中均为 legacy 2025-era；modern `2026-07-28` 仅由仓库内 v2
+  client/协议矩阵覆盖，不能据此声称 host 已普遍启用 modern wire。
+- `docs/CHANGELOG.md` 早期存在与本次发布无关的 `[3.0.0] - 2026-08-02` 旧编号条目，已在新条目中显式说明，
+  但历史条目未重新编号。
 
 ## Phase 0 结果
 

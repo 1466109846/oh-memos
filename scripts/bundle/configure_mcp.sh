@@ -38,7 +38,7 @@ CUBES_DIR="$BUNDLE_ROOT/data/oh-memos_cubes"
 # npx 是必需项：没有它下面生成的配置启动不了
 if ! command -v npx >/dev/null 2>&1; then
     echo -e "  ${YELLOW}[WARN] 未在 PATH 中找到 npx${NC}"
-    echo "  oh-memos MCP server 以 npm 包形式分发，需要 Node.js >= 18。"
+    echo "  oh-memos MCP server 以 npm 包形式分发，需要 Node.js >= 20。"
     echo "  请先安装 Node.js: https://nodejs.org/"
     echo "  安装后重新运行本脚本。配置仍会生成，但在装好 Node 之前无法启动。"
     echo ""

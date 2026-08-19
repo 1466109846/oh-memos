@@ -147,6 +147,36 @@ flowchart LR
 - 检索为混合排序：语义余弦（截断到 [0,1]）0.6 + 词法 0.4；维度不匹配的存量记录按词法参与；Ollama 不可用时自动回退纯词法。
 - 配置：`MEMOS_LITE_EMBED_URL`（默认 `http://127.0.0.1:11434`）、`MEMOS_LITE_EMBED_MODEL`（默认 `bge-m3`）、`MEMOS_LITE_EMBED=off` 显式关闭。
 
+## [3.0.0] - 2026-08-19
+
+### 💥 BREAKING — Node MCP 升级到 SDK v2 与双时代协议，运行时最低 Node.js 20
+
+本次发布把此前分叉的版本号统一：npm `oh-memos-mcp`、`pyproject.toml` / `src/oh_memos/__init__.py`、
+GHCR 镜像 tag 与 git tag 从本版起同为 `3.0.0`。
+（注意：本文件早期的 `[3.0.0] - 2026-08-02` 属于旧的「仅文档」编号线，与本条不是同一次发布。）
+
+#### 破坏性变更
+
+- **Node.js 20 是新的最低运行时**。仍在 Node 18 的用户请固定 `npx -y oh-memos-mcp@2`，升级运行时后再切回 `latest`。入口在动态加载 SDK/config 之前先检查 Node 主版本，以退出码 1 输出可执行的升级提示，而不是抛出难以定位的模块错误。
+- MCP 运行时从单体 `@modelcontextprotocol/sdk` v1 + Zod 3 换为角色拆分的 `@modelcontextprotocol/server@2` + Zod 4。
+
+#### 新增
+
+- **同一个 stdio 包同时服务两个协议时代**：通过 `serveStdio(..., { legacy: "serve" })`，既接受 legacy 2025-era 的 initialize 客户端，也接受固定到 MCP `2026-07-28` 的客户端。
+- 字符串化的 `tools/call` arguments 在时代分类和 schema 校验之前归一化，保留既有客户端兼容路径。
+- 发布门禁扩展为协议、生命周期、语义 schema 与包边界四类，覆盖 legacy/auto/modern 客户端、Full 与 Lite provider、16/17 工具面、大请求、probe 回退和进程优雅关闭。
+
+#### 迁移与兼容
+
+- **不需要数据迁移**。记忆、cube 与 Lite JSONL 的格式、工具名和输入 schema 全部不变，Agent 配置只需把包引用改成 `npx -y oh-memos-mcp`（或固定 `oh-memos-mcp@3.0.0`）。
+- 仍协商 2025-era 的客户端无需任何改动即可继续工作；采用 3.0 不要求客户端先迁移协议。
+- `2.x` 仍可从 npm 安装，本次发布不 unpublish、不 deprecate。
+
+#### 回滚
+
+- 把 Agent 配置固定回 `npx -y oh-memos-mcp@2.1.0` 即可；持久化格式未变，无需回滚数据。
+- 镜像可回退到 `ghcr.io/lsg1103275794/oh-memos:2.1.0`。
+
 ## [3.2.0] - 2026-08-15
 
 ### 🐳 Docker 化、GHCR 镜像发布与 Windows→Docker 全量数据迁移

@@ -72,7 +72,7 @@ The MCP server ships to npm as [`oh-memos-mcp`](https://www.npmjs.com/package/oh
 
 ## Full mode prerequisites | Full 重部署前置条件
 
-- Node.js ≥ 18
+- Node.js ≥ 20
 - For Full mode only: oh-memos backend running | the oh-memos backend running (`scripts/local/start.bat` → `http://localhost:18000`)
 
 **Full configuration | Full 配置**

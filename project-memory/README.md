@@ -287,7 +287,7 @@ cwd is not the project), and `MEMOS_ENABLE_DELETE=true` exposes `memos_delete`.
 ## Prerequisites
 
 - [oh-memos](https://github.com/lsg1103275794/oh-memos) API running at `127.0.0.1:18000`
-- Node.js 18+ for the MCP server (`npx -y oh-memos-mcp`)
+- Node.js 20+ for the MCP server (`npx -y oh-memos-mcp`)
 - Claude Code CLI
 
 ---

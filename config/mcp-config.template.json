@@ -1,5 +1,5 @@
 {
-  "_comment": "oh-memos MCP — 通用配置(推荐)。经 npx 拉取 npm 上的 oh-memos-mcp,无需本地编译。前提: (1) 本机已装 Node>=18; (2) API 已在 localhost:18000 启动(scripts/local/start.bat)。使用时把 ${BUNDLE_ROOT} 替换为你的 oh-memos 安装路径。若你在源码上开发、需要配置始终跟随本地改动,改用 mcp-config.node.template.json。",
+  "_comment": "oh-memos MCP — 通用配置(推荐)。经 npx 拉取 npm 上的 oh-memos-mcp,无需本地编译。前提: (1) 本机已装 Node>=20; (2) API 已在 localhost:18000 启动(scripts/local/start.bat)。使用时把 ${BUNDLE_ROOT} 替换为你的 oh-memos 安装路径。若你在源码上开发、需要配置始终跟随本地改动,改用 mcp-config.node.template.json。",
   "mcpServers": {
     "oh-memos": {
       "type": "stdio",

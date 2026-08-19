@@ -1,4 +1,4 @@
-__version__ = "2.1.0"
+__version__ = "3.0.0"
 
 from oh_memos.configs.mem_cube import GeneralMemCubeConfig
 from oh_memos.configs.mem_os import MOSConfig

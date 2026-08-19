@@ -8,16 +8,20 @@ MCP Server for **oh-memos** — Intelligent Persistent Memory for AI Assistants.
 
 Pure Node.js. No Python required. Works with `npx` out of the box.
 
-> **3.0 canary:** requires Node.js 20+, serves legacy 2025-era and MCP
-> `2026-07-28` clients from the same stdio package, and requires no data
-> migration. Install with `oh-memos-mcp@next`; npm `latest` remains on 2.1.x
-> during the observation window.
+> **3.0:** requires Node.js 20+, serves legacy 2025-era and MCP `2026-07-28`
+> clients from the same stdio package, and requires no data migration. Still on
+> Node 18? Pin `oh-memos-mcp@2` until you can upgrade the runtime.
 
 ---
 
 ## Prerequisites
 
 - **Node.js 20 or newer**
+
+```bash
+npx -y oh-memos-mcp        # 3.x, npm latest — needs Node.js 20+
+npx -y oh-memos-mcp@2      # 2.x maintenance line — still runs on Node.js 18
+```
 
 oh-memos backend API must be running before connecting this MCP server:
 
@@ -38,7 +42,7 @@ Add to your Claude Code `~/.claude/settings.json`:
   "mcpServers": {
     "oh-memos": {
       "command": "npx",
-      "args": ["-y", "oh-memos-mcp@next"],
+      "args": ["-y", "oh-memos-mcp"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
@@ -55,7 +59,7 @@ Or use a `.env` file in your working directory (the server auto-discovers it):
 ```bash
 cp node_modules/oh-memos-mcp/.env.example .env
 # Edit .env with your paths
-npx -y oh-memos-mcp@next
+npx -y oh-memos-mcp
 ```
 
 ---
@@ -69,7 +73,7 @@ npx -y oh-memos-mcp@next
   "mcpServers": {
     "oh-memos": {
       "command": "npx",
-      "args": ["-y", "oh-memos-mcp@next"],
+      "args": ["-y", "oh-memos-mcp"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
@@ -88,7 +92,7 @@ npx -y oh-memos-mcp@next
   "mcpServers": {
     "oh-memos": {
       "command": "npx",
-      "args": ["-y", "oh-memos-mcp@next"],
+      "args": ["-y", "oh-memos-mcp"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
@@ -107,7 +111,7 @@ npx -y oh-memos-mcp@next
   "mcpServers": {
     "oh-memos": {
       "command": "npx",
-      "args": ["-y", "oh-memos-mcp@next"],
+      "args": ["-y", "oh-memos-mcp"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
@@ -134,7 +138,7 @@ be deleted without a prompt; add it only if you have decided you want that.
     "oh-memos": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "oh-memos-mcp@next"],
+      "args": ["-y", "oh-memos-mcp"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",

@@ -12,7 +12,7 @@ memory into another.
 [![Docker](https://github.com/lsg1103275794/oh-memos/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/lsg1103275794/oh-memos/actions/workflows/docker-publish.yml)
 [![npm](https://img.shields.io/npm/v/oh-memos-mcp.svg?label=oh-memos-mcp)](https://www.npmjs.com/package/oh-memos-mcp)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](mcp-server-node/package.json)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](mcp-server-node/package.json)
 [![License](https://img.shields.io/badge/License-Apache--2.0-D22128)](LICENSE)
 
 English | [简体中文](README_CN.md) ·
@@ -66,7 +66,7 @@ extraction. Native Windows and host-database Docker are Full-mode variants.
 
 | Choose | Requires | Provides |
 |---|---|---|
-| **Lite** | Node.js 18+ | Local JSONL memory, typed save/list/get/search, canvas, lexical search, optional local Ollama embeddings |
+| **Lite** | Node.js 20+ | Local JSONL memory, typed save/list/get/search, canvas, lexical search, optional local Ollama embeddings |
 | **Full** | Docker Compose or native Python + Qdrant + Neo4j | API, semantic/vector search, graph relations, LLM extraction, Wiki round-trip, graph/admin operations |
 
 For the smallest setup, configure the MCP client with the `env` block below:
@@ -96,7 +96,7 @@ extraction. Native Windows and host-database Docker are Full-mode variants.
 
 | Choose | Requires | Provides |
 |---|---|---|
-| **Lite** | Node.js 18+ | Local JSONL memory, typed save/list/get/search, canvas, lexical search, optional local Ollama embeddings |
+| **Lite** | Node.js 20+ | Local JSONL memory, typed save/list/get/search, canvas, lexical search, optional local Ollama embeddings |
 | **Full** | Docker Compose or native Python + Qdrant + Neo4j | API, semantic/vector search, graph relations, LLM extraction, Wiki round-trip, graph/admin operations |
 
 For the smallest setup, configure the MCP client with the `env` block below:
@@ -122,7 +122,7 @@ the recommended choice for team use and graph-aware retrieval. See the full
 ### Prerequisites
 
 - Docker Desktop or Docker Engine with Compose v2
-- Node.js 18 or newer on the machine running the MCP client
+- Node.js 20 or newer on the machine running the MCP client
 - An OpenAI-compatible chat and embedding provider, or a local Ollama setup
 
 The published Docker image currently targets `linux/amd64`. The same Compose file

@@ -11,7 +11,7 @@ oh-memos 为兼容 MCP 的 AI 助手提供一个长期、可检索、按项目�
 [![Docker](https://github.com/lsg1103275794/oh-memos/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/lsg1103275794/oh-memos/actions/workflows/docker-publish.yml)
 [![npm](https://img.shields.io/npm/v/oh-memos-mcp.svg?label=oh-memos-mcp)](https://www.npmjs.com/package/oh-memos-mcp)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](mcp-server-node/package.json)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](mcp-server-node/package.json)
 [![License](https://img.shields.io/badge/License-Apache--2.0-D22128)](LICENSE)
 
 [English](README.md) | 简体中文 ·
@@ -63,7 +63,7 @@ Windows 和 host-db Docker 都属于 Full 的运行变体，不是第三种架�
 
 | 选择 | 需要 | 提供 |
 |---|---|---|
-| **Lite 轻部署** | Node.js 18+ | 本地 JSONL 记忆、typed save/list/get/search、canvas、词法检索，可选本地 Ollama embedding |
+| **Lite 轻部署** | Node.js 20+ | 本地 JSONL 记忆、typed save/list/get/search、canvas、词法检索，可选本地 Ollama embedding |
 | **Full 重部署** | Docker Compose，或 Python + Qdrant + Neo4j | API、语义/向量检索、关系图谱、LLM 抽取、Wiki 回灌、图谱和管理操作 |
 
 最小 Lite 配置如下（放入 MCP 客户端的 `env`）：
@@ -88,7 +88,7 @@ Lite 不需要 `MEMOS_URL`、Python、FastAPI、Neo4j 或 Qdrant。删除
 ### 前置条件
 
 - Docker Desktop，或 Docker Engine + Compose v2
-- 运行 MCP 客户端的机器安装 Node.js 18 或更高版本
+- 运行 MCP 客户端的机器安装 Node.js 20 或更高版本
 - 一个 OpenAI 兼容的聊天与 embedding 服务，或本地 Ollama
 
 当前发布的 Docker 镜像目标平台是 `linux/amd64`。也可以使用同一份

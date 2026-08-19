@@ -23,7 +23,7 @@ set "CUBES_DIR=%BUNDLE_ROOT_UNIX%/data/oh-memos_cubes"
 where npx >nul 2>&1
 if errorlevel 1 (
     echo   [WARN] npx not found on PATH
-    echo   The oh-memos MCP server ships as an npm package and needs Node.js ^>= 18.
+    echo   The oh-memos MCP server ships as an npm package and needs Node.js ^>= 20.
     echo   Install Node.js first: https://nodejs.org/
     echo   The config is still generated, but cannot start until Node is installed.
     echo.

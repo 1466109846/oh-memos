@@ -137,3 +137,24 @@
 - 使用独立 raw JSON-RPC 进程直接启动安装后的 `dist/index.js`，initialize、`tools/list`、`memos_save`、`memos_search`、`memos_get` 和同一记录 ID 回读全部通过。
 - 临时 pack/install/cube 路径已精确清理。首次 smoke 失败仅由 cwd 解析错误引起，修正后重跑通过。
 - Phase 4 registry `next` 发布、`npx @next` smoke 和至少 7 天观察窗口仍未执行；当前版本和 latest/next 状态保持不变。
+
+## Phase 4.2 / Phase 5：stable 3.0.0 发布准备（2026-08-19）
+
+维护者指示直接发布 stable `3.0.0`，跳过 npm `next` canary 与 7 天观察窗口。本次改动只涉及版本号、
+发布文档和兼容承诺，未修改任何 MCP 运行时代码、工具 schema 或持久化格式。
+
+- 版本号：`mcp-server-node/package.json` 与 lockfile `3.0.0-next.0` → `3.0.0`；
+  `pyproject.toml` 与 `src/oh_memos/__init__.py` `2.1.0` → `3.0.0`（GHCR workflow 的
+  version-check 要求 tag == pyproject == `__version__`）。
+- Node 20 文档门禁：根 `README.md`、`README_CN.md` 徽章与前置条件、`config/mcp-config*.template.json`
+  的 `Node>=18`、`docs/DEPLOYMENT_MODES.md`、`docs/MCP_GUIDE.md`、`scripts/bundle/configure_mcp.{bat,sh}`
+  以及两份 `project-memory/README.md` 全部从 Node 18 改为 Node 20；`mcp-server-node/README.md`
+  去掉 canary 横幅、`@next` 安装示例改为 `latest`，并新增 `oh-memos-mcp@2` 的 Node 18 固定示例。
+- CHANGELOG：`mcp-server-node/CHANGELOG.md` 的 `[3.0.0-next.0]` 改写为 `[3.0.0]`，
+  Breaking/Added/Migration/Rollback 四段齐全；根 `docs/CHANGELOG.md` 新增 `[3.0.0] - 2026-08-19`，
+  并显式说明它与旧编号线的 `[3.0.0] - 2026-08-02` 不是同一次发布。
+- 版本线分叉如实记录：`docs/CHANGELOG.md` 历史上已出现 `[3.0.0]`/`[3.2.0]`，而 git tag 与 GHCR
+  镜像 tag 一直跟随 pyproject（最新为 `2.1.0`/`2.1`/`2`/`latest`）。本次发布把 npm、Python、镜像和
+  git tag 统一到 `3.0.0`，历史条目未重新编号。
+- sed 曾把 `pyproject.toml` 与 `src/oh_memos/__init__.py` 的 CRLF 改成 LF，导致 240/20 行全文件 diff；
+  已 `git checkout` 还原后改用保留行尾的按字节替换，两个文件的 diff 收敛为 1/1 行。
