@@ -390,7 +390,7 @@ tool schema or public API changes.
 
 ## Upstream and license
 
-oh-memos builds on [MemTensor/oh-memos](https://github.com/MemTensor/oh-memos)
+oh-memos builds on [MemTensor/MemOS](https://github.com/MemTensor/MemOS)
 and extends it with project-oriented MCP workflows, retrieval, deployment, and
 agent integration.
 

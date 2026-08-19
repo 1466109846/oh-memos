@@ -6,7 +6,7 @@
 
 *�?AI 真正理解你的项目历史*
 
-[![oh-memos](https://img.shields.io/badge/Powered%20by-oh-memos-blue)](https://github.com/MemTensor/oh-memos)
+[![oh-memos](https://img.shields.io/badge/Powered%20by-oh-memos-blue)](https://github.com/lsg1103275794/oh-memos)
 [![Claude Code](https://img.shields.io/badge/For-Claude%20Code-orange)](https://claude.ai)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
@@ -286,7 +286,7 @@ project-memory/
 
 ## Prerequisites
 
-- [oh-memos](https://github.com/MemTensor/oh-memos) running at `localhost:18000`
+- [oh-memos](https://github.com/lsg1103275794/oh-memos) running at `localhost:18000`
 - Python 3.10+
 - Claude Code CLI
 
@@ -352,7 +352,7 @@ project-memory/
 
 ## Related Links
 
-- [oh-memos](https://github.com/MemTensor/oh-memos) - Memory backend
+- [oh-memos](https://github.com/lsg1103275794/oh-memos) - Memory backend
 - [Claude Code](https://claude.ai) - Anthropic CLI
 - [Full Examples](references/examples.md) - Memory format templates
 

@@ -387,7 +387,7 @@ Node 包附近补充测试；工具 schema 或公开 API 发生变化时，同�
 
 ## 上游与许可证
 
-oh-memos 基于 [MemTensor/oh-memos](https://github.com/MemTensor/oh-memos)，
+oh-memos 基于 [MemTensor/MemOS](https://github.com/MemTensor/MemOS)，
 并围绕项目级 MCP 工作流、检索、部署和 Agent 集成进行了扩展。
 
 本仓库采用 [Apache License 2.0](LICENSE)。
