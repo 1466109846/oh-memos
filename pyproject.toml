@@ -51,13 +51,11 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://oh-memos.openmem.net/"
-repository = "https://github.com/MemTensor/oh-memos"
-download = "https://pypi.org/project/MemoryOS/#files"
-changelog = "https://github.com/MemTensor/oh-memos/releases"
-releasenotes = "https://github.com/MemTensor/oh-memos/releases"
-documentation = "https://oh_memos-docs.openmem.net/home/overview/"
-issues = "https://github.com/MemTensor/oh-memos/issues"
+homepage = "https://github.com/lsg1103275794/oh-memos"
+repository = "https://github.com/lsg1103275794/oh-memos"
+changelog = "https://github.com/lsg1103275794/oh-memos/blob/main/docs/CHANGELOG.md"
+documentation = "https://lsg1103275794.github.io/oh-memos/"
+issues = "https://github.com/lsg1103275794/oh-memos/issues"
 
 [project.scripts]
 oh_memos = "oh_memos.cli:main"
