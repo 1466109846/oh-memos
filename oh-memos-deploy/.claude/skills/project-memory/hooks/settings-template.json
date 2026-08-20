@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_user_prompt.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_user_prompt.js",
             "timeout": 5
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_context_inject.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_context_inject.js",
             "timeout": 5
           }
         ]
@@ -29,17 +29,29 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_block_sensitive.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_block_sensitive.js",
             "timeout": 5
           }
         ]
       },
       {
-        "matcher": "tool == \"Bash\" && tool_input.command matches \"mkdir.*memory\"",
+        "_comment": "matcher must be the bare tool name. A value containing characters outside [A-Za-z0-9_-, |*] is treated as an unanchored regex against the TOOL NAME, so an expression like 'tool == \"Bash\" && ...' never matches and the hook silently never fires. Argument-level conditions belong in the script, or in the per-handler 'if' field.",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_block_mkdir_memory.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_block_mkdir_memory.js",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "_comment": "Blocks Claude Code's built-in file-based memory (~/.claude/projects/<proj>/memory/*.md) and points the agent at oh_memos_save instead. Must cover Edit as well as Write, or the agent just switches tool.",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_block_memory_write.js",
             "timeout": 5
           }
         ]
@@ -51,12 +63,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_log_commands.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_log_commands.js",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_save.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_auto_save.js",
             "timeout": 5
           }
         ]
@@ -66,12 +78,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_notify_milestone.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_notify_milestone.js",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_save.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_auto_save.js",
             "timeout": 5
           }
         ]
@@ -83,11 +95,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_pre_compact.js"
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_pre_compact.js"
           },
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_capture.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_auto_capture.js",
             "timeout": 5
           }
         ]
@@ -99,7 +111,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_capture.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_auto_capture.js",
             "timeout": 5
           }
         ]
@@ -111,7 +123,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_auto_capture.js",
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_auto_capture.js",
             "timeout": 5
           }
         ]
@@ -123,7 +135,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <MEMOS_PATH>/project-memory/hooks/node/oh_memos_session_start.js"
+            "command": "node <MEMOS_PATH>/.claude/skills/project-memory/hooks/node/oh_memos_session_start.js"
           }
         ]
       }

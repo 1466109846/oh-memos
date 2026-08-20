@@ -324,3 +324,22 @@ src/.env.bak*
 
 # Memory admin GUI: exported memory backups (may contain sensitive content)
 tools/memory-admin/backups/
+
+# Claude Code local session state: worktrees, transcripts, per-session settings.
+# Machine-specific and can hold credentials — never commit.
+#
+# Leading slash anchors this to the repo root ONLY. Without it the pattern also
+# swallows oh-memos-deploy/.claude/, which is the hook bundle that ships to
+# users and must stay tracked.
+/.claude/
+
+# Zed / zcode local scratch (plans, drafts)
+.zcode/
+
+# Local probe scripts: dot-prefixed one-off verification runs, not part of tests/
+.probe_*.py
+
+# Architecture visual-check output: regenerated screenshots from the
+# `visual-check` command. oh-memos.architecture.preview.png IS committed on
+# purpose; these per-viewport captures are artifacts.
+docs/architecture/*.visual-check.*.png

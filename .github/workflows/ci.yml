@@ -9,8 +9,33 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual trigger: lets a run be kicked off without an empty commit, and is the
+  # first thing to try after re-enabling Actions on the account.
+  workflow_dispatch:
 
 jobs:
+  hooks:
+    name: Hooks (matcher lint · deploy bundle sync)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # A hook `matcher` is evaluated against the TOOL NAME only. Anything
+      # containing a character outside [A-Za-z0-9_-, |*] is treated as an
+      # unanchored regex, so an expression matcher silently never fires — and a
+      # shipped template carrying that typo hands the dead hook to every user
+      # who copies it. This gate is cheap and catches the whole class.
+      - run: node scripts/lint-hook-matchers.mjs
+
+      # oh-memos-deploy/ ships a copy of the hook set. It previously drifted from
+      # project-memory/hooks/ (stale exit code, missing guard), so the copy is
+      # verified rather than trusted.
+      - run: node scripts/sync-deploy-hooks.mjs
+
   node:
     name: Node MCP (Node ${{ matrix.node }} · build · vitest · protocol)
     runs-on: ubuntu-latest

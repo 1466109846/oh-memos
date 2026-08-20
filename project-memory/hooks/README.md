@@ -150,8 +150,25 @@ Claude Code 2.x 自带一套 **file-based memory**。它的 system prompt 直接
 const ok = /^[A-Za-z0-9_\-, |*]*$/.test(matcher);  // false → 被当正则 → 极可能失效
 ```
 
-`settings-template.json` 里所有 matcher 都由
-`mcp-server-node/src/block-memory-write-hook.test.ts` 断言守着，防止这类 typo 回归。
+### CI 门禁
+
+两道门禁守着这类问题，CI 的 `hooks` job 会跑，本地也能直接跑：
+
+```bash
+node scripts/lint-hook-matchers.mjs    # 所有已跟踪 hook 配置的 matcher 合规性
+node scripts/sync-deploy-hooks.mjs     # deploy bundle 与本目录是否同步
+node scripts/sync-deploy-hooks.mjs --write   # 同步过去
+```
+
+`lint-hook-matchers.mjs` 只扫**已跟踪**文件 —— 发出去的才算数，编辑器本地配置
+（`.vscode/settings.json` 是 JSONC 不是 JSON，`.trae/` 整个被 ignore）不该产生噪音。
+它同时校验模板引用的脚本真实存在，避免改名后模板指向空文件。
+
+`oh-memos-deploy/.claude/skills/project-memory/hooks/` 是随发布走的副本。它曾经
+drift 过（留着旧 exit code、缺 memory 守卫），所以现在是**校验**而不是信任。
+
+`mcp-server-node/src/block-memory-write-hook.test.ts` 另有 16 项断言覆盖 hook 行为
+与本目录模板的 matcher。
 
 ## 阻断必须用 exit 2
 
