@@ -109,6 +109,7 @@ oh-memos provides Claude Code hooks in `project-memory/hooks/node/`. See `projec
 | `oh_memos_session_start.js` | SessionStart | Output CWD→cube_id mapping |
 | `oh_memos_user_prompt.js` | UserPromptSubmit | Smart intent detection, suggest oh-memos_search |
 | `oh_memos_block_mkdir_memory.js` | PreToolUse (Bash) | Block `mkdir.*memory` commands |
+| `oh_memos_block_memory_write.js` | PreToolUse (Write/Edit) | Block Claude Code built-in file-based memory (`~/.claude/projects/*/memory/*.md`), point at `oh_memos_save` |
 | `oh_memos_auto_save.js` | PostToolUse (Bash/Edit/Write) | Suggest memory type + project_path |
 | `oh_memos_notify_milestone.js` | PostToolUse (Edit/Write) | Suggest MILESTONE for important files |
 | `oh_memos_pre_compact.js` | PreCompact | Remind: use MCP oh-memos, not mkdir |
