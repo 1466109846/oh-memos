@@ -4,7 +4,16 @@
  * memos_search, memos_search, memos_suggest, memos_context_resume
  */
 
-import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, MEMOS_MODE, MEMOS_CUBES_DIR, logger } from "../config.js";
+import {
+  MEMOS_URL,
+  MEMOS_USER,
+  NEO4J_HTTP_URL,
+  NEO4J_USER,
+  NEO4J_PASSWORD,
+  MEMOS_MODE,
+  MEMOS_CUBES_DIR,
+  logger,
+} from "../config.js";
 import { getMemoryProvider } from "../providers/provider-factory.js";
 import { apiCallWithRetry, fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
@@ -27,12 +36,41 @@ import {
 import { suggestSearchQueries } from "../memory-analysis.js";
 import { summarizeActiveCanvases } from "./canvas.js";
 import { applyMemoryQualityPolicy } from "../memory-quality.js";
+import type { QualityOptions } from "../memory-quality.js";
+import { readAccessStats } from "../access-tracker.js";
+import {
+  buildSpreadCypher,
+  mergeSpread,
+  pickSeeds,
+  rankNeighbours,
+  rowToNeighbour,
+  spreadEnabled,
+  spreadRelativity,
+  toSpreadNode,
+} from "../spreading-activation.js";
 import type { TextContent, MemoryNode, SearchData } from "../types.js";
 import {
   apiErrorResponse,
   cubeRegistrationError,
   getCubeIdFromArgs,
 } from "./utils.js";
+
+/**
+ * 检索排序策略的选项。
+ *
+ * 抽成一处是因为五条检索路径（Lite / Full / context-search / 两条 fallback）
+ * 必须用同一套策略 —— 之前是同一段表达式复制五遍，改一处漏四处的风险很高。
+ *
+ * `accessStats` 每次现读：它来自本地侧车日志，读失败返回空 map，
+ * 因此不需要错误处理，也不会让检索失败。
+ */
+function qualityOptions(cubeId: string, query: string): QualityOptions {
+  return {
+    mode: MEMOS_MODE,
+    includeAutoCapture: /session|auto[-_ ]?capture/i.test(query),
+    accessStats: readAccessStats(MEMOS_CUBES_DIR, cubeId),
+  };
+}
 
 // ============================================================================
 // Temporal Graph Query (Neo4j)
@@ -41,14 +79,16 @@ import {
 export async function getTemporalMemories(
   cubeId: string,
   topK = 10,
-  timeWindowHours?: number
+  timeWindowHours?: number,
 ): Promise<MemoryNode[]> {
   if (!NEO4J_HTTP_URL || !NEO4J_USER || !NEO4J_PASSWORD) {
     logger.debug("Neo4j config missing, skipping temporal query");
     return [];
   }
 
-  const auth = Buffer.from(`${NEO4J_USER}:${NEO4J_PASSWORD}`).toString("base64");
+  const auth = Buffer.from(`${NEO4J_USER}:${NEO4J_PASSWORD}`).toString(
+    "base64",
+  );
 
   const timeFilter = timeWindowHours
     ? `AND n.updated_at >= datetime() - duration({hours: ${timeWindowHours}})`
@@ -85,19 +125,25 @@ export async function getTemporalMemories(
     });
 
     if (response.ok) {
-      const data = await response.json() as Record<string, unknown>;
-      const errors = data.errors as unknown[] ?? [];
+      const data = (await response.json()) as Record<string, unknown>;
+      const errors = (data.errors as unknown[]) ?? [];
       if (errors.length > 0) {
-        logger.warning(`Neo4j temporal query errors: ${JSON.stringify(errors)}`);
+        logger.warning(
+          `Neo4j temporal query errors: ${JSON.stringify(errors)}`,
+        );
         return [];
       }
 
-      const rows = ((data.results as Record<string, unknown>[])?.[0]?.data as Record<string, unknown>[] ?? []);
+      const rows =
+        ((data.results as Record<string, unknown>[])?.[0]?.data as Record<
+          string,
+          unknown
+        >[]) ?? [];
       const memories: MemoryNode[] = [];
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const r = row.row as unknown[] ?? [];
+        const r = (row.row as unknown[]) ?? [];
         if (r.length >= 4) {
           memories.push({
             id: String(r[0] ?? ""),
@@ -124,10 +170,97 @@ export async function getTemporalMemories(
   return [];
 }
 
+// ============================================================================
+// 一跳图扩散联想（P4）
+// ============================================================================
+
+/**
+ * 对已命中的候选集做一跳扩散，把强关联记忆并入结果。
+ *
+ * **默认关闭**（`MEMOS_SPREAD_ACTIVATION=true` 开启）。任何失败都返回原
+ * 候选集 —— 联想是增益不是必需，扩散失败不该让检索失败。
+ *
+ * 只在 Full 模式生效：Lite 无图，`NEO4J_HTTP_URL` 缺失时静默跳过。
+ * 设计取舍见 spreading-activation.ts 文件头。
+ */
+async function applySpreadingActivation(
+  data: SearchData,
+  cubeId: string,
+): Promise<SearchData> {
+  if (!spreadEnabled()) return data;
+  if (!NEO4J_HTTP_URL || !NEO4J_USER || !NEO4J_PASSWORD) return data;
+
+  const existing = extractSearchMemories(data);
+  const seeds = pickSeeds(existing);
+  if (seeds.length === 0) return data;
+
+  try {
+    const auth = Buffer.from(`${NEO4J_USER}:${NEO4J_PASSWORD}`).toString(
+      "base64",
+    );
+    const response = await fetchWithTimeout(NEO4J_HTTP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${auth}`,
+      },
+      body: JSON.stringify({
+        statements: [
+          {
+            statement: buildSpreadCypher(),
+            parameters: { seeds, user_name: cubeId },
+          },
+        ],
+      }),
+      timeoutMs: 10,
+    });
+    if (!response.ok) return data;
+
+    const payload = (await response.json()) as Record<string, unknown>;
+    if (((payload.errors as unknown[]) ?? []).length > 0) {
+      logger.warning(
+        `Spreading activation errors: ${JSON.stringify(payload.errors)}`,
+      );
+      return data;
+    }
+
+    const rows =
+      ((payload.results as Record<string, unknown>[])?.[0]?.data as Record<
+        string,
+        unknown
+      >[]) ?? [];
+    const neighbours = rows
+      .map((row) => rowToNeighbour((row.row as unknown[]) ?? []))
+      .filter((n): n is NonNullable<typeof n> => n !== null);
+    if (neighbours.length === 0) return data;
+
+    const spread = rankNeighbours(neighbours).map((n) =>
+      // relativity 依赖候选集：绝不压过任何直接命中（见 spreadRelativity）。
+      toSpreadNode(n, spreadRelativity(existing)),
+    );
+    const merged = mergeSpread(existing, spread);
+    logger.info(
+      `Spreading activation: ${seeds.length} seeds → +${merged.length - existing.length} memories`,
+    );
+    return {
+      text_mem: [
+        {
+          cube_id: "merged",
+          memories: merged,
+          _source: "spreading_activation",
+        },
+      ],
+    };
+  } catch (err) {
+    logger.error(`Spreading activation failed: ${err}`);
+    return data;
+  }
+}
+
 function mergeTemporalResults(
   searchData: SearchData,
   temporalMemories: MemoryNode[],
-  intent: string
+  intent: string,
 ): SearchData {
   if (temporalMemories.length === 0) return searchData;
 
@@ -177,7 +310,9 @@ function extractSearchMemories(data: SearchData): MemoryNode[] {
 // memos_search
 // ============================================================================
 
-export async function handleMemosSearch(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosSearch(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   // context provided → context-aware path (formerly the memos_search tool)
   const ctx = arguments_.context;
   if (Array.isArray(ctx) && ctx.length > 0) {
@@ -186,7 +321,10 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
 
   const cubeId = getCubeIdFromArgs(arguments_);
   const rawQuery = String(arguments_.query ?? "");
-  const topK = Math.min(Number(arguments_.top_k ?? 10), MEMOS_MODE === "lite" ? 20 : 100);
+  const topK = Math.min(
+    Number(arguments_.top_k ?? 10),
+    MEMOS_MODE === "lite" ? 20 : 100,
+  );
   const compact = arguments_.compact !== false;
 
   const [memType, cleanedQuery] = parseMemoryTypePrefix(rawQuery);
@@ -195,13 +333,31 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
 
   const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
   if (localProvider) {
-    let resultData = localProvider.toSearchData(cubeId, await localProvider.search(cubeId, query, topK));
+    let resultData = localProvider.toSearchData(
+      cubeId,
+      await localProvider.search(cubeId, query, topK),
+    );
     resultData = filterMemoriesByType(resultData, memType);
     resultData = applyKeywordRerank(resultData, query);
-    resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
+    resultData = applyMemoryQualityPolicy(
+      resultData,
+      qualityOptions(cubeId, query),
+    );
     const allMemories = extractSearchMemories(resultData);
     if (compact && shouldCompact(allMemories.length)) {
-      return [{ type: "text", text: compactedResultToText({ preview: allMemories.slice(0, PREVIEW_COUNT).map(toMinimal), totalCount: allMemories.length, omittedCount: Math.max(0, allMemories.length - PREVIEW_COUNT), message: 'Use memos_get(memory_id="<id>") for full details', query: rawQuery, cubeId }) }];
+      return [
+        {
+          type: "text",
+          text: compactedResultToText({
+            preview: allMemories.slice(0, PREVIEW_COUNT).map(toMinimal),
+            totalCount: allMemories.length,
+            omittedCount: Math.max(0, allMemories.length - PREVIEW_COUNT),
+            message: 'Use memos_get(memory_id="<id>") for full details',
+            query: rawQuery,
+            cubeId,
+          }),
+        },
+      ];
     }
     return [{ type: "text", text: formatMemoriesForDisplay(resultData) }];
   }
@@ -221,11 +377,12 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
         top_k: topK,
       },
     },
-    ensureCubeRegistered
+    ensureCubeRegistered,
   );
 
   if (apiResult.success && apiResult.data) {
-    let resultData = (apiResult.data as Record<string, unknown>).data as SearchData ?? {};
+    let resultData =
+      ((apiResult.data as Record<string, unknown>).data as SearchData) ?? {};
 
     // Temporal enhancement
     if (intent === "temporal") {
@@ -235,7 +392,11 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
       else if (/今天|today/i.test(query)) timeWindow = 24;
       else if (/本周|this\s*week|week/i.test(query)) timeWindow = 168;
 
-      const temporalMemories = await getTemporalMemories(cubeId, topK, timeWindow);
+      const temporalMemories = await getTemporalMemories(
+        cubeId,
+        topK,
+        timeWindow,
+      );
       resultData = mergeTemporalResults(resultData, temporalMemories, intent);
     }
 
@@ -243,7 +404,12 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
     resultData = filterMemoriesByType(resultData, memType);
     const keywordQuery = memType ? cleanedQuery : query;
     resultData = applyKeywordRerank(resultData, keywordQuery);
-    resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
+    resultData = applyMemoryQualityPolicy(
+      resultData,
+      qualityOptions(cubeId, query),
+    );
+    // 扩散在 policy 之后：种子应当是已排序的高分命中，而非原始候选。
+    resultData = await applySpreadingActivation(resultData, cubeId);
     const allMemories = extractSearchMemories(resultData);
     const totalCount = allMemories.length;
 
@@ -274,7 +440,12 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
 
     return [{ type: "text", text: formatted }];
   } else if (apiResult.data) {
-    return apiErrorResponse("Search", String((apiResult.data as Record<string, unknown>).message ?? "Unknown error"));
+    return apiErrorResponse(
+      "Search",
+      String(
+        (apiResult.data as Record<string, unknown>).message ?? "Unknown error",
+      ),
+    );
   } else {
     return apiErrorResponse("Search", `HTTP ${apiResult.status}`);
   }
@@ -284,7 +455,9 @@ export async function handleMemosSearch(arguments_: Record<string, unknown>): Pr
 // memos_search
 // ============================================================================
 
-export async function handleMemosSearchContext(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosSearchContext(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const rawQuery = String(arguments_.query ?? "");
   const context = (arguments_.context as Array<Record<string, string>>) ?? [];
@@ -292,7 +465,10 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
   const [memType, cleanedQuery] = parseMemoryTypePrefix(rawQuery);
   const query = cleanedQuery || rawQuery;
 
-  const contextText = context.slice(-5).map((m) => m.content ?? "").join(" ");
+  const contextText = context
+    .slice(-5)
+    .map((m) => m.content ?? "")
+    .join(" ");
   const intent = detectQueryIntent(`${query} ${contextText}`);
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
@@ -311,7 +487,7 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
     });
 
     if (response.ok) {
-      const data = await response.json() as Record<string, unknown>;
+      const data = (await response.json()) as Record<string, unknown>;
       if (data.code === 200) {
         const results: string[] = [];
         const intentDesc = getIntentDescription(intent);
@@ -321,18 +497,30 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
 
         if (intent === "temporal") {
           const temporalMemories = await getTemporalMemories(cubeId, 15);
-          resultData = mergeTemporalResults(resultData, temporalMemories, intent);
+          resultData = mergeTemporalResults(
+            resultData,
+            temporalMemories,
+            intent,
+          );
         }
 
         resultData = filterEdgesByIntent(resultData, intent);
         resultData = filterMemoriesByType(resultData, memType);
         const keywordQuery = memType ? cleanedQuery : query;
         resultData = applyKeywordRerank(resultData, keywordQuery);
-        resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
+        resultData = applyMemoryQualityPolicy(
+          resultData,
+          qualityOptions(cubeId, query),
+        );
+        // 扩散在 policy 之后：种子应当是已排序的高分命中，而非原始候选。
+        resultData = await applySpreadingActivation(resultData, cubeId);
         const formatted = formatMemoriesForDisplay(resultData);
 
         if (context.length > 0) {
-          results.push(`*Analyzed with ${context.length} context messages*`, "");
+          results.push(
+            `*Analyzed with ${context.length} context messages*`,
+            "",
+          );
         }
         results.push(formatted);
         return [{ type: "text", text: results.join("\n") }];
@@ -343,19 +531,34 @@ export async function handleMemosSearchContext(arguments_: Record<string, unknow
           `${MEMOS_URL}/search`,
           cubeId,
           { body: { user_id: MEMOS_USER, query, install_cube_ids: [cubeId] } },
-          ensureCubeRegistered
+          ensureCubeRegistered,
         );
         if (fallbackResult.success && fallbackResult.data) {
-          let resultData = (fallbackResult.data as Record<string, unknown>).data as SearchData ?? {};
+          let resultData =
+            ((fallbackResult.data as Record<string, unknown>)
+              .data as SearchData) ?? {};
           resultData = filterEdgesByIntent(resultData, intent);
           resultData = filterMemoriesByType(resultData, memType);
           const keywordQuery = memType ? cleanedQuery : query;
           resultData = applyKeywordRerank(resultData, keywordQuery);
-          resultData = applyMemoryQualityPolicy(resultData, { mode: MEMOS_MODE, includeAutoCapture: /session|auto[-_ ]?capture/i.test(query) });
+          resultData = applyMemoryQualityPolicy(
+            resultData,
+            qualityOptions(cubeId, query),
+          );
+          // 扩散在 policy 之后：种子应当是已排序的高分命中，而非原始候选。
+          resultData = await applySpreadingActivation(resultData, cubeId);
           const formatted = formatMemoriesForDisplay(resultData);
-          return [{ type: "text", text: `## Search Results (fallback)\n\n${formatted}` }];
+          return [
+            {
+              type: "text",
+              text: `## Search Results (fallback)\n\n${formatted}`,
+            },
+          ];
         }
-        return apiErrorResponse("Context search", String(data.message ?? "Unknown error"));
+        return apiErrorResponse(
+          "Context search",
+          String(data.message ?? "Unknown error"),
+        );
       }
     } else {
       return apiErrorResponse("Context search", `HTTP ${response.status}`);
@@ -398,19 +601,26 @@ const MEMORY_TYPE_DECISION_TREE = [
   "按那个处境选类型,而不是按写它时的心情。",
 ].join("\n");
 
-export async function handleMemosSuggest(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosSuggest(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const context = String(arguments_.context ?? "");
   const suggestions = suggestSearchQueries(context);
 
   const parts: string[] = [];
 
   if (suggestions.length > 0) {
-    parts.push("## 🔍 Suggested Searches\n", "Based on your context, try these searches:\n");
+    parts.push(
+      "## 🔍 Suggested Searches\n",
+      "Based on your context, try these searches:\n",
+    );
     for (let i = 0; i < suggestions.length; i++) {
       parts.push(`${i + 1}. \`${suggestions[i]}\``);
     }
   } else {
-    parts.push("No specific suggestions. Try searching with keywords from your context.");
+    parts.push(
+      "No specific suggestions. Try searching with keywords from your context.",
+    );
   }
 
   parts.push("", "---", "", MEMORY_TYPE_DECISION_TREE);
@@ -418,20 +628,35 @@ export async function handleMemosSuggest(arguments_: Record<string, unknown>): P
   return [{ type: "text", text: parts.join("\n") }];
 }
 
-function renderContextResume(cubeId: string, recentMemories: MemoryNode[]): TextContent[] {
+function renderContextResume(
+  cubeId: string,
+  recentMemories: MemoryNode[],
+): TextContent[] {
   const lines = ["## Context Resumed", ""];
   const canvasLines = summarizeActiveCanvases(cubeId);
   if (canvasLines.length > 0) lines.push(...canvasLines);
   if (recentMemories.length > 0) {
-    lines.push(`**Recent memories** (${recentMemories.length} items, last 24h):`, "");
-    for (let i = 0; i < Math.min(recentMemories.length, 10); i++) lines.push(`${i + 1}. ${(recentMemories[i].memory ?? "").slice(0, 120).split("\n")[0]}`);
+    lines.push(
+      `**Recent memories** (${recentMemories.length} items, last 24h):`,
+      "",
+    );
+    for (let i = 0; i < Math.min(recentMemories.length, 10); i++)
+      lines.push(
+        `${i + 1}. ${(recentMemories[i].memory ?? "").slice(0, 120).split("\n")[0]}`,
+      );
   } else lines.push("No recent memories found in this cube.");
-  lines.push("", "---", "**REMINDER**: Use MCP memos tools for ALL memory operations.", "NEVER use `mkdir` or `Write` to create memory files.");
+  lines.push(
+    "",
+    "---",
+    "**REMINDER**: Use MCP memos tools for ALL memory operations.",
+    "NEVER use `mkdir` or `Write` to create memory files.",
+  );
   return [{ type: "text", text: lines.join("\n") }];
 }
 
-
-export async function handleMemosContextResume(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosContextResume(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
   if (localProvider) {
@@ -452,10 +677,12 @@ export async function handleMemosContextResume(arguments_: Record<string, unknow
       `${MEMOS_URL}/memories`,
       cubeId,
       { params: { user_id: MEMOS_USER, mem_cube_id: cubeId, limit: 10 } },
-      ensureCubeRegistered
+      ensureCubeRegistered,
     );
     if (result.success && result.data) {
-      recentMemories = extractSearchMemories((result.data as Record<string, unknown>).data as SearchData ?? {});
+      recentMemories = extractSearchMemories(
+        ((result.data as Record<string, unknown>).data as SearchData) ?? {},
+      );
     }
   }
 
@@ -468,7 +695,10 @@ export async function handleMemosContextResume(arguments_: Record<string, unknow
   if (canvasLines.length > 0) lines.push(...canvasLines);
 
   if (recentMemories.length > 0) {
-    lines.push(`**Recent memories** (${recentMemories.length} items, last 24h):`, "");
+    lines.push(
+      `**Recent memories** (${recentMemories.length} items, last 24h):`,
+      "",
+    );
     for (let i = 0; i < Math.min(recentMemories.length, 10); i++) {
       const mem = recentMemories[i];
       const content = mem.memory ?? "";
@@ -481,7 +711,9 @@ export async function handleMemosContextResume(arguments_: Record<string, unknow
   }
 
   lines.push("---");
-  lines.push("**REMINDER**: Use MCP memos tools (`memos_save`, `memos_search`) for ALL memory operations.");
+  lines.push(
+    "**REMINDER**: Use MCP memos tools (`memos_save`, `memos_search`) for ALL memory operations.",
+  );
   lines.push("NEVER use `mkdir` or `Write` to create memory files.");
 
   return [{ type: "text", text: lines.join("\n") }];

@@ -3,7 +3,13 @@
  */
 
 import { extractMcpType } from "./query-processing.js";
-import type { MemoryNode, MemoryMinimal, MemoryBrief, MemoryFull } from "./types.js";
+import { memoryAnnotations } from "./formatters.js";
+import type {
+  MemoryNode,
+  MemoryMinimal,
+  MemoryBrief,
+  MemoryFull,
+} from "./types.js";
 
 // ============================================================================
 // Compaction Configuration
@@ -41,38 +47,48 @@ export function getTypeIcon(memoryType: string): string {
 // Conversion Utilities
 // ============================================================================
 
-export function toMinimal(memory: MemoryNode | Record<string, unknown>): MemoryMinimal {
+export function toMinimal(
+  memory: MemoryNode | Record<string, unknown>,
+): MemoryMinimal {
   const memoryType = extractMcpType(memory as MemoryNode);
-  const content = (memory as MemoryNode).memory ?? (memory as Record<string, unknown>).content as string ?? "";
+  const content =
+    (memory as MemoryNode).memory ??
+    ((memory as Record<string, unknown>).content as string) ??
+    "";
   const cleanContent = content.replace(/^\[[A-Z_]+\]\s*/, "");
 
   const lines = cleanContent.split("\n").filter((l) => l.trim());
   const firstLine = lines[0] ?? cleanContent;
-  const summary = firstLine.length > 100 ? firstLine.slice(0, 100) + "..." : firstLine;
+  const summary =
+    firstLine.length > 100 ? firstLine.slice(0, 100) + "..." : firstLine;
 
   const meta = (memory as MemoryNode).metadata ?? {};
   const created =
     (memory as MemoryNode).updated_at ??
     (memory as MemoryNode).created_at ??
-    meta.updated_at as string ??
-    meta.created_at as string;
+    (meta.updated_at as string) ??
+    (meta.created_at as string);
 
+  const annotations = memoryAnnotations(meta);
   return {
     id: (memory as MemoryNode).id ?? "",
     memoryType,
     summary,
     createdAt: created,
+    ...(annotations ? { annotations } : {}),
   };
 }
 
-export function toBrief(memory: MemoryNode | Record<string, unknown>): MemoryBrief {
+export function toBrief(
+  memory: MemoryNode | Record<string, unknown>,
+): MemoryBrief {
   const minimal = toMinimal(memory);
   const meta = (memory as MemoryNode).metadata ?? {};
-  const rawTags = (memory as MemoryNode).tags ?? meta.tags as string[] ?? [];
+  const rawTags = (memory as MemoryNode).tags ?? (meta.tags as string[]) ?? [];
 
   return {
     ...minimal,
-    key: (memory as MemoryNode).key ?? meta.key as string,
+    key: (memory as MemoryNode).key ?? (meta.key as string),
     tags: Array.isArray(rawTags) ? rawTags.map(String) : [],
     relevance: (meta.relativity as number) ?? 1.0,
   };
@@ -81,20 +97,25 @@ export function toBrief(memory: MemoryNode | Record<string, unknown>): MemoryBri
 export function toFull(
   memory: MemoryNode | Record<string, unknown>,
   cubeId = "",
-  userId = ""
+  userId = "",
 ): MemoryFull {
   const brief = toBrief(memory);
   const meta = (memory as MemoryNode).metadata ?? {};
-  const content = (memory as MemoryNode).memory ?? (memory as Record<string, unknown>).content as string ?? "";
+  const content =
+    (memory as MemoryNode).memory ??
+    ((memory as Record<string, unknown>).content as string) ??
+    "";
   const cleanContent = content.replace(/^\[[A-Z_]+\]\s*/, "");
 
   return {
     ...brief,
     content: cleanContent,
-    background: (memory as MemoryNode).background ?? meta.background as string,
+    background:
+      (memory as MemoryNode).background ?? (meta.background as string),
     cubeId,
     userId,
-    relations: (memory as Record<string, unknown>).relations as unknown[] ?? [],
+    relations:
+      ((memory as Record<string, unknown>).relations as unknown[]) ?? [],
   };
 }
 
@@ -111,7 +132,9 @@ export interface CompactedSearchResultData {
   cubeId: string;
 }
 
-export function compactedResultToText(result: CompactedSearchResultData): string {
+export function compactedResultToText(
+  result: CompactedSearchResultData,
+): string {
   const lines = [
     "## 🔍 Search Results (Compacted)",
     "",
@@ -127,13 +150,15 @@ export function compactedResultToText(result: CompactedSearchResultData): string
     const mem = result.preview[i];
     const icon = getTypeIcon(mem.memoryType);
     lines.push(`${i + 1}. ${icon} **[${mem.memoryType}]** ${mem.summary}`);
-    lines.push(`   ID: \`${mem.id}\``);
+    lines.push(`   ID: \`${mem.id}\`${mem.annotations ?? ""}`);
     lines.push("");
   }
 
   lines.push("---");
   lines.push("");
-  lines.push('💡 **Tip**: Use `memos_get(memory_id="<id>")` to get full details of a specific memory.');
+  lines.push(
+    '💡 **Tip**: Use `memos_get(memory_id="<id>")` to get full details of a specific memory.',
+  );
 
   return lines.join("\n");
 }

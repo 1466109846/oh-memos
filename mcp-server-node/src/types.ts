@@ -85,7 +85,8 @@ export interface MemosConfig {
 // Query Processing Types
 // ============================================================================
 
-export type QueryIntent = "causal" | "related" | "conflict" | "temporal" | "default";
+export type QueryIntent =
+  "causal" | "related" | "conflict" | "temporal" | "default";
 
 export interface QueryProcessingResult {
   intent: QueryIntent;
@@ -103,6 +104,13 @@ export interface MemoryMinimal {
   memoryType: string;
   summary: string;
   createdAt?: string;
+  /**
+   * 检索期注解（access_count / stale / folded）。空串表示无。
+   *
+   * compact 输出走 toMinimal，它原本丢掉整个 metadata —— 而 compact 恰恰在
+   * 结果量大时触发，正是最需要这些信号的场合。
+   */
+  annotations?: string;
 }
 
 export interface MemoryBrief extends MemoryMinimal {

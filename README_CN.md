@@ -53,6 +53,10 @@ AI 助手在一次对话里可以很好地推理，但真实项目远比一个�
 | **写入闭环** | 记忆写入返回新 ID，并接受来源、置信度、生命周期元数据；Wiki 回灌会保留这些字段 |
 | **本地优先部署** | FastAPI、Qdrant、Neo4j 均可本地运行；模型既可使用 Ollama，也可使用 OpenAI 兼容 API |
 | **本地 Lite provider** | `MEMOS_MODE=lite` 或 `MEMOS_PROVIDER=local` 使用每 cube JSONL；默认词法检索，可选接本地 Ollama embedding 做混合语义排序，不需要 Python API 或 Neo4j |
+| **会衰减的排序** | 按类型分档的指数衰减（`PROGRESS` 14 天 … `DECISION` 1095 天），叠加访问强化 —— 反复打开的记忆留在前列，长期不用的自然下沉 |
+| **近重复折叠** | 字符 n-gram 相似度 + 按类型分档的阈值，措辞略异的同义记忆不再挤占 `top_k`。对中文友好：不依赖分词 |
+| **图扩散联想** | 可选的一跳图联想（`MEMOS_SPREAD_ACTIVATION=true`）：命中后沿 `CAUSE`/`CONDITION`/`RELATE` 边带回强关联记忆，标明经由哪条边，且恒排在直接命中之后 |
+| **可读的结果** | 结果行附带真正起作用的信号 —— `access_count`、`stale`、被折叠的重复 id、以及联想来源 `via CAUSE from …` —— 让助手分得清证据与旁证 |
 
 ## 选择部署架构
 
@@ -378,12 +382,12 @@ Docker 发布工作流还会导入 API、检查依赖、确认 CPU-only Torch �
 更新日志每条标题下的 `<!-- en: ... -->` 注释。
 
 <!-- changelog-recent:start -->
-- 🔁 新增 `memos_import_wiki`：Markdown Wiki 往返回灌
-- 🧭 架构感知图谱与 Graphify 适配层
-- 🧠 自动捕获、检索质量层、Lite 策略与 Skill 候选
-- 🧾 写入 ID 与元数据闭环
-- 🛡️ 一致性与部署硬化
-- ✅ 审核生命周期与能力边界硬化
+- `3.1.0 · 2026-08-22` — 🧠 检索排序：衰减、强化、分档去重与图扩散联想
+- `3.1.0 · 2026-08-22` — 🔁 新增 `memos_import_wiki`：Markdown Wiki 往返回灌
+- `3.1.0 · 2026-08-22` — 🧭 架构感知图谱与 Graphify 适配层
+- `3.1.0 · 2026-08-22` — 🧠 自动捕获、检索质量层、Lite 策略与 Skill 候选
+- `3.1.0 · 2026-08-22` — 🧾 写入 ID 与元数据闭环
+- `3.1.0 · 2026-08-22` — 🛡️ 一致性与部署硬化
 <!-- changelog-recent:end -->
 
 完整历史见[更新日志](docs/CHANGELOG.md)，计划中的能力见

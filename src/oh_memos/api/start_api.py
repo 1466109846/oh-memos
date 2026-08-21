@@ -16,7 +16,11 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
 from oh_memos.api.config import APIConfig
-from oh_memos.api.handlers.graph_handler import GraphHandler, HandlerDependencies
+from oh_memos.api.handlers.graph_handler import (
+    GraphHandler,
+    HandlerDependencies,
+    neo4j_schema_stats,
+)
 from oh_memos.api.middleware.request_context import RequestContextMiddleware
 from oh_memos.api.product_models import (
     APIAddRelationRequest,
@@ -1016,7 +1020,10 @@ async def trace_path(req: APITracePathRequest):
 async def get_graph_schema(req: APISchemaRequest):
     """Get graph schema and statistics."""
     handler = get_graph_handler()
-    return handler.handle_get_graph_schema(req)
+    # 方法名此前写作 handle_get_graph_schema，GraphHandler 上并不存在该属性，
+    # 这个端点因此恒返回 500（实测：'GraphHandler' object has no attribute
+    # 'handle_get_graph_schema'）。真实方法名是 handle_export_schema。
+    return handler.handle_export_schema(req)
 
 
 @app.post("/product/graph/relation", summary="Add graph relation", response_model=SimpleResponse)
@@ -1384,7 +1391,12 @@ async def export_schema(req: APISchemaRequest):
             stats = graph_db.get_schema_stats(sample_size=req.sample_size)
         else:
             # Fallback: direct Neo4j query (run in thread to avoid blocking event loop)
-            stats = await asyncio.to_thread(_neo4j_get_schema_stats, req.sample_size)
+            # 传 mem_cube_id：统计必须按 cube 收敛。此前只传 sample_size，
+            # cube 信息在调用边界丢失，导致返回全库合计（实测某 cube 6534 节点
+            # 却报 7878 = 所有 cube 之和），跨 cube 串味且数字无法用于诊断。
+            stats = await asyncio.to_thread(
+                _neo4j_get_schema_stats, req.sample_size, req.mem_cube_id
+            )
 
         return SchemaResponse(
             code=200,
@@ -1441,72 +1453,16 @@ def _neo4j_find_path(source_id: str, target_id: str, max_depth: int) -> dict:
     return {"path_found": False, "paths": []}
 
 
-def _neo4j_get_schema_stats(sample_size: int) -> dict:
-    """Fallback: Direct Neo4j query for schema stats."""
-    import httpx
+def _neo4j_get_schema_stats(sample_size: int, mem_cube_id: str | None = None) -> dict:
+    """委托给 graph_handler.neo4j_schema_stats —— 唯一实现。
 
-    neo4j_url = os.environ.get("NEO4J_HTTP_URL", "http://localhost:7474/db/neo4j/tx/commit")
-    neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
-    neo4j_password = os.environ.get("NEO4J_PASSWORD", "12345678")
+    此前 start_api 与 graph_handler 各有一份逐行重复的实现，两份**各自**
+    漏掉了度数统计（avg/max/orphan 恒为 0）与 cube 过滤（返回全库合计）。
+    重复本身就是缺陷成因，所以收敛为一份，放在 handler 层。
 
-    stats = {
-        "total_nodes": 0,
-        "total_edges": 0,
-        "edge_types": {},
-        "memory_types": {},
-        "top_tags": [],
-        "avg_connections": 0.0,
-        "max_connections": 0,
-        "orphan_nodes": 0,
-        "time_range": {}
-    }
-
-    try:
-        # Get node count
-        response = httpx.post(
-            neo4j_url,
-            json={"statements": [{"statement": "MATCH (n:Memory) RETURN count(n) as cnt"}]},
-            auth=(neo4j_user, neo4j_password),
-            timeout=30
-        )
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("results", [{}])[0].get("data", [])
-            if results:
-                stats["total_nodes"] = results[0].get("row", [0])[0]
-
-        # Get edge count
-        response = httpx.post(
-            neo4j_url,
-            json={"statements": [{"statement": "MATCH ()-[r]->() RETURN count(r) as cnt"}]},
-            auth=(neo4j_user, neo4j_password),
-            timeout=30
-        )
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("results", [{}])[0].get("data", [])
-            if results:
-                stats["total_edges"] = results[0].get("row", [0])[0]
-
-        # Get edge type distribution
-        response = httpx.post(
-            neo4j_url,
-            json={"statements": [{"statement": "MATCH ()-[r]->() RETURN type(r) as t, count(r) as cnt"}]},
-            auth=(neo4j_user, neo4j_password),
-            timeout=30
-        )
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("results", [{}])[0].get("data", [])
-            for r in results:
-                row = r.get("row", [])
-                if len(row) >= 2:
-                    stats["edge_types"][row[0]] = row[1]
-
-    except Exception as e:
-        logger.error(f"Neo4j schema query error: {e}")
-
-    return stats
+    import 方向安全：start_api 本就 import graph_handler，反向无引用。
+    """
+    return neo4j_schema_stats(sample_size, mem_cube_id)
 
 
 @app.post("/chat", summary="Chat with MemOS", response_model=ChatResponse)

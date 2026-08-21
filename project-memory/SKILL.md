@@ -158,6 +158,42 @@ Neo4j node count and Qdrant point count for the same cube are **expected to
 differ** — Qdrant stores chunked vectors, so one memory can map to several
 points. Only a column being empty indicates orphaned data.
 
+### Memory tiers — `WorkingMemory` is hidden by default
+
+The API writes **two nodes per saved memory**: a `LongTermMemory` graph node
+and a short-lived `WorkingMemory` copy with identical text (the scheduler
+evicts the latter FIFO). Both are needed — the short tier serves "what we just
+discussed", the long tier persists.
+
+Search and `memos_list_v2` **hide the `WorkingMemory` tier**, so one saved
+memory shows up once. If you ever see paired duplicates, that is the tier
+leaking through, not a double write — do not "deduplicate" them.
+Set `MEMOS_SHOW_WORKING_MEMORY=true` only to debug the scheduler.
+
+`metadata.memory_type` (the tier: WorkingMemory / LongTermMemory / UserMemory)
+and `metadata.type` (the business type: DECISION / BUGFIX / …) are **two
+orthogonal axes**. Confusing them is the most common mistake here.
+
+---
+
+## Result annotations
+
+Search results append signals after the ID when they carry information.
+A clean, never-read, fresh memory shows a bare `` ID: `abc123` ``.
+
+| Annotation | Meaning | What to do |
+|---|---|---|
+| `access_count 4` | You opened this memory with `memos_get` 4 times | Higher count = repeatedly useful. Weak reliability signal |
+| `stale` | Older than a year (by `updated_at`) | Verify before relying on it; config and code may have moved on |
+| `expired` | Past its `expires_at` | Treat as historical record, not current truth |
+| `folded 2: id-a, id-b` | 2 near-duplicates were collapsed into this one | Use `memos_get` on those ids if you need the variants |
+| `via CAUSE from 49b59302` | **Not a direct match** — reached by spreading one hop from memory `49b59302` along a CAUSE edge | Side evidence. Useful context, but it did not match your query |
+
+`via …` deserves attention: those entries are associations, not answers.
+They always rank below every direct match. Edge types are `CAUSE` >
+`CONDITION` > `RELATE` in priority. Requires `MEMOS_SPREAD_ACTIVATION=true`
+and Full mode (Lite has no graph).
+
 ---
 
 ## Proactive Triggers (Use MCP Automatically!)
@@ -405,6 +441,8 @@ Tags: gotcha, {category}
 | `MEMOS_CUBES_DIR` | *(required)* | Absolute path to the cube directory; must match the API's |
 | `MEMOS_ENV_FILE` | — | Explicit `.env` location for the MCP server (needed under `npx`, where cwd is not the project) |
 | `MEMOS_ENABLE_DELETE` | `false` | Exposes `memos_delete`; leave off unless the user asks |
+| `MEMOS_SPREAD_ACTIVATION` | `false` | One-hop graph spreading activation (Full mode only). Brings back up to 12 related memories along CAUSE/CONDITION/RELATE edges |
+| `MEMOS_SHOW_WORKING_MEMORY` | `false` | Show the scheduler-managed `WorkingMemory` tier. Hidden by default — those are short-lived duplicates of `LongTermMemory` |
 
 `MEMOS_URL`, `MEMOS_USER`, `MEMOS_DEFAULT_CUBE` and `MEMOS_CUBES_DIR` are all
 **required** by the MCP server — it exits if any is missing.

@@ -56,6 +56,10 @@ reconstructed from files.
 | **Write-back contract** | Memory writes return created IDs and accept source/confidence/lifecycle metadata; Wiki imports preserve that metadata |
 | **Local-first deployment** | FastAPI, Qdrant, and Neo4j run locally; models can be local through Ollama or remote through an OpenAI-compatible API |
 | **Local Lite provider** | `MEMOS_MODE=lite` or `MEMOS_PROVIDER=local` stores typed memories in per-cube JSONL; lexical search by default, optional hybrid semantic ranking via a local Ollama embedding model — no Python API or Neo4j required |
+| **Ranking that decays** | Exponential decay with per-type half-lives (`PROGRESS` 14 days … `DECISION` 1095), plus access reinforcement — memories you keep opening stay near the top, unused ones sink |
+| **Near-duplicate folding** | Character n-gram similarity with per-type thresholds, so reworded copies of the same note stop crowding out `top_k`. CJK-safe: no word segmentation involved |
+| **Spreading activation** | Optional one-hop graph association (`MEMOS_SPREAD_ACTIVATION=true`): a hit pulls in strongly related memories along `CAUSE`/`CONDITION`/`RELATE` edges, tagged with the edge they came from and always ranked below direct matches |
+| **Legible results** | Result lines carry the signals that mattered — `access_count`, `stale`, folded duplicate IDs, and `via CAUSE from …` for associations — so an assistant can tell evidence from side evidence |
 
 ## Choose a deployment architecture
 
@@ -377,12 +381,12 @@ The six most recent entries from the [changelog](docs/CHANGELOG.md), generated b
 from the `<!-- en: ... -->` comment under each changelog heading.
 
 <!-- changelog-recent:start -->
-- 🔁 New `memos_import_wiki`: round-trip Markdown wiki back into memory
-- 🧭 Architecture-aware graph and Graphify adapter layer
-- 🧠 Auto-capture, retrieval quality layer, Lite policy, and skill candidates
-- 🧾 Write-back contract: created IDs and metadata round-trip
-- 🛡️ Consistency and deployment hardening
-- ✅ Review lifecycle and capability-boundary hardening
+- `3.1.0 · 2026-08-22` — 🧠 Retrieval ranking: decay, reinforcement, tiered dedupe, spreading activation
+- `3.1.0 · 2026-08-22` — 🔁 New `memos_import_wiki`: round-trip Markdown wiki back into memory
+- `3.1.0 · 2026-08-22` — 🧭 Architecture-aware graph and Graphify adapter layer
+- `3.1.0 · 2026-08-22` — 🧠 Auto-capture, retrieval quality layer, Lite policy, and skill candidates
+- `3.1.0 · 2026-08-22` — 🧾 Write-back contract: created IDs and metadata round-trip
+- `3.1.0 · 2026-08-22` — 🛡️ Consistency and deployment hardening
 <!-- changelog-recent:end -->
 
 See the [changelog](docs/CHANGELOG.md) for the full history and the

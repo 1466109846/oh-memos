@@ -1,6 +1,6 @@
 {
   "name": "oh-memos-mcp",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "MCP Server for oh-memos — Intelligent Memory Management (Node.js, no Python required)",
   "type": "module",
   "main": "dist/index.js",
@@ -21,6 +21,7 @@
     "test:protocol": "npm run build && node scripts/protocol-smoke.mjs && node scripts/protocol-v2-smoke.mjs",
     "test:protocol:v2": "npm run build && node scripts/protocol-v2-smoke.mjs",
     "test:lite-smoke": "npm run build && node scripts/lite-smoke-test.mjs",
+    "test:spread-smoke": "npm run build && node scripts/spread-smoke-test.mjs",
     "schema:semantic": "npm run build && node scripts/schema-semantic-snapshot.mjs --check",
     "schema:semantic:freeze": "npm run build && node scripts/schema-semantic-snapshot.mjs --write",
     "test:pack": "node scripts/pack-contract.mjs",

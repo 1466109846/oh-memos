@@ -4,11 +4,22 @@
  * memos_graph(mode="path"), memos_graph(mode="related"), memos_graph(mode="schema"), memos_graph(mode="impact")
  */
 
-import { MEMOS_URL, MEMOS_USER, NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD, logger, registeredCubes } from "../config.js";
+import {
+  MEMOS_URL,
+  MEMOS_USER,
+  NEO4J_HTTP_URL,
+  NEO4J_USER,
+  NEO4J_PASSWORD,
+  logger,
+  registeredCubes,
+} from "../config.js";
 import { fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { formatProvenance } from "../graph-provenance.js";
-import { buildGraphImportPlan, renderGraphImportPlan } from "../graphify-import.js";
+import {
+  buildGraphImportPlan,
+  renderGraphImportPlan,
+} from "../graphify-import.js";
 import {
   detectQueryIntent,
   extractMemoriesFromResponse,
@@ -36,38 +47,60 @@ import {
  * cannot make the server read arbitrary local files.  Applying the plan to a
  * database is intentionally a separate future step.
  */
-export function handleMemosGraphifyImport(arguments_: Record<string, unknown>): TextContent[] {
+export function handleMemosGraphifyImport(
+  arguments_: Record<string, unknown>,
+): TextContent[] {
   const raw = arguments_.graph_json;
-  if (raw === undefined || raw === null || (typeof raw === "string" && !raw.trim())) {
+  if (
+    raw === undefined ||
+    raw === null ||
+    (typeof raw === "string" && !raw.trim())
+  ) {
     return errorResponse(
       "graph_json is required for Graphify import dry-run",
       ERR_PARAM_MISSING,
-      ["Pass the contents of Graphify graph.json as graph_json", "No database write occurs in this mode"],
+      [
+        "Pass the contents of Graphify graph.json as graph_json",
+        "No database write occurs in this mode",
+      ],
     );
   }
 
   let parsed: unknown = raw;
   if (typeof raw === "string") {
     if (raw.length > 5_000_000) {
-      return errorResponse("graph_json exceeds the 5 MB safety limit", "PARAM_INVALID");
+      return errorResponse(
+        "graph_json exceeds the 5 MB safety limit",
+        "PARAM_INVALID",
+      );
     }
     try {
       parsed = JSON.parse(raw) as unknown;
     } catch (err) {
-      return errorResponse(`graph_json is not valid JSON: ${String(err)}`, "PARAM_INVALID");
+      return errorResponse(
+        `graph_json is not valid JSON: ${String(err)}`,
+        "PARAM_INVALID",
+      );
     }
   }
 
   try {
     const plan = buildGraphImportPlan(parsed, {
-      projectKey: typeof arguments_.project_key === "string" ? arguments_.project_key : undefined,
+      projectKey:
+        typeof arguments_.project_key === "string"
+          ? arguments_.project_key
+          : undefined,
     });
     return [{ type: "text", text: renderGraphImportPlan(plan) }];
   } catch (err) {
-    return errorResponse(`Graphify import validation failed: ${String(err)}`, "PARAM_INVALID", [
-      "Use Graphify NetworkX node-link JSON with nodes and links (or edges)",
-      "Ensure every edge endpoint refers to an existing node and source_file is project-relative",
-    ]);
+    return errorResponse(
+      `Graphify import validation failed: ${String(err)}`,
+      "PARAM_INVALID",
+      [
+        "Use Graphify NetworkX node-link JSON with nodes and links (or edges)",
+        "Ensure every edge endpoint refers to an existing node and source_file is project-relative",
+      ],
+    );
   }
 }
 
@@ -77,8 +110,12 @@ function neo4jAuthHeader(): string {
 
 async function neo4jQuery(
   cypher: string,
-  parameters: Record<string, unknown>
-): Promise<{ ok: boolean; data: Record<string, unknown> | null; status: number }> {
+  parameters: Record<string, unknown>,
+): Promise<{
+  ok: boolean;
+  data: Record<string, unknown> | null;
+  status: number;
+}> {
   try {
     const response = await fetchWithTimeout(NEO4J_HTTP_URL!, {
       method: "POST",
@@ -92,7 +129,7 @@ async function neo4jQuery(
       timeoutMs: 15,
     });
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     return { ok: response.ok, data, status: response.status };
   } catch (err) {
     logger.error(`Neo4j query error: ${err}`);
@@ -104,7 +141,9 @@ async function neo4jQuery(
 // memos_graph(mode="path")
 // ============================================================================
 
-export async function handleMemosTracePath(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosTracePath(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const sourceId = String(arguments_.source_id ?? "");
   const targetId = String(arguments_.target_id ?? "");
@@ -117,7 +156,7 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
       [
         'Get node IDs from memos_search or memos_graph(mode="related")',
         '`memos_graph(mode="path", source_id="uuid-1", target_id="uuid-2")`',
-      ]
+      ],
     );
   }
 
@@ -125,36 +164,43 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
   try {
-    const response = await fetchWithTimeout(`${MEMOS_URL}/product/graph/trace_path`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: MEMOS_USER,
-        source_id: sourceId,
-        target_id: targetId,
-        max_depth: maxDepth,
-        include_all_paths: false,
-        mem_cube_id: cubeId,
-      }),
-    });
+    const response = await fetchWithTimeout(
+      `${MEMOS_URL}/product/graph/trace_path`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: MEMOS_USER,
+          source_id: sourceId,
+          target_id: targetId,
+          max_depth: maxDepth,
+          include_all_paths: false,
+          mem_cube_id: cubeId,
+        }),
+      },
+    );
 
     if (response.ok) {
-      const data = await response.json() as Record<string, unknown>;
+      const data = (await response.json()) as Record<string, unknown>;
       if (data.code === 200) {
-        const traceData = data.data as Record<string, unknown> ?? {};
+        const traceData = (data.data as Record<string, unknown>) ?? {};
         const found = traceData.path_found ?? traceData.found ?? false;
         const paths = (traceData.paths as unknown[]) ?? [];
-        const sourceNode = traceData.source as Record<string, unknown> ?? {};
-        const targetNode = traceData.target as Record<string, unknown> ?? {};
+        const sourceNode = (traceData.source as Record<string, unknown>) ?? {};
+        const targetNode = (traceData.target as Record<string, unknown>) ?? {};
 
         const results: string[] = ["## 🔗 Path Trace Results", ""];
 
         if (sourceNode.memory) {
-          results.push(`**Source**: ${String(sourceNode.memory).slice(0, 80)}...`);
+          results.push(
+            `**Source**: ${String(sourceNode.memory).slice(0, 80)}...`,
+          );
           results.push(`**Source evidence**: ${formatProvenance(sourceNode)}`);
         }
         if (targetNode.memory) {
-          results.push(`**Target**: ${String(targetNode.memory).slice(0, 80)}...`);
+          results.push(
+            `**Target**: ${String(targetNode.memory).slice(0, 80)}...`,
+          );
           results.push(`**Target evidence**: ${formatProvenance(targetNode)}`);
         }
         results.push("");
@@ -173,8 +219,15 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
             const edges = (path.edges as unknown[]) ?? [];
 
             // If API returns empty nodes, fall back to Neo4j
-            if (nodes.length === 0 && NEO4J_HTTP_URL && NEO4J_USER && NEO4J_PASSWORD) {
-              throw new Error("API returned empty path nodes, falling back to Neo4j");
+            if (
+              nodes.length === 0 &&
+              NEO4J_HTTP_URL &&
+              NEO4J_USER &&
+              NEO4J_PASSWORD
+            ) {
+              throw new Error(
+                "API returned empty path nodes, falling back to Neo4j",
+              );
             }
 
             results.push(`### Path ${i + 1} (Length: ${length})`, "", "```");
@@ -195,7 +248,10 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
 
         return [{ type: "text", text: results.join("\n") }];
       } else {
-        return apiErrorResponse("Trace path", String((data as Record<string, unknown>).message ?? "Unknown error"));
+        return apiErrorResponse(
+          "Trace path",
+          String((data as Record<string, unknown>).message ?? "Unknown error"),
+        );
       }
     } else {
       throw new Error(`HTTP ${response.status}`);
@@ -204,14 +260,10 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
     logger.warning(`Falling back to direct Neo4j query: ${err}`);
 
     if (!NEO4J_HTTP_URL || !NEO4J_USER || !NEO4J_PASSWORD) {
-      return errorResponse(
-        "Neo4j configuration missing",
-        ERR_NEO4J_CONFIG,
-        [
-          "Set NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD in .env",
-          "Example: NEO4J_HTTP_URL=http://localhost:7474/db/neo4j/tx/commit",
-        ]
-      );
+      return errorResponse("Neo4j configuration missing", ERR_NEO4J_CONFIG, [
+        "Set NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD in .env",
+        "Example: NEO4J_HTTP_URL=http://localhost:7474/db/neo4j/tx/commit",
+      ]);
     }
 
     const cypher = `
@@ -223,14 +275,21 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
       LIMIT 1
     `;
 
-    const { ok, data, status } = await neo4jQuery(cypher, { source_id: sourceId, target_id: targetId });
+    const { ok, data, status } = await neo4jQuery(cypher, {
+      source_id: sourceId,
+      target_id: targetId,
+    });
 
     const results = ["## 🔗 Path Trace (Direct Query)", ""];
 
     if (ok && data) {
-      const rows = ((data.results as Record<string, unknown>[])?.[0]?.data as Record<string, unknown>[]) ?? [];
+      const rows =
+        ((data.results as Record<string, unknown>[])?.[0]?.data as Record<
+          string,
+          unknown
+        >[]) ?? [];
       if (rows.length > 0) {
-        const row = rows[0].row as unknown[][] ?? [[], []];
+        const row = (rows[0].row as unknown[][]) ?? [[], []];
         const nodes = (row[0] as Record<string, unknown>[]) ?? [];
         const rels = (row[1] as Record<string, unknown>[]) ?? [];
 
@@ -241,7 +300,9 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
           if (j < rels.length) {
             const rel = rels[j] as Record<string, unknown>;
             results.push(`    └── ${rel.type ?? "?"} ──>`);
-            results.push(`        Evidence: ${formatProvenance(rel.provenance ?? rel)}`);
+            results.push(
+              `        Evidence: ${formatProvenance(rel.provenance ?? rel)}`,
+            );
           }
         }
         results.push("```");
@@ -260,7 +321,9 @@ export async function handleMemosTracePath(arguments_: Record<string, unknown>):
 // memos_graph(mode="related")
 // ============================================================================
 
-export async function handleMemosGetGraph(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosGetGraph(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const query = String(arguments_.query ?? "");
 
@@ -271,14 +334,10 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
   if (!NEO4J_HTTP_URL || !NEO4J_USER || !NEO4J_PASSWORD) {
-    return errorResponse(
-      "Neo4j configuration missing",
-      ERR_NEO4J_CONFIG,
-      [
-        "Set NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD in .env",
-        "Example: NEO4J_HTTP_URL=http://localhost:7474/db/neo4j/tx/commit",
-      ]
-    );
+    return errorResponse("Neo4j configuration missing", ERR_NEO4J_CONFIG, [
+      "Set NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD in .env",
+      "Example: NEO4J_HTTP_URL=http://localhost:7474/db/neo4j/tx/commit",
+    ]);
   }
 
   // Search for relevant memories first
@@ -295,7 +354,7 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
     });
 
     if (searchResponse.ok) {
-      const data = await searchResponse.json() as Record<string, unknown>;
+      const data = (await searchResponse.json()) as Record<string, unknown>;
       if (data.code === 200) {
         memories = extractMemoriesFromResponse((data.data as SearchData) ?? {});
       } else {
@@ -306,12 +365,21 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
           const retrySearch = await fetchWithTimeout(`${MEMOS_URL}/search`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: MEMOS_USER, query, install_cube_ids: [cubeId] }),
+            body: JSON.stringify({
+              user_id: MEMOS_USER,
+              query,
+              install_cube_ids: [cubeId],
+            }),
           });
           if (retrySearch.ok) {
-            const retryData = await retrySearch.json() as Record<string, unknown>;
+            const retryData = (await retrySearch.json()) as Record<
+              string,
+              unknown
+            >;
             if (retryData.code === 200) {
-              memories = extractMemoriesFromResponse((retryData.data as SearchData) ?? {});
+              memories = extractMemoriesFromResponse(
+                (retryData.data as SearchData) ?? {},
+              );
             }
           }
         }
@@ -377,12 +445,16 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
   }
 
   if (ok && data) {
-    const rows = ((data.results as Record<string, unknown>[])?.[0]?.data as Record<string, unknown>[]) ?? [];
+    const rows =
+      ((data.results as Record<string, unknown>[])?.[0]?.data as Record<
+        string,
+        unknown
+      >[]) ?? [];
 
     if (rows.length > 0) {
       results.push("### 🔗 Relationships", "```");
       for (const row of rows) {
-        const r = row.row as unknown[] ?? [];
+        const r = (row.row as unknown[]) ?? [];
         if (r.length >= 5) {
           const sourceMem = String(r[1] ?? "").slice(0, 50);
           const relType = String(r[2] ?? "UNKNOWN");
@@ -417,9 +489,139 @@ export async function handleMemosGetGraph(arguments_: Record<string, unknown>): 
 // memos_graph(mode="schema")
 // ============================================================================
 
-export async function handleMemosExportSchema(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+/**
+ * 把 /graph/schema 的响应渲染成报告。
+ *
+ * ## 为什么是导出的纯函数
+ *
+ * 这段逻辑原本内联在 handler 里，单测触达不到 —— 于是**五个字段名读错了
+ * 却长期无人发现**。抽出来才能钉住字段契约。同一类漏洞本轮已出现过两次
+ * （list 路径的层级过滤、access-tracker 的接线）。
+ *
+ * ## 修掉的字段名不匹配
+ *
+ * API（SchemaData）返回的键与此前读取的键对不上，读不到就 `?? 0` 静默兜成零：
+ *
+ * | 此前读                      | API 实际返回        |
+ * |----------------------------|--------------------|
+ * | `avg_connections_per_node` | `avg_connections`  |
+ * | `orphan_node_count`        | `orphan_nodes`     |
+ * | `edge_type_distribution`   | `edge_types`       |
+ * | `memory_type_distribution` | `memory_types`     |
+ * | `tag_frequency`            | `top_tags`         |
+ *
+ * `max_connections` / `total_nodes` / `total_edges` / `time_range` 恰好同名，
+ * 所以只有上面五项失效 —— 部分正确正是它难被发现的原因。
+ *
+ * 后果不只是少显示：健康评估读的也是错字段，于是 orphan 比例恒为 0（永远
+ * 报「连接良好」），avg 恒为 0（永远报「平均连接过低」）。两句结论同时出现、
+ * 自相矛盾，而它们**都是基于零值**得出的。
+ *
+ * 兼容两种键名：后端字段若将来改回长名，读取仍然成立。
+ */
+export function formatSchemaReport(schema: Record<string, unknown>): string {
+  /** 依次尝试多个键名，取第一个存在的。 */
+  const pick = (...keys: string[]): unknown => {
+    for (const key of keys) {
+      if (schema[key] !== undefined && schema[key] !== null) return schema[key];
+    }
+    return undefined;
+  };
+  const num = (...keys: string[]): number => {
+    const raw = Number(pick(...keys));
+    return Number.isFinite(raw) ? raw : 0;
+  };
+  const dict = (...keys: string[]): Record<string, number> => {
+    const raw = pick(...keys);
+    return raw && typeof raw === "object"
+      ? (raw as Record<string, number>)
+      : {};
+  };
+
+  const totalNodes = num("total_nodes");
+  const avgConn = num("avg_connections", "avg_connections_per_node");
+  const orphanCount = num("orphan_nodes", "orphan_node_count");
+
+  const results: string[] = ["## 📊 Knowledge Graph Schema", ""];
+  results.push("### Overview");
+  results.push(`- **Total Nodes**: ${totalNodes}`);
+  results.push(`- **Total Edges**: ${num("total_edges")}`);
+  results.push(`- **Avg Connections/Node**: ${avgConn.toFixed(2)}`);
+  results.push(`- **Max Connections**: ${num("max_connections")}`);
+  results.push(`- **Orphan Nodes**: ${orphanCount}`);
+  results.push("");
+
+  const timeRange = dict("time_range") as unknown as Record<string, unknown>;
+  if (timeRange.earliest || timeRange.latest) {
+    results.push("### Time Range");
+    if (timeRange.earliest) results.push(`- Earliest: ${timeRange.earliest}`);
+    if (timeRange.latest) results.push(`- Latest: ${timeRange.latest}`);
+    results.push("");
+  }
+
+  const edgeDist = dict("edge_types", "edge_type_distribution");
+  if (Object.keys(edgeDist).length > 0) {
+    results.push("### Relationship Types");
+    for (const [t, c] of Object.entries(edgeDist).sort((a, b) => b[1] - a[1])) {
+      results.push(`- **${t}**: ${c}`);
+    }
+    results.push("");
+  }
+
+  const memDist = dict("memory_types", "memory_type_distribution");
+  if (Object.keys(memDist).length > 0) {
+    results.push("### Memory Types");
+    for (const [t, c] of Object.entries(memDist).sort((a, b) => b[1] - a[1])) {
+      results.push(`- ${t}: ${c}`);
+    }
+    results.push("");
+  }
+
+  // top_tags 在 SchemaData 里是 list；旧读法当成 {tag: count} 字典。两种都收。
+  const rawTags = pick("top_tags", "tag_frequency");
+  const tagItems: Array<[string, number | string]> = Array.isArray(rawTags)
+    ? rawTags
+        .slice(0, 10)
+        .map((entry) =>
+          Array.isArray(entry)
+            ? [String(entry[0]), entry[1] as number]
+            : [String(entry), ""],
+        )
+    : Object.entries(dict("top_tags", "tag_frequency")).slice(0, 10);
+  if (tagItems.length > 0) {
+    results.push("### Top Tags");
+    for (const [tag, count] of tagItems) {
+      results.push(count === "" ? `- \`${tag}\`` : `- \`${tag}\`: ${count}`);
+    }
+    results.push("");
+  }
+
+  results.push("### Health Assessment");
+  if (totalNodes > 0) {
+    const orphanRatio = orphanCount / totalNodes;
+    if (orphanRatio > 0.5)
+      results.push("⚠️ High orphan ratio - many memories are not connected");
+    else if (orphanRatio > 0.2) results.push("📋 Moderate orphan ratio");
+    else results.push("✅ Good connectivity - memories are well connected");
+  }
+  if (avgConn < 1)
+    results.push(
+      "⚠️ Low average connections - consider enriching relationships",
+    );
+  else if (avgConn > 5)
+    results.push("✅ Rich relationships - good knowledge graph density");
+
+  return results.join("\n");
+}
+
+export async function handleMemosExportSchema(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
-  const sampleSize = Math.min(Math.max(Number(arguments_.sample_size ?? 100), 10), 1000);
+  const sampleSize = Math.min(
+    Math.max(Number(arguments_.sample_size ?? 100), 10),
+    1000,
+  );
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
@@ -436,73 +638,15 @@ export async function handleMemosExportSchema(arguments_: Record<string, unknown
     });
 
     if (response.ok) {
-      const data = await response.json() as Record<string, unknown>;
+      const data = (await response.json()) as Record<string, unknown>;
       if (data.code === 200) {
         const schema = (data.data as Record<string, unknown>) ?? {};
-        const results: string[] = [];
-
-        results.push("## 📊 Knowledge Graph Schema", "");
-        results.push("### Overview");
-        results.push(`- **Total Nodes**: ${schema.total_nodes ?? 0}`);
-        results.push(`- **Total Edges**: ${schema.total_edges ?? 0}`);
-        results.push(`- **Avg Connections/Node**: ${Number(schema.avg_connections_per_node ?? 0).toFixed(2)}`);
-        results.push(`- **Max Connections**: ${schema.max_connections ?? 0}`);
-        results.push(`- **Orphan Nodes**: ${schema.orphan_node_count ?? 0}`);
-        results.push("");
-
-        const timeRange = (schema.time_range as Record<string, unknown>) ?? {};
-        if (timeRange.earliest || timeRange.latest) {
-          results.push("### Time Range");
-          if (timeRange.earliest) results.push(`- Earliest: ${timeRange.earliest}`);
-          if (timeRange.latest) results.push(`- Latest: ${timeRange.latest}`);
-          results.push("");
-        }
-
-        const edgeDist = (schema.edge_type_distribution as Record<string, number>) ?? {};
-        if (Object.keys(edgeDist).length > 0) {
-          results.push("### Relationship Types");
-          for (const [t, c] of Object.entries(edgeDist).sort((a, b) => b[1] - a[1])) {
-            results.push(`- **${t}**: ${c}`);
-          }
-          results.push("");
-        }
-
-        const memDist = (schema.memory_type_distribution as Record<string, number>) ?? {};
-        if (Object.keys(memDist).length > 0) {
-          results.push("### Memory Types");
-          for (const [t, c] of Object.entries(memDist).sort((a, b) => b[1] - a[1])) {
-            results.push(`- ${t}: ${c}`);
-          }
-          results.push("");
-        }
-
-        const tagFreq = (schema.tag_frequency as Record<string, number>) ?? {};
-        const tagItems = Object.entries(tagFreq).slice(0, 10);
-        if (tagItems.length > 0) {
-          results.push("### Top Tags");
-          for (const [tag, count] of tagItems) {
-            results.push(`- \`${tag}\`: ${count}`);
-          }
-          results.push("");
-        }
-
-        results.push("### Health Assessment");
-        const totalNodes = Number(schema.total_nodes ?? 0);
-        const orphanCount = Number(schema.orphan_node_count ?? 0);
-        if (totalNodes > 0) {
-          const orphanRatio = orphanCount / totalNodes;
-          if (orphanRatio > 0.5) results.push("⚠️ High orphan ratio - many memories are not connected");
-          else if (orphanRatio > 0.2) results.push("📋 Moderate orphan ratio");
-          else results.push("✅ Good connectivity - memories are well connected");
-        }
-
-        const avgConn = Number(schema.avg_connections_per_node ?? 0);
-        if (avgConn < 1) results.push("⚠️ Low average connections - consider enriching relationships");
-        else if (avgConn > 5) results.push("✅ Rich relationships - good knowledge graph density");
-
-        return [{ type: "text", text: results.join("\n") }];
+        return [{ type: "text", text: formatSchemaReport(schema) }];
       } else {
-        return apiErrorResponse("Schema export", String((data as Record<string, unknown>).message ?? "Unknown error"));
+        return apiErrorResponse(
+          "Schema export",
+          String((data as Record<string, unknown>).message ?? "Unknown error"),
+        );
       }
     } else {
       return apiErrorResponse("Schema export", `HTTP ${response.status}`);
@@ -516,31 +660,25 @@ export async function handleMemosExportSchema(arguments_: Record<string, unknown
 // memos_graph(mode="impact")
 // ============================================================================
 
-export async function handleMemosImpact(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosImpact(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const memoryId = String(arguments_.memory_id ?? "");
   const maxDepth = Math.min(Math.max(Number(arguments_.max_depth ?? 3), 1), 6);
 
   if (!memoryId) {
-    return errorResponse(
-      "memory_id is required",
-      ERR_PARAM_MISSING,
-      [
-        'Get a memory_id from memos_search or memos_graph(mode="related") first',
-        '`memos_graph(mode="impact", memory_id="uuid-here")`',
-      ]
-    );
+    return errorResponse("memory_id is required", ERR_PARAM_MISSING, [
+      'Get a memory_id from memos_search or memos_graph(mode="related") first',
+      '`memos_graph(mode="impact", memory_id="uuid-here")`',
+    ]);
   }
 
   if (!NEO4J_HTTP_URL || !NEO4J_USER || !NEO4J_PASSWORD) {
-    return errorResponse(
-      "Neo4j configuration missing",
-      ERR_NEO4J_CONFIG,
-      [
-        "Set NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD in .env",
-        "Example: NEO4J_HTTP_URL=http://localhost:7474/db/neo4j/tx/commit",
-      ]
-    );
+    return errorResponse("Neo4j configuration missing", ERR_NEO4J_CONFIG, [
+      "Set NEO4J_HTTP_URL, NEO4J_USER, NEO4J_PASSWORD in .env",
+      "Example: NEO4J_HTTP_URL=http://localhost:7474/db/neo4j/tx/commit",
+    ]);
   }
 
   const cypher = `
@@ -554,7 +692,9 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
   `;
 
   try {
-    const { ok, data, status } = await neo4jQuery(cypher, { source_id: memoryId });
+    const { ok, data, status } = await neo4jQuery(cypher, {
+      source_id: memoryId,
+    });
 
     if (!ok) {
       return apiErrorResponse("Impact analysis", `Neo4j HTTP ${status}`);
@@ -566,20 +706,34 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
 
     const errors = (data.errors as unknown[]) ?? [];
     if (errors.length > 0) {
-      const errMsg = String((errors[0] as Record<string, unknown>).message ?? "Unknown Neo4j error");
+      const errMsg = String(
+        (errors[0] as Record<string, unknown>).message ?? "Unknown Neo4j error",
+      );
       return apiErrorResponse("Impact analysis", errMsg);
     }
 
-    const rows = ((data.results as Record<string, unknown>[])?.[0]?.data as Record<string, unknown>[]) ?? [];
+    const rows =
+      ((data.results as Record<string, unknown>[])?.[0]?.data as Record<
+        string,
+        unknown
+      >[]) ?? [];
 
     if (rows.length === 0) {
-      return [{ type: "text", text: "No forward impact found — this memory has no CAUSE or FOLLOWS successors." }];
+      return [
+        {
+          type: "text",
+          text: "No forward impact found — this memory has no CAUSE or FOLLOWS successors.",
+        },
+      ];
     }
 
     // Group by depth
-    const depthGroups: Record<number, Array<{ id: string; key: string; memory: string; provenance: unknown }>> = {};
+    const depthGroups: Record<
+      number,
+      Array<{ id: string; key: string; memory: string; provenance: unknown }>
+    > = {};
     for (const row of rows) {
-      const r = row.row as unknown[] ?? [];
+      const r = (row.row as unknown[]) ?? [];
       if (r.length >= 4) {
         const depth = Number(r[3]);
         if (!depthGroups[depth]) depthGroups[depth] = [];
@@ -592,7 +746,10 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
       }
     }
 
-    const totalCount = Object.values(depthGroups).reduce((sum, items) => sum + items.length, 0);
+    const totalCount = Object.values(depthGroups).reduce(
+      (sum, items) => sum + items.length,
+      0,
+    );
     const maxHop = Math.max(...Object.keys(depthGroups).map(Number));
 
     const results: string[] = [
@@ -607,10 +764,15 @@ export async function handleMemosImpact(arguments_: Record<string, unknown>): Pr
       2: "Indirect Impact",
     };
 
-    for (const depth of Object.keys(depthGroups).map(Number).sort((a, b) => a - b)) {
+    for (const depth of Object.keys(depthGroups)
+      .map(Number)
+      .sort((a, b) => a - b)) {
       const items = depthGroups[depth];
       const label = depthLabels[depth] ?? `Downstream (hop ${depth})`;
-      results.push(`### ${label} (${items.length} node${items.length !== 1 ? "s" : ""})`, "");
+      results.push(
+        `### ${label} (${items.length} node${items.length !== 1 ? "s" : ""})`,
+        "",
+      );
 
       for (let i = 0; i < Math.min(items.length, 8); i++) {
         const item = items[i];

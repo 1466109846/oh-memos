@@ -174,6 +174,13 @@ scripts/local/stop_db_silent.bat
 # Memory admin GUI (works even when the API is down)
 memory-admin.bat   # → http://127.0.0.1:18010
 ```
+## 项目版本控制
+
+- **项目变更**时及时更新changelog.md
+
+- **项目架构变更**时及时更新G:\test\oh-memos\docs\architecture里的网页渲染
+
+- **项目变更时需联想前后端及mcp服务端以及"G:\test\oh-memos\project-memory\SKILL.md"技能是否存在优化并分发本地和进行云端版本的npm包管理
 
 ---
 

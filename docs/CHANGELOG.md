@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-22
+
+### 🧠 检索排序：衰减、强化、分档去重与图扩散联想
+<!-- en: 🧠 Retrieval ranking: decay, reinforcement, tiered dedupe, spreading activation -->
+
+本轮源自一次「LLM agent 能否像人脑那样记忆」的文献调研与随后的实现审计。结论不是
+「该换成全息架构」——全息叠加的容量与干扰是硬约束（arXiv 2606.24948），且**做不到
+删除单条记忆**——而是把 localist 路线该有的机制补全。设计文档
+`docs/design/memory-retrieval-optimization.md`（831 行，含全部实测数据与修正记录）。
+
+#### 衰减与强化
+
+旧的 `freshness` 是 `max(0.55, 1 - age/3650)`：**十年才掉 45% 且永不归零**，
+一年的时间差在总分里只值 0.0027，实际等于不衰减。实测后果是 400 天的 PROGRESS
+压过全新的 GOTCHA。
+
+改为按 `memory_type` 分档的指数衰减 `0.5^(age/halfLife)`：PROGRESS 14 天、
+CONFIG 180、BUGFIX·ERROR_PATTERN 365、FEATURE·MILESTONE 540、
+DECISION·GOTCHA·CODE_PATTERN·SYNTHESIS 1095，floor 从 0.55 降到 0.05。
+
+新增访问强化（ACT-R base-level activation 的简化形式）：有效年龄取
+`min(距上次更新, 距上次访问)`，强化项对数饱和、20 次达满。写入方是**本地侧车日志**
+`<cube>/access-log.jsonl`——不碰记忆存储，Full/Lite 行为一致，只追加不与
+`withLock` 交互。**只在 `memos_get` 记账、不在 search 记账**：否则形成
+「高分→更常返回→更多计数→分数更高」的正反馈，新记忆永远追不上。
+
+权重：semantic .50 / confidence .15 / freshness .14 / reinforcement .06 /
+三个惩罚各 .05，和为 1.0。**惩罚项刻意不动**——它们编码产品策略
+（auto-capture 不可信、archived 已退役），不应因新增信号被稀释。
+
+#### 近重复折叠（按类型分档）
+
+原有去重只在 Python 侧按 `memory` 文本**精确匹配**，措辞略异的同义记忆全部返回、
+挤占 top_k。新增字符 4-gram Jaccard 折叠，在 node 层 quality policy 内做，
+一次覆盖全部检索路径。
+
+**用字符 n-gram 而非分词是 CJK 的关键**：中文没有词边界，按空格分词会退化成
+「整段一个 token」，Jaccard 恒为 0 或 1。
+
+阈值按类型分档：PROGRESS 0.70（进度汇报本就重复）、MILESTONE·FEATURE 0.78、
+BUGFIX·ERROR_PATTERN·CONFIG 0.82、DECISION·GOTCHA·CODE_PATTERN·SYNTHESIS 0.88
+（原理性内容差一个字可能差很多）。不跨 `memory_type` 折叠；被折叠 id 记入
+`duplicates_folded`，信息不丢。
+
+#### 一跳图扩散联想（`MEMOS_SPREAD_ACTIVATION`，默认关闭）
+
+命中后沿 `CAUSE`/`CONDITION`/`RELATE` 边扩散一跳，把强关联记忆并入候选集。
+这是 localist 存储实现「联想」的方式——避开叠加容量瓶颈，同时保留逐条删除能力。
+
+实现前量过五项（jincaizhaopin_cube，6534 节点 / 9133 条 typed 边）：边覆盖 98.4%、
+一跳候选中位 10 / p90 33、跨业务类型边 28%、**邻居专属率 72%**、最强 hub 仅被
+61/3039 源共享。随机抽 6 个 fact 邻居集**完全零重叠**——否决了实现前的 hub 稀释担忧。
+
+上界 12（覆盖中位到 p90 之间）、边类型优先级 `CAUSE` > `CONDITION` > `RELATE`、
+同类型内按度数升序（低度数更专属）。扩散节点带 `spread_via` / `spread_from` 标记，
+不参与二次扩散。仅 Full 模式（Lite 无图）。
+
+**「联想绝不压过直接命中」在排序层强制，而非靠压低 relativity。** 后者做不到：
+`quality_score` 是六项加权和，联想节点 `updated_at` 来自邻居、可能是今天，
+freshness 拿满分就能反超陈旧命中（实测 0.8400 > 0.7030）。修法是排序时先按
+「是否扩散」分层、组内再按分数。
+
+#### 记忆层级：`WorkingMemory` 默认隐藏
+
+API 每条记忆写**两个节点**：`LongTermMemory` 图节点 + 内容逐字相同的
+`WorkingMemory` 短期副本（scheduler FIFO 淘汰）。两者都必需，但同时呈现会让
+`memos_list_v2` 看起来每条记忆出现两次。
+
+检索与 list 路径现在隐藏 `WorkingMemory`（`MEMOS_SHOW_WORKING_MEMORY=true` 可开）。
+**这是分层泄漏而非双写**——按「去重」去修会删掉短期记忆整层。
+`handlers/wiki-export.ts` 早已做同样过滤，本次只是铺到 search 与 list。
+
+缺 `memory_type` 视为可见（Lite 不写该字段，误判会清空整个 cube）；
+全是 `WorkingMemory` 时原样返回而非返回空。
+
+#### 检索期注解
+
+quality policy 算出的信号此前**算完就丢**——`duplicates_folded` 写了却无人读，
+文档声称的「可用 `memos_get` 展开」是假的。现在 ID 行按需附加：
+`access_count N` / `stale` / `expired` / `folded N: ids` / `via CAUSE from xxx`。
+干净且未被读过的记忆无任何附加。compact 模式（>15 条时）同样带出——
+它走 `toMinimal`，而那里原本丢掉整个 metadata。
+
+#### graph schema 四处缺陷修复
+
+`memos_graph(mode="schema")` 报 `Avg Connections 0.00 / Max 0 / Orphan 0`，
+而同一 cube 实测 25781 条边、6430 个带边节点；健康评估同时输出「连接良好」与
+「平均连接过低」，自相矛盾。
+
+- `avg_connections` / `max_connections` / `orphan_nodes` / `memory_types` /
+  `time_range` 从初始化的 0 起**从未被赋值**——不是算错，是根本没算；
+- 查询是裸 `MATCH (n:Memory)`，**不按 cube 过滤** → 返回全库合计
+  （某 cube 6534 节点却报 7878）；
+- `/product/graph/schema` 调用不存在的 `handle_get_graph_schema`，**恒返回 500**；
+- `start_api.py` 与 `graph_handler.py` 各有一份逐行重复的实现，两份**各自**漏掉
+  同样的东西——已收敛为 handler 层一份（110 行 → 10 行委托）。
+
+MCP 侧另有**五个字段名读错**（`avg_connections_per_node` 等），读不到就 `?? 0`
+静默兜零；`total_nodes` / `max_connections` 恰好同名，**部分正确正是它难被发现的
+原因**。修复后实测 6534 / 6.83 / 151 / 104，与真值吻合，健康评估改为
+「连接良好 + 关系丰富」。
+
+#### 新增配置
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `MEMOS_SPREAD_ACTIVATION` | `false` | 一跳图扩散联想（仅 Full 模式） |
+| `MEMOS_SHOW_WORKING_MEMORY` | `false` | 显示 scheduler 管理的短期层（调试用） |
+
+新增 `docker/docker-compose.dev.yml`：把 `src/` 以 `:ro` 挂进容器，
+改 Python 只需 `restart` 而非 rebuild。放 override 而非主 compose——
+生产从 GHCR 拉镜像时挂宿主源码是错的。
+
+#### 测试
+
+新增 `memory-quality-baseline.test.ts`（60）、`access-tracker.test.ts`（19）、
+`memory-tier.test.ts`（18）、`spreading-activation.test.ts`（40）、
+`formatters.test.ts`（16）、`schema-report.test.ts`（15）、
+`list-memories.test.ts`（8）、`tests/test_graph_schema_stats.py`（18）。
+新增 `scripts/spread-smoke-test.mjs`（8 项，打真实 Neo4j）。
+
+全量 **vitest 394 / pytest 98**，每一处逻辑都做过变异验证——含「回到原缺陷状态」
+形态的变异，确认守卫真的守住了修掉的 bug。
+
+
 ### 🔁 新增 `memos_import_wiki`：Markdown Wiki 往返回灌
 <!-- en: 🔁 New `memos_import_wiki`: round-trip Markdown wiki back into memory -->
 

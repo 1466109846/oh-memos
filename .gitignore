@@ -22,6 +22,7 @@ docker/.env.docker
 docker/.env.host-db
 docker/.env.migration
 *.env.local
+*.bak
 
 # ========== Temporary files ==========
 tmp/
@@ -343,3 +344,4 @@ tools/memory-admin/backups/
 # `visual-check` command. oh-memos.architecture.preview.png IS committed on
 # purpose; these per-viewport captures are artifacts.
 docs/architecture/*.visual-check.*.png
+.env.pre-3.1.0.bak

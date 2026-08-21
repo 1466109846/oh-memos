@@ -1,0 +1,35 @@
+# 开发用 override：把宿主源码挂进容器，改 Python 后只需 restart，不必 rebuild。
+#
+# 为什么单独一个文件而不改 docker-compose.yml：
+#   生产部署从 GHCR 拉镜像（MEMOS_IMAGE 默认 ghcr.io/...），那种场景下挂宿主
+#   源码是错的 —— 宿主上可能根本没有源码，或版本与镜像不一致。override 文件
+#   让「用本地源码」成为显式的开发选择，而不是默认行为。
+#
+# 用法（在 compose 文件之后追加本文件，顺序有意义）：
+#
+#   docker compose \
+#     -f docker/docker-compose.yml \
+#     -f docker/docker-compose.dev.yml \
+#     --env-file docker/.env.migration \
+#     up -d memos
+#
+# 之后改 src/ 下的 Python 只需：
+#
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+#     --env-file docker/.env.migration restart memos
+#
+# 注意：
+#   - 挂载是 :ro。主 compose 设了 read_only: true，容器内不应写源码。
+#   - uvicorn 没开 --reload，所以仍需 restart 才能重新加载模块。
+#     不加 --reload 是有意的：reload 会 fork 额外进程，与容器的
+#     cap_drop: ALL / no-new-privileges 约束交互不明确。
+#   - 镜像里 /app/src 已有一份代码；本挂载会遮盖它。两边不一致时以宿主为准，
+#     这正是开发期想要的，但也意味着**宿主源码坏了容器就起不来**。
+
+services:
+  memos:
+    volumes:
+      - type: bind
+        source: ../src
+        target: /app/src
+        read_only: true

@@ -10,6 +10,8 @@ import { getMemoryProvider } from "../providers/provider-factory.js";
 import { apiCallWithRetry } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { parseMemoryWriteResponse } from "../memory-write-response.js";
+import { recordAccess } from "../access-tracker.js";
+import { filterEphemeralTier } from "../memory-tier.js";
 // formatMemoriesForDisplay intentionally not imported here — list output is built
 // from the truncated allMemories in handleMemosList (avoids printing the full cube).
 import {
@@ -52,7 +54,9 @@ function isDuplicateSave(content: string, cubeId: string): boolean {
 
   const entry = saveDedupCache.get(key);
   if (entry && now - entry[1] < DEDUP_TTL_SECONDS) {
-    logger.debug(`Duplicate save detected (within ${DEDUP_TTL_SECONDS}s), skipping`);
+    logger.debug(
+      `Duplicate save detected (within ${DEDUP_TTL_SECONDS}s), skipping`,
+    );
     return true;
   }
   return false;
@@ -67,7 +71,9 @@ function markSaved(content: string, cubeId: string): void {
 // memos_save
 // ============================================================================
 
-export async function handleMemosSave(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosSave(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   let content = String(arguments_.content ?? "");
   const memoryType = arguments_.memory_type as string | undefined;
@@ -87,7 +93,7 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
         "Pure progress update -> `PROGRESS`",
         "Synthesized answer from memos_think evidence -> `SYNTHESIS`",
         'Example: `memos_save(content="...", memory_type="BUGFIX")`',
-      ]
+      ],
     );
   }
 
@@ -96,14 +102,29 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
   }
 
   if (isDuplicateSave(content, cubeId)) {
-    return [{ type: "text", text: `⏭️ Skipped: Same content was saved within ${DEDUP_TTL_SECONDS}s (dedup protection)` }];
+    return [
+      {
+        type: "text",
+        text: `⏭️ Skipped: Same content was saved within ${DEDUP_TTL_SECONDS}s (dedup protection)`,
+      },
+    ];
   }
 
   const provider = getMemoryProvider(MEMOS_CUBES_DIR);
   if (provider) {
-    const saved = await provider.save({ cubeId, content, memoryType, tags: [memoryType] });
+    const saved = await provider.save({
+      cubeId,
+      content,
+      memoryType,
+      tags: [memoryType],
+    });
     markSaved(content, cubeId);
-    return [{ type: "text", text: `Memory saved as [${memoryType}] in local cube '${cubeId}' · ID: ${saved.id}` }];
+    return [
+      {
+        type: "text",
+        text: `Memory saved as [${memoryType}] in local cube '${cubeId}' · ID: ${saved.id}`,
+      },
+    ];
   }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
@@ -120,17 +141,33 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
         memory_content: content,
       },
     },
-    ensureCubeRegistered
+    ensureCubeRegistered,
   );
 
   if (result.success) {
     markSaved(content, cubeId);
-    const write = parseMemoryWriteResponse(result.data as { code: number; data?: unknown });
-    const idText = write.memoryIds.length > 0 ? ` · IDs: ${write.memoryIds.join(", ")}` : "";
-    const warningText = write.warnings.length > 0 ? ` · warnings: ${write.warnings.join("; ")}` : "";
-    return [{ type: "text", text: `Memory saved as [${memoryType}] in cube '${cubeId}'${idText}${warningText}` }];
+    const write = parseMemoryWriteResponse(
+      result.data as { code: number; data?: unknown },
+    );
+    const idText =
+      write.memoryIds.length > 0 ? ` · IDs: ${write.memoryIds.join(", ")}` : "";
+    const warningText =
+      write.warnings.length > 0
+        ? ` · warnings: ${write.warnings.join("; ")}`
+        : "";
+    return [
+      {
+        type: "text",
+        text: `Memory saved as [${memoryType}] in cube '${cubeId}'${idText}${warningText}`,
+      },
+    ];
   } else if (result.data) {
-    return apiErrorResponse("Save", String((result.data as Record<string, unknown>).message ?? "Unknown error"));
+    return apiErrorResponse(
+      "Save",
+      String(
+        (result.data as Record<string, unknown>).message ?? "Unknown error",
+      ),
+    );
   } else {
     return apiErrorResponse("Save", `HTTP ${result.status}`);
   }
@@ -140,7 +177,9 @@ export async function handleMemosSave(arguments_: Record<string, unknown>): Prom
 // memos_list_v2
 // ============================================================================
 
-export async function handleMemosList(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosList(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const limit = Number(arguments_.limit ?? 20);
   const memoryType = arguments_.memory_type as string | undefined;
@@ -148,14 +187,45 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
 
   const provider = getMemoryProvider(MEMOS_CUBES_DIR);
   if (provider) {
-    let allMemories = await provider.list(cubeId, Math.max(limit * 20, 200), memoryType);
+    let allMemories = await provider.list(
+      cubeId,
+      Math.max(limit * 20, 200),
+      memoryType,
+    );
     allMemories = allMemories.slice(0, limit);
     const totalCount = allMemories.length;
     if (compact && shouldCompact(totalCount)) {
-      return [{ type: "text", text: compactedResultToText({ preview: allMemories.slice(0, PREVIEW_COUNT).map(toMinimal), totalCount, omittedCount: totalCount - Math.min(PREVIEW_COUNT, totalCount), message: 'Use memos_get(memory_id="<id>") for full details', query: "local list", cubeId }) }];
+      return [
+        {
+          type: "text",
+          text: compactedResultToText({
+            preview: allMemories.slice(0, PREVIEW_COUNT).map(toMinimal),
+            totalCount,
+            omittedCount: totalCount - Math.min(PREVIEW_COUNT, totalCount),
+            message: 'Use memos_get(memory_id="<id>") for full details',
+            query: "local list",
+            cubeId,
+          }),
+        },
+      ];
     }
-    if (!allMemories.length) return [{ type: "text", text: `## Cube: ${cubeId}\n\nNo memories found.` }];
-    return [{ type: "text", text: [`## Cube: ${cubeId} (${allMemories.length})`, "", ...allMemories.map((m, i) => `${i + 1}. [${extractMcpType(m)}] ${m.memory}\n   ID: \`${m.id}\``)].join("\n\n") }];
+    if (!allMemories.length)
+      return [
+        { type: "text", text: `## Cube: ${cubeId}\n\nNo memories found.` },
+      ];
+    return [
+      {
+        type: "text",
+        text: [
+          `## Cube: ${cubeId} (${allMemories.length})`,
+          "",
+          ...allMemories.map(
+            (m, i) =>
+              `${i + 1}. [${extractMcpType(m)}] ${m.memory}\n   ID: \`${m.id}\``,
+          ),
+        ].join("\n\n"),
+      },
+    ];
   }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
@@ -170,16 +240,18 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
   // pulling everything blew a limit=5 request up to ~1.8M tokens on large cubes.
   params.limit = memoryType ? Math.max(limit * 20, 200) : limit;
 
-  const result = await apiCallWithRetry("GET", `${MEMOS_URL}/memories`, cubeId, { params }, ensureCubeRegistered);
+  const result = await apiCallWithRetry(
+    "GET",
+    `${MEMOS_URL}/memories`,
+    cubeId,
+    { params },
+    ensureCubeRegistered,
+  );
 
   if (result.success && result.data) {
-    const resultData = (result.data as Record<string, unknown>).data as SearchData ?? {};
-    let allMemories = extractMemoriesFromData(resultData);
-
-    if (memoryType) {
-      allMemories = allMemories.filter((m) => extractMcpType(m) === memoryType);
-    }
-    allMemories = allMemories.slice(0, limit); // always bound output to the requested limit
+    const resultData =
+      ((result.data as Record<string, unknown>).data as SearchData) ?? {};
+    const allMemories = prepareListMemories(resultData, memoryType, limit);
 
     const totalCount = allMemories.length;
 
@@ -200,7 +272,12 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
     // (Previously this fell back to formatMemoriesForDisplay(resultData) = the full
     // untrimmed pull, which is how a limit=5 request printed the entire cube.)
     if (totalCount === 0) {
-      return [{ type: "text", text: `## Cube: ${cubeId}\n\nNo memories${memoryType ? ` of type ${memoryType}` : ""} found.` }];
+      return [
+        {
+          type: "text",
+          text: `## Cube: ${cubeId}\n\nNo memories${memoryType ? ` of type ${memoryType}` : ""} found.`,
+        },
+      ];
     }
     const header = memoryType
       ? `## Cube: ${cubeId} — type=${memoryType} (${totalCount})`
@@ -211,7 +288,12 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
     });
     return [{ type: "text", text: [header, "", ...lines].join("\n\n") }];
   } else if (result.data) {
-    return apiErrorResponse("List", String((result.data as Record<string, unknown>).message ?? "Unknown error"));
+    return apiErrorResponse(
+      "List",
+      String(
+        (result.data as Record<string, unknown>).message ?? "Unknown error",
+      ),
+    );
   } else {
     return apiErrorResponse("List", `HTTP ${result.status}`);
   }
@@ -221,27 +303,46 @@ export async function handleMemosList(arguments_: Record<string, unknown>): Prom
 // memos_get
 // ============================================================================
 
-export async function handleMemosGet(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosGet(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const memoryId = String(arguments_.memory_id ?? "");
 
   if (!memoryId) {
-    return errorResponse(
-      "memory_id parameter is required",
-      ERR_PARAM_MISSING,
-      [
-        "Get memory_id from memos_search or memos_list_v2 results",
-        'Example: `memos_get(memory_id="abc123-...")`',
-      ]
-    );
+    return errorResponse("memory_id parameter is required", ERR_PARAM_MISSING, [
+      "Get memory_id from memos_search or memos_list_v2 results",
+      'Example: `memos_get(memory_id="abc123-...")`',
+    ]);
   }
 
   const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
   if (localProvider) {
     const node = await localProvider.get(cubeId, memoryId);
     if (!node) return [{ type: "text", text: notFoundText(memoryId) }];
+    // 只在确实取到记忆后记账 —— 未命中的 id 不构成使用度信号。
+    recordAccess(MEMOS_CUBES_DIR, cubeId, [memoryId]);
     const full = toFull(node, cubeId, MEMOS_USER);
-    return [{ type: "text", text: ["## 📝 Memory Details", "", `**ID**: \`${full.id}\``, `**Type**: ${full.memoryType}`, `**Cube**: ${full.cubeId} (local)`, full.tags.length ? `**Tags**: ${full.tags.join(", ")}` : "", full.createdAt ? `**Created**: ${full.createdAt}` : "", "", "### Content", "", full.content].filter(Boolean).join("\n") }];
+    return [
+      {
+        type: "text",
+        text: [
+          "## 📝 Memory Details",
+          "",
+          `**ID**: \`${full.id}\``,
+          `**Type**: ${full.memoryType}`,
+          `**Cube**: ${full.cubeId} (local)`,
+          full.tags.length ? `**Tags**: ${full.tags.join(", ")}` : "",
+          full.createdAt ? `**Created**: ${full.createdAt}` : "",
+          "",
+          "### Content",
+          "",
+          full.content,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      },
+    ];
   }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
@@ -251,13 +352,16 @@ export async function handleMemosGet(arguments_: Record<string, unknown>): Promi
     `${MEMOS_URL}/memories/${cubeId}/${memoryId}`,
     cubeId,
     {},
-    ensureCubeRegistered
+    ensureCubeRegistered,
   );
 
   if (result.success && result.data) {
-    const resultData = (result.data as Record<string, unknown>).data as MemoryNode | null;
+    const resultData = (result.data as Record<string, unknown>)
+      .data as MemoryNode | null;
 
     if (resultData) {
+      // Full 模式同样记在本机侧车 —— 使用度是本机数据，不需要后端端点。
+      recordAccess(MEMOS_CUBES_DIR, cubeId, [memoryId]);
       const fullMem = toFull(resultData, cubeId, MEMOS_USER);
       const lines = [
         "## 📝 Memory Details",
@@ -268,7 +372,8 @@ export async function handleMemosGet(arguments_: Record<string, unknown>): Promi
       ];
 
       if (fullMem.key) lines.push(`**Key**: ${fullMem.key}`);
-      if (fullMem.tags.length > 0) lines.push(`**Tags**: ${fullMem.tags.join(", ")}`);
+      if (fullMem.tags.length > 0)
+        lines.push(`**Tags**: ${fullMem.tags.join(", ")}`);
       if (fullMem.createdAt) lines.push(`**Created**: ${fullMem.createdAt}`);
 
       lines.push("", "### Content", "", fullMem.content);
@@ -289,7 +394,9 @@ export async function handleMemosGet(arguments_: Record<string, unknown>): Promi
       return [{ type: "text", text: notFoundText(memoryId) }];
     }
   } else if (result.data) {
-    const errMsg = String((result.data as Record<string, unknown>).message ?? "Unknown error");
+    const errMsg = String(
+      (result.data as Record<string, unknown>).message ?? "Unknown error",
+    );
     if (errMsg.toLowerCase().includes("not found") || result.status === 404) {
       return [{ type: "text", text: notFoundText(memoryId) }];
     }
@@ -314,7 +421,9 @@ function notFoundText(memoryId: string): string {
 // memos_admin(action="stats")
 // ============================================================================
 
-export async function handleMemosGetStats(arguments_: Record<string, unknown>): Promise<TextContent[]> {
+export async function handleMemosGetStats(
+  arguments_: Record<string, unknown>,
+): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
@@ -325,27 +434,42 @@ export async function handleMemosGetStats(arguments_: Record<string, unknown>): 
     `${MEMOS_URL}/memories`,
     cubeId,
     { params: { user_id: MEMOS_USER, mem_cube_id: cubeId } },
-    ensureCubeRegistered
+    ensureCubeRegistered,
   );
 
   if (result.success && result.data) {
-    const [stats, total] = computeMemoryStats((result.data as Record<string, unknown>).data as SearchData ?? {});
+    const [stats, total] = computeMemoryStats(
+      ((result.data as Record<string, unknown>).data as SearchData) ?? {},
+    );
 
     if (total === 0) {
       return [{ type: "text", text: `No memories found in cube '${cubeId}'.` }];
     }
 
     const typeIcons: Record<string, string> = {
-      BUGFIX: "🐛", ERROR_PATTERN: "🔴", DECISION: "📋",
-      GOTCHA: "⚠️", CODE_PATTERN: "📝", CONFIG: "⚙️",
-      FEATURE: "✨", MILESTONE: "🎯", PROGRESS: "📊", INFERRED: "🔗",
+      BUGFIX: "🐛",
+      ERROR_PATTERN: "🔴",
+      DECISION: "📋",
+      GOTCHA: "⚠️",
+      CODE_PATTERN: "📝",
+      CONFIG: "⚙️",
+      FEATURE: "✨",
+      MILESTONE: "🎯",
+      PROGRESS: "📊",
+      INFERRED: "🔗",
       SYNTHESIS: "🧠",
     };
 
-    const result_lines = [`## 📊 Memory Stats: ${cubeId}`, `Total Memories: **${total}**`, ""];
+    const result_lines = [
+      `## 📊 Memory Stats: ${cubeId}`,
+      `Total Memories: **${total}**`,
+      "",
+    ];
 
-    for (const [mtype, count] of Object.entries(stats).sort((a, b) => b[1] - a[1])) {
-      const percentage = (count / total * 100).toFixed(1);
+    for (const [mtype, count] of Object.entries(stats).sort(
+      (a, b) => b[1] - a[1],
+    )) {
+      const percentage = ((count / total) * 100).toFixed(1);
       const icon = typeIcons[mtype] ?? "📌";
       result_lines.push(`- ${icon} **${mtype}**: ${count} (${percentage}%)`);
     }
@@ -355,21 +479,41 @@ export async function handleMemosGetStats(arguments_: Record<string, unknown>): 
     const userTyped = total - inferredCount - progressCount;
 
     if (inferredCount > 0) {
-      result_lines.push("", "---", "", `ℹ️ **INFERRED** (${inferredCount} 条): 图数据库自动生成的因果推断节点，非用户保存，属正常现象。`);
+      result_lines.push(
+        "",
+        "---",
+        "",
+        `ℹ️ **INFERRED** (${inferredCount} 条): 图数据库自动生成的因果推断节点，非用户保存，属正常现象。`,
+      );
     }
 
     if (total > 0 && progressCount / total > 0.5) {
-      result_lines.push("", "---", "", `⚠️ **PROGRESS 占比偏高** (${progressCount}/${total}): 保存时建议显式指定类型:`);
-      result_lines.push("   `BUGFIX` · `DECISION` · `MILESTONE` · `FEATURE` · `GOTCHA` · `CONFIG`");
+      result_lines.push(
+        "",
+        "---",
+        "",
+        `⚠️ **PROGRESS 占比偏高** (${progressCount}/${total}): 保存时建议显式指定类型:`,
+      );
+      result_lines.push(
+        "   `BUGFIX` · `DECISION` · `MILESTONE` · `FEATURE` · `GOTCHA` · `CONFIG`",
+      );
     }
 
     if (userTyped > 0) {
-      result_lines.push("", `✅ **用户标注记忆**: ${userTyped} 条 (${(userTyped / total * 100).toFixed(0)}%)`);
+      result_lines.push(
+        "",
+        `✅ **用户标注记忆**: ${userTyped} 条 (${((userTyped / total) * 100).toFixed(0)}%)`,
+      );
     }
 
     return [{ type: "text", text: result_lines.join("\n") }];
   } else if (result.data) {
-    return apiErrorResponse("Stats", String((result.data as Record<string, unknown>).message ?? "Unknown error"));
+    return apiErrorResponse(
+      "Stats",
+      String(
+        (result.data as Record<string, unknown>).message ?? "Unknown error",
+      ),
+    );
   } else {
     return apiErrorResponse("Stats", `HTTP ${result.status}`);
   }
@@ -391,4 +535,32 @@ export function extractMemoriesFromData(data: SearchData): MemoryNode[] {
     }
   }
   return memories;
+}
+
+/**
+ * memos_list_v2（Full 路径）的取数序列：提取 → 滤层级 → 滤业务类型 → 截断。
+ *
+ * 抽成导出的纯函数**只为让顺序可测**。这三步的次序不是随意的：
+ *
+ *   - 滤层级必须在 slice **之前**。放到之后，`limit` 会被随即隐藏的
+ *     WorkingMemory 副本吃掉 —— 要 20 条只拿到 10 条。
+ *   - slice 必须最后。它是对外承诺的输出上界。
+ *
+ * 之前这段逻辑内联在 handler 里，单测触达不到：实测切断层级过滤后
+ * 全部 319 项 vitest 依然通过。这与 P1.5 的 W3/W4 是同一类漏洞
+ * （见 docs/design/memory-retrieval-optimization.md 第 11 节）。
+ * 在测试里自行组合这几步只能证明测试文件本身，证明不了 handler，
+ * 所以必须让 handler 和测试调用同一个函数。
+ */
+export function prepareListMemories(
+  data: SearchData,
+  memoryType: string | undefined,
+  limit: number,
+): MemoryNode[] {
+  const extracted = extractMemoriesFromData(data);
+  const visible = [...filterEphemeralTier(extracted, (m) => m.metadata)];
+  const typed = memoryType
+    ? visible.filter((m) => extractMcpType(m) === memoryType)
+    : visible;
+  return typed.slice(0, limit);
 }
