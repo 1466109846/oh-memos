@@ -15,7 +15,7 @@ on:
 
 jobs:
   hooks:
-    name: Hooks (matcher lint · deploy bundle sync)
+    name: Repo consistency (hook matchers · deploy bundle · README changelog)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +35,11 @@ jobs:
       # project-memory/hooks/ (stale exit code, missing guard), so the copy is
       # verified rather than trusted.
       - run: node scripts/sync-deploy-hooks.mjs
+
+      # The READMEs' "Recent changes" block is generated from docs/CHANGELOG.md.
+      # This fails when a changelog entry lands without regenerating it, which is
+      # the drift the hand-written list used to accumulate silently.
+      - run: node scripts/generate-readme-changelog.mjs
 
   node:
     name: Node MCP (Node ${{ matrix.node }} · build · vitest · protocol)

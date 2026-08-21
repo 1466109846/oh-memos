@@ -363,19 +363,28 @@ cd mcp-server-node
 npm ci
 npm run build
 npm test
+
+# 编辑 docs/CHANGELOG.md 后重新生成 README 的「近期变化」块
+cd .. && node scripts/generate-readme-changelog.mjs --write
 ```
 
 Docker 发布工作流还会导入 API、检查依赖、确认 CPU-only Torch 构建，并验证
 镜像以非 root 用户运行。
 
-## 近期亮点
+## 近期变化
 
-- 符号化任务画布让进行中的工作跨上下文压缩存续。
-- 上下文检索、证据包、图谱路径和影响分析同时提供语义与因果信息。
-- 基于项目路径的 cube 路由避免不同仓库之间的记忆污染。
-- Markdown Wiki 导出让项目知识可以审阅、链接和版本化。
-- Wiki 往返：导出的 Markdown 可以手工编辑后回灌，记忆库因此可审阅、可修复、可用 Git 管理。
-- PreToolUse 与生命周期 Hooks 帮助 AI 在修改前先检索，在完成后保存重要结果。
+[更新日志](docs/CHANGELOG.md)中最近的六条条目，由
+`scripts/generate-readme-changelog.mjs` 生成，请勿手工编辑。英文标题取自
+更新日志每条标题下的 `<!-- en: ... -->` 注释。
+
+<!-- changelog-recent:start -->
+- 🔁 新增 `memos_import_wiki`：Markdown Wiki 往返回灌
+- 🧭 架构感知图谱与 Graphify 适配层
+- 🧠 自动捕获、检索质量层、Lite 策略与 Skill 候选
+- 🧾 写入 ID 与元数据闭环
+- 🛡️ 一致性与部署硬化
+- ✅ 审核生命周期与能力边界硬化
+<!-- changelog-recent:end -->
 
 完整历史见[更新日志](docs/CHANGELOG.md)，计划中的能力见
 [路线图](docs/future/ROADMAP.md)。

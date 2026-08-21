@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### 🔁 新增 `memos_import_wiki`：Markdown Wiki 往返回灌
+<!-- en: 🔁 New `memos_import_wiki`: round-trip Markdown wiki back into memory -->
 
 此前 `memos_export_wiki` 是单向的——导出的 Markdown 只能读，人工修正无法回到记忆库，
 记忆一旦写错就只能删除重写。本次补上反方向，导出目录成为可编辑、可 review、可回灌的镜像。
@@ -58,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 设计方案与后续分期见 `docs/plans/2026-08-16-wiki-round-trip-and-memsearch-gap.md`。
 
 ### 🧭 架构感知图谱与 Graphify 适配层
+<!-- en: 🧭 Architecture-aware graph and Graphify adapter layer -->
 
 - 新增统一 provenance 合同：`EXTRACTED / INFERRED / AMBIGUOUS / UNKNOWN`、置信度、证据引用、源码文件和位置。
 - `memos_graph` 的 related/path/impact 输出现在解释关系或节点证据；新增 `mode="import"`，严格校验 Graphify node-link JSON 并生成无写入 dry-run 计划。
@@ -99,6 +101,7 @@ flowchart LR
 <!-- architecture-aware-memory:end -->
 
 ### 🧠 自动捕获、检索质量层、Lite 策略与 Skill 候选
+<!-- en: 🧠 Auto-capture, retrieval quality layer, Lite policy, and skill candidates -->
 
 - 新增默认关闭的 `oh_memos_auto_capture.js`：PreCompact 有界 checkpoint、低置信度、服务端脱敏、失败开放、session/event 哈希去重；`MEMOS_MODE=lite` 强制关闭。
 - 搜索保留现有向量/BM25/全文/图谱召回，在 MCP 结果层增加 freshness、confidence、source 和 lifecycle 质量评分；自动捕获降权，Lite 默认过滤，跨 cube 统一排序。
@@ -107,6 +110,7 @@ flowchart LR
 - Wiki parser 归一化 Windows CRLF，并拒绝未知 lifecycle status。
 
 ### 🧾 写入 ID 与元数据闭环
+<!-- en: 🧾 Write-back contract: created IDs and metadata round-trip -->
 
 - `POST /memories` 现在返回 `data.memory_ids` 与 `data.warnings`，旧客户端可继续忽略新增 data。
 - 写入请求支持并校验 `memory_type`、`tags`、`confidence`、`status`、`created_at`、`updated_at`、`source`、`session_id` 和 `source_ref`。
@@ -114,6 +118,7 @@ flowchart LR
 - Wiki ledger 保存内容哈希、导入时间和新 ID；旧 ledger 格式仍可读取。
 
 ### 🛡️ 一致性与部署硬化
+<!-- en: 🛡️ Consistency and deployment hardening -->
 
 - `POST /memories` 详细结果现在包含 `created_ids`、`queued`、`backend`、`warnings`；非 tree 或无法确认 ID 时明确报告 `ids_unavailable`，async 不再伪装成已持久化。
 - Wiki 回灌增加 duplicate ID 预检、损坏 ledger 拒绝、跨进程锁、原子 ledger 替换、递归总量上限和 uncertain write 保护，并传播 API warnings。
@@ -121,18 +126,21 @@ flowchart LR
 - Skill 候选改为原子创建，拒绝覆盖已有候选和 symlink，列表只显示合法 generator/status 文件。
 
 ### ✅ 审核生命周期与能力边界硬化
+<!-- en: ✅ Review lifecycle and capability-boundary hardening -->
 
 - Skill 候选现在支持显式 approve/reject/install 状态机；安装仅写项目 `.claude/skills/<slug>/SKILL.md`，拒绝覆盖、symlink 和未审批候选。
 - tree_text update 对外显式失败（`TREE_TEXT_UPDATE_UNSUPPORTED`），避免静默成功；待 ID-preserving 图/向量事务合同后再实现。
 - 自动发现的 `.env` 不再覆盖继承环境变量；`MEMOS_ENV_FILE` 显式指定的文件仍为权威配置源。
 
 ### 🗂️ True Lite provider
+<!-- en: 🗂️ True Lite provider -->
 
 - `MEMOS_PROVIDER=local` 或 `MEMOS_MODE=lite` 现在可在没有 Python API 的情况下运行 Node JSONL provider。
 - 每个 cube 写入 `memories.jsonl` 与 `manifest.json`，支持 fsync append、跨进程锁、typed metadata、get/list/recent 和确定性词法 search。
 - Lite 下 graph/think/wiki/admin/delete 返回 `LOCAL_PROVIDER_UNSUPPORTED`，不冒充有图谱后端；迁移边界是导出的 Wiki Markdown，不读取 Python cube 内部。
 
 ### 🔗 Wiki 关系边回灌
+<!-- en: 🔗 Wiki relation edges written back to the graph -->
 
 - Wiki `## 关联` wikilinks 现在在导入时写入 Neo4j 图谱边，不再仅作报告。
 - 新增 `POST /product/graph/relation`（Python API）与纯函数 wiki-relations（Node），支持 `CAUSE`、`CONDITION`、`RELATE`、`CONFLICT`、`FOLLOWS`、`PARENT`。
@@ -141,6 +149,7 @@ flowchart LR
 - 边标签统一在 `wiki-relations.ts EDGE_LABELS`，export 和 import 共用，避免标签漂移。
 
 ### 🧠 Lite 本地语义检索
+<!-- en: 🧠 Local semantic retrieval for Lite -->
 
 - Lite provider 支持可选语义排序：本地 Ollama `/api/embeddings` 提供 embedding，无新增 npm 依赖。
 - embedding 随 JSONL 记录持久化，但永不离开 provider（get/list/search 返回前剥离）；写入时 embedding 失败不阻塞保存。
