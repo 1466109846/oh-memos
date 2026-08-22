@@ -22,6 +22,7 @@
     "test:protocol:v2": "npm run build && node scripts/protocol-v2-smoke.mjs",
     "test:lite-smoke": "npm run build && node scripts/lite-smoke-test.mjs",
     "test:spread-smoke": "npm run build && node scripts/spread-smoke-test.mjs",
+    "test:host-env-smoke": "npm run build && node scripts/host-env-smoke.mjs",
     "schema:semantic": "npm run build && node scripts/schema-semantic-snapshot.mjs --check",
     "schema:semantic:freeze": "npm run build && node scripts/schema-semantic-snapshot.mjs --write",
     "test:pack": "node scripts/pack-contract.mjs",

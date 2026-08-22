@@ -53,8 +53,12 @@ if (!pre.ok) {
 console.log(`前置 ok：${CUBE} 有 ${pre.edges} 条可扩散边\n`);
 
 // ---- MCP server 驱动 ----
+// 入口可覆盖：默认本地构建，设 SPREAD_SMOKE_ENTRY 可打 npm 上装下来的那份，
+// 用来验证「发布出去的包」而不只是「本地能编出来的包」。
+const ENTRY = process.env.SPREAD_SMOKE_ENTRY || "dist/index.js";
+
 function startServer(spreadOn) {
-  const child = spawn(process.execPath, ["dist/index.js"], {
+  const child = spawn(process.execPath, [ENTRY], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
