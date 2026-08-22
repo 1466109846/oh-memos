@@ -1,0 +1,8 @@
+# 让 git blame 跳过纯机械改动的提交。
+#
+# 本地启用一次(每个克隆各自设一次):
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# 行尾规范化:git add --renormalize . 把索引里 474 个文件统一成 LF,
+# 仅行尾、无逻辑改动。
+36a3f47650c7687ee81465b6f6c26f1b23dfb6a4
