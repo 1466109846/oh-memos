@@ -174,7 +174,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    HOST["Host<br/>AI Client + npx oh-memos-mcp"]
+    HOST["Host<br/>AI Client + oh-memos-mcp"]
     BIND["Shared Cube Bind Mount"]
     subgraph COMPOSE["Docker Compose · oh_memos network"]
       API["oh-memos-api :18000<br/>read-only rootfs · non-root"]

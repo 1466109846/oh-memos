@@ -172,27 +172,42 @@ Add this server definition to your MCP client's configuration. The exact config
 file location depends on the client; see the [MCP guide](docs/MCP_GUIDE.md) for
 Claude Code, Cursor, Windsurf, Trae, and other clients.
 
+Install the server once, then point the config at it (`npm root -g` prints the
+directory to use in `args`):
+
+```bash
+npm install -g oh-memos-mcp
+npm root -g
+```
+
 ```json
 {
   "mcpServers": {
     "oh-memos": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["<npm root -g>/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://127.0.0.1:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/absolute/path/to/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "/absolute/path/to/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "/absolute/path/to/oh-memos/.env"
       }
     }
   }
 }
 ```
 
-All four environment variables are required. `MEMOS_CUBES_DIR` must point to
+The first four environment variables are required. `MEMOS_CUBES_DIR` must point to
 the same host directory used by `MEMOS_CUBES_HOST_DIR` in Docker. On Windows,
 use forward slashes in JSON, for example `C:/work/oh-memos/data/oh-memos_cubes`.
+`MEMOS_ENV_FILE` is what lets a globally-installed server find your `.env` — the
+positional search never reaches it from outside the project.
+
+To upgrade, run `npm i -g oh-memos-mcp@latest` and restart the client; the config
+stays as it is. A running server is never swapped mid-session, so the restart is
+what makes a new version take effect.
 
 ### 3. Use memory inside a project
 

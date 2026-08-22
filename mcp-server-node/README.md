@@ -6,7 +6,7 @@
 
 MCP Server for **oh-memos** — Intelligent Persistent Memory for AI Assistants.
 
-Pure Node.js. No Python required. Works with `npx` out of the box.
+Pure Node.js. No Python required.
 
 > **3.0:** requires Node.js 20+, serves legacy 2025-era and MCP `2026-07-28`
 > clients from the same stdio package, and requires no data migration. Still on
@@ -19,8 +19,8 @@ Pure Node.js. No Python required. Works with `npx` out of the box.
 - **Node.js 20 or newer**
 
 ```bash
-npx -y oh-memos-mcp        # 3.x, npm latest — needs Node.js 20+
-npx -y oh-memos-mcp@2      # 2.x maintenance line — still runs on Node.js 18
+npm i -g oh-memos-mcp       # 3.x, npm latest — needs Node.js 20+
+npm i -g oh-memos-mcp@2     # 2.x maintenance line — still runs on Node.js 18
 ```
 
 oh-memos backend API must be running before connecting this MCP server:
@@ -35,36 +35,81 @@ oh-memos backend API must be running before connecting this MCP server:
 
 ## Quick Start
 
-Add to your Claude Code `~/.claude/settings.json`:
+Install once, then point the client at the installed entry point:
+
+```bash
+npm install -g oh-memos-mcp
+npm root -g          # prints the directory used in "args" below
+```
 
 ```json
 {
   "mcpServers": {
     "oh-memos": {
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["<npm root -g>/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "G:/test/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "/path/to/oh-memos/.env"
       }
     }
   }
 }
 ```
 
-Or use a `.env` file in your working directory (the server auto-discovers it):
+To upgrade, reinstall globally — the config needs no edit:
+
+```bash
+npm install -g oh-memos-mcp@latest
+```
+
+Then restart the client. A running MCP server is never swapped mid-session: the
+stdio pipe is bound when the client starts, so an upgrade takes effect only after
+the client restarts.
+
+### Why not `npx`
+
+`npx -y oh-memos-mcp@<version>` also works and is fine for a one-off trial, but it
+costs two extra processes per client — `cmd`/`sh` → `npx-cli` (node) → `cmd`/`sh` →
+server (node), versus a direct launch's two. With several MCP clients open at once
+that overhead is measurable: on one Windows machine running seven clients, the npx
+wrappers alone held ~360 MB. `npx` also pins the version inside every client
+config, so upgrading means editing each one.
+
+| | `npx -y oh-memos-mcp@x.y.z` | `node <npm root -g>/oh-memos-mcp/dist/index.js` |
+|---|---|---|
+| Processes per client | 4 | 2 |
+| Upgrade | edit every config | `npm i -g oh-memos-mcp@latest` |
+| Version source | the config | the global install |
+
+A third option is to point `args` at a checkout's `dist/index.js`. That is the
+lowest-overhead choice for working *on* oh-memos — `npm run build` takes effect on
+the next client restart, with no publish — but the client then breaks if the
+checkout moves or its build output is stale.
+
+Or use a `.env` file in your working directory (the server auto-discovers it when
+the working directory is the project root):
 
 ```bash
 cp node_modules/oh-memos-mcp/.env.example .env
 # Edit .env with your paths
-npx -y oh-memos-mcp
+node "$(npm root -g)/oh-memos-mcp/dist/index.js"
 ```
 
 ---
 
 ## Configuration Examples
+
+The `args` path below assumes npm's **default** global prefix for each platform.
+A custom prefix (nvm, fnm, Volta, a hand-set `prefix`) puts the package
+elsewhere, so confirm with `npm root -g` and use what it prints:
+
+```bash
+node -e "console.log(require('path').join(process.argv[1],'oh-memos-mcp/dist/index.js'))" "$(npm root -g)"
+```
 
 ### Linux / macOS
 
@@ -72,13 +117,14 @@ npx -y oh-memos-mcp
 {
   "mcpServers": {
     "oh-memos": {
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["/usr/local/lib/node_modules/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/home/user/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "/home/user/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "/home/user/oh-memos/.env"
       }
     }
   }
@@ -91,13 +137,14 @@ npx -y oh-memos-mcp
 {
   "mcpServers": {
     "oh-memos": {
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["C:/Users/you/AppData/Roaming/npm/node_modules/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "G:/test/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "G:/test/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "G:/test/oh-memos/.env"
       }
     }
   }
@@ -110,13 +157,14 @@ npx -y oh-memos-mcp
 {
   "mcpServers": {
     "oh-memos": {
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["/usr/lib/node_modules/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/mnt/g/test/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "/mnt/g/test/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "/mnt/g/test/oh-memos/.env"
       }
     }
   }
@@ -137,13 +185,14 @@ be deleted without a prompt; add it only if you have decided you want that.
   "mcpServers": {
     "oh-memos": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["<npm root -g>/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "/path/to/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "/path/to/oh-memos/.env"
       },
       "alwaysAllow": [
         "memos_context_resume",
@@ -183,15 +232,79 @@ be deleted without a prompt; add it only if you have decided you want that.
 | `NEO4J_PASSWORD` | No | — | Neo4j password |
 | `MEMOS_ENV_FILE` | No | — | Explicit path to a `.env` file. Highest priority — see below |
 
+### Mode and provider
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MEMOS_MODE` | No | `full` | `lite` runs the local JSONL provider with no API, Python, Neo4j, or Qdrant. `full` uses the HTTP backend |
+| `MEMOS_PROVIDER` | No | `local` when `MEMOS_MODE=lite`, else `api` | Storage backend. Set explicitly only to override the mode-derived default |
+| `MEMOS_LOG_LEVEL` | No | `info` | `debug` / `info` / `warning` / `error`. Logs go to stderr so they never corrupt the stdio JSON-RPC stream |
+
+`MEMOS_URL` is required for Full mode and unused in Lite.
+
+### Retrieval behaviour (3.1.x)
+
+These change what search returns. All are off or conservative by default, so
+upgrading never silently changes ranking.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MEMOS_SPREAD_ACTIVATION` | No | `false` | One-hop graph spreading activation. When on, a search also returns memories reachable from its direct hits over `CAUSE` / `CONDITION` / `RELATE` edges, annotated ` · via CAUSE from <first 8 chars of the source id>`. Full mode only — it queries Neo4j directly, so `NEO4J_HTTP_URL`, `NEO4J_USER`, and `NEO4J_PASSWORD` must all resolve |
+| `MEMOS_SHOW_WORKING_MEMORY` | No | `false` | Show the scheduler's `WorkingMemory` tier. The backend writes each memory twice — one short-term copy plus one long-term graph node with identical content — so leaving this off is what stops every memory appearing in pairs. Debugging only |
+| `MEMOS_AUTO_CAPTURE` | No | `false` | Accept auto-captured memories. Auto-captured records are also ranked below explicit saves |
+
+> **Spreading activation degrades silently without Neo4j credentials.** Retrieval
+> still returns memories and logs nothing unusual — you simply get no ` via `
+> annotations. If you enabled the switch and see no annotations, check that the
+> Neo4j variables actually reach the server (under `npx`, that means
+> `MEMOS_ENV_FILE`), not that the feature is missing.
+
+Ranking that needs no configuration: per-type exponential decay (a `PROGRESS`
+note ages out in weeks, a `DECISION` stays relevant for years), access
+reinforcement, and near-duplicate folding with per-type thresholds. Folded
+duplicates are reported as ` · folded N: <ids>` rather than dropped.
+
+### Lite embeddings
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MEMOS_LITE_EMBED` | No | `auto` | `off` forces lexical search. `auto` uses Ollama embeddings when reachable and falls back to lexical |
+| `MEMOS_LITE_EMBED_URL` | No | `http://localhost:11434` | Ollama endpoint |
+| `MEMOS_LITE_EMBED_MODEL` | No | `nomic-embed-text` | Embedding model |
+
+### Read from `.env`, not from the client config
+
+The server reads these when building a cube, and they are conventionally kept in
+`.env` rather than repeated in every client config. `MOS_CHAT_MODEL` is
+**required** — cube registration dies on it first, surfacing as a cube that
+"registers" and immediately reports itself unregistered.
+
+| Variable | Description |
+|----------|-------------|
+| `MOS_CHAT_MODEL` | Chat model for memory extraction. Required |
+| `MOS_EMBEDDER_BACKEND` / `_PROVIDER` / `_MODEL` / `_API_BASE` | Embedder wiring |
+| `MOS_ENABLE_REORGANIZE` | Background memory reorganization |
+| `NEO4J_BACKEND` / `NEO4J_URI` / `NEO4J_DB_NAME` | Graph DB connection for cube construction |
+| `NEO4J_AUTO_CREATE` / `NEO4J_USE_MULTI_DB` | Cube creation policy |
+
 > **On locating `.env`**: without `MEMOS_ENV_FILE`, the file is found by guessing
 > from position (working directory, two levels above the package, then dotenv's
-> upward search). That works from a checkout and **never works under `npx`**,
-> where the package root sits in the npm cache and every candidate misses — so no
-> variable loads at all. Set `MEMOS_ENV_FILE` (or pass `--memos-env-file`) when the
-> client's working directory and the install location are both outside the project.
-> A path that does not exist warns on stderr rather than failing silently.
+> upward search). That works from a checkout but **not from a global install or
+> `npx`**, where the package sits outside the project and every candidate misses —
+> so no variable loads at all. Set `MEMOS_ENV_FILE` (or pass `--memos-env-file`)
+> when the client's working directory and the install location are both outside the
+> project. A path that does not exist warns on stderr rather than failing silently.
 >
 > Copy `.env.example` to get started.
+
+> **`MEMOS_ENV_FILE` wins over the client config.** It is loaded with
+> `override: true`, so a value in that file beats the same key in the MCP client's
+> `env` block. The positional fallbacks are the opposite — they only fill gaps and
+> never override the launcher. This is deliberate: an explicitly named env file is
+> meant to be authoritative, while a `.env` that merely happens to sit nearby is
+> not. The practical consequence is that switches like
+> `MEMOS_SHOW_WORKING_MEMORY` cannot be flipped from the client config once
+> `.env` sets them — edit the env file instead.
 
 ---
 

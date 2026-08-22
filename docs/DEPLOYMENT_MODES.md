@@ -66,16 +66,17 @@ host.
 
 ## Lite quick start | Lite 快速开始
 
-Only Node.js 20+ is required. Configure the MCP server with the same `npx`
-command used by Full, but set the local provider and omit `MEMOS_URL`:
+Only Node.js 20+ is required. Install once with `npm i -g oh-memos-mcp`, then use
+the same launch line as Full but set the local provider and omit `MEMOS_URL`
+(`npm root -g` prints the directory for `args`):
 
 ```json
 {
   "mcpServers": {
     "oh-memos": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["<npm root -g>/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_MODE": "lite",
         "MEMOS_PROVIDER": "local",

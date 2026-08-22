@@ -138,27 +138,39 @@ API 文档位于
 Claude Code、Cursor、Windsurf、Trae 等平台的示例见
 [MCP 配置指南](docs/MCP_GUIDE.md)。
 
+先全局装一次，再让配置指向安装后的入口（`npm root -g` 会打印 `args` 里要用的目录）：
+
+```bash
+npm install -g oh-memos-mcp
+npm root -g
+```
+
 ```json
 {
   "mcpServers": {
     "oh-memos": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["<npm root -g>/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://127.0.0.1:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "/absolute/path/to/oh-memos/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "/absolute/path/to/oh-memos/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "/absolute/path/to/oh-memos/.env"
       }
     }
   }
 }
 ```
 
-这四个环境变量都是必填项。`MEMOS_CUBES_DIR` 必须与 Docker 中
+前四个环境变量都是必填项。`MEMOS_CUBES_DIR` 必须与 Docker 中
 `MEMOS_CUBES_HOST_DIR` 指向同一个宿主机目录。Windows JSON 路径请使用
 正斜杠，例如 `C:/work/oh-memos/data/oh-memos_cubes`。
+`MEMOS_ENV_FILE` 是全局安装后能找到 `.env` 的关键 —— 按位置搜索从项目外面永远够不着。
+
+升级只需 `npm i -g oh-memos-mcp@latest` 然后重启客户端，配置不用动。运行中的
+server 不会中途换掉，所以那次重启才是新版生效的时机。
 
 ### 3. 在项目中使用记忆
 

@@ -1,15 +1,18 @@
 {
-  "_comment": "oh-memos MCP — 通用配置(推荐)。经 npx 拉取 npm 上的 oh-memos-mcp,无需本地编译。前提: (1) 本机已装 Node>=20; (2) API 已在 localhost:18000 启动(scripts/local/start.bat)。使用时把 ${BUNDLE_ROOT} 替换为你的 oh-memos 安装路径。若你在源码上开发、需要配置始终跟随本地改动,改用 mcp-config.node.template.json。",
+  "_comment": "oh-memos MCP — 通用配置(推荐)。全局装一次 `npm i -g oh-memos-mcp`,配置指向安装后的入口。前提: (1) 本机已装 Node>=20; (2) API 已在 localhost:18000 启动(scripts/local/start.bat)。使用时把 ${NPM_ROOT_G} 替换为 `npm root -g` 的输出,${BUNDLE_ROOT} 替换为你的 oh-memos 安装路径。升级只需 `npm i -g oh-memos-mcp@latest` 后重启客户端,本文件不用改。若你在源码上开发、需要配置始终跟随本地改动,改用 mcp-config.node.template.json。",
+  "_why_not_npx": "npx 每个客户端要多起两个进程(cmd/sh → npx-cli → cmd/sh → server),同时开多个 MCP 客户端时开销可观;且版本号钉在配置里,升级要逐个改。",
+  "_retrieval_switches": "MEMOS_SPREAD_ACTIVATION=true 开启一跳图扩散联想(仅 Full 模式,需要 Neo4j 凭据经 MEMOS_ENV_FILE 传入)。MEMOS_SHOW_WORKING_MEMORY=true 显示 scheduler 短期副本层,仅调试用。两者默认关闭,详见 docs/MCP_GUIDE.md 的「检索行为」一节。",
   "mcpServers": {
     "oh-memos": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "oh-memos-mcp"],
+      "command": "node",
+      "args": ["${NPM_ROOT_G}/oh-memos-mcp/dist/index.js"],
       "env": {
         "MEMOS_URL": "http://localhost:18000",
         "MEMOS_USER": "dev_user",
         "MEMOS_DEFAULT_CUBE": "dev_cube",
-        "MEMOS_CUBES_DIR": "${BUNDLE_ROOT}/data/oh-memos_cubes"
+        "MEMOS_CUBES_DIR": "${BUNDLE_ROOT}/data/oh-memos_cubes",
+        "MEMOS_ENV_FILE": "${BUNDLE_ROOT}/.env"
       }
     }
   }
