@@ -48,6 +48,7 @@ import {
   spreadRelativity,
   toSpreadNode,
 } from "../spreading-activation.js";
+import { filterEphemeralTier, showsEphemeralTier } from "../memory-tier.js";
 import type { TextContent, MemoryNode, SearchData } from "../types.js";
 import {
   apiErrorResponse,
@@ -76,6 +77,56 @@ function qualityOptions(cubeId: string, query: string): QualityOptions {
 // Temporal Graph Query (Neo4j)
 // ============================================================================
 
+/**
+ * Cypher for the recency query behind `memos_context_resume` and the
+ * `temporal` search intent.
+ *
+ * ## 为什么必须在 Cypher 里排除 WorkingMemory，而不是在 handler 层
+ *
+ * 这个查询原先不 RETURN `memory_type`，构造出的 metadata 只有
+ * `relativity`/`temporal_rank`/`source`。于是 `isEphemeralTier()` 永远读到
+ * undefined 并判为可见 —— **下游任何分层过滤对 temporal 记忆都是空转**。
+ *
+ * 受害面是四个调用点，不只是 context_resume：
+ *   - `memos_context_resume`（成对显示，用户实测发现）
+ *   - `memos_search` 的 temporal intent 两处（经 applyMemoryQualityPolicy，
+ *     过滤存在但读不到字段）
+ *   - `memos_think`（同上）
+ *
+ * 在 Cypher 里滤还顺带避开超额取数：`LIMIT` 在过滤之后，要 10 条就得 10 条真
+ * 记忆。若放到 handler 层，limit 会被随即隐藏的副本吃掉（这正是 §9.6 在 list
+ * 路径踩过的顺序缺陷）。
+ *
+ * 同时 RETURN `memory_type`，让下游过滤从空转变成真的有落点 —— 双保险，
+ * 且 `mergeTemporalResults` 之后的 quality policy 也能正确判层。
+ *
+ * 逃生开关 `MEMOS_SHOW_WORKING_MEMORY=true` 时不加这个条件，与
+ * `filterEphemeralTier` 的语义保持一致。
+ */
+export function buildTemporalCypher(
+  timeWindowHours?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const timeFilter = timeWindowHours
+    ? `AND n.updated_at >= datetime() - duration({hours: ${timeWindowHours}})`
+    : "";
+  const tierFilter = showsEphemeralTier(env)
+    ? ""
+    : "AND coalesce(n.memory_type, '') <> 'WorkingMemory'";
+  return `
+    MATCH (n:Memory)
+    WHERE n.user_name = $user_name
+    AND n.status = 'activated'
+    ${timeFilter}
+    ${tierFilter}
+    RETURN n.id AS id, n.memory AS memory, n.key AS key,
+           n.updated_at AS updated_at, n.background AS background,
+           n.tags AS tags, n.memory_type AS memory_type
+    ORDER BY n.updated_at DESC
+    LIMIT $top_k
+  `;
+}
+
 export async function getTemporalMemories(
   cubeId: string,
   topK = 10,
@@ -90,21 +141,7 @@ export async function getTemporalMemories(
     "base64",
   );
 
-  const timeFilter = timeWindowHours
-    ? `AND n.updated_at >= datetime() - duration({hours: ${timeWindowHours}})`
-    : "";
-
-  const cypher = `
-    MATCH (n:Memory)
-    WHERE n.user_name = $user_name
-    AND n.status = 'activated'
-    ${timeFilter}
-    RETURN n.id AS id, n.memory AS memory, n.key AS key,
-           n.updated_at AS updated_at, n.background AS background,
-           n.tags AS tags
-    ORDER BY n.updated_at DESC
-    LIMIT $top_k
-  `;
+  const cypher = buildTemporalCypher(timeWindowHours);
 
   try {
     const response = await fetchWithTimeout(NEO4J_HTTP_URL, {
@@ -156,6 +193,13 @@ export async function getTemporalMemories(
               relativity: 0.8 - i * 0.05,
               temporal_rank: i + 1,
               source: "temporal_query",
+              // 带上层级，否则下游 filterEphemeralTier 读到 undefined 而空转。
+              // Cypher 已排除 WorkingMemory，这里是双保险 + 让 quality policy
+              // 能正确判层。r[6] 可能缺失（旧节点没写该属性），留 undefined 即
+              // 按可见处理，与 isEphemeralTier 的缺失语义一致。
+              ...(r.length > 6 && r[6] != null
+                ? { memory_type: String(r[6]) }
+                : {}),
             },
           });
         }
@@ -640,7 +684,7 @@ function renderContextResume(
       `**Recent memories** (${recentMemories.length} items, last 24h):`,
       "",
     );
-    for (let i = 0; i < Math.min(recentMemories.length, 10); i++)
+    for (let i = 0; i < Math.min(recentMemories.length, RESUME_LIMIT); i++)
       lines.push(
         `${i + 1}. ${(recentMemories[i].memory ?? "").slice(0, 120).split("\n")[0]}`,
       );
@@ -654,21 +698,65 @@ function renderContextResume(
   return [{ type: "text", text: lines.join("\n") }];
 }
 
+/**
+ * 分层过滤 + 截断，供 `memos_context_resume` 两条路径共用。
+ *
+ * ## 顺序要紧：滤层级必须在 slice 之前
+ *
+ * 放到之后，`limit` 会被随即隐藏的 WorkingMemory 副本吃掉 —— 要 10 条只拿到
+ * 5 条（用户实测就是 10 条里 5 对）。与 `prepareListMemories` 同形，
+ * 那处已经因为同样的原因栽过一次。
+ *
+ * ## 为什么必须是导出的函数
+ *
+ * 原先这段逻辑内联在 handler 里，单测触达不到 —— §9.6 与 P1.5 已两次证明：
+ * 切断 handler 内联逻辑时全部单测仍然通过。在测试里自行组合只能证明测试文件，
+ * 证明不了 handler。所以 handler 与测试必须调用**同一个**函数。
+ */
+export function prepareResumeMemories(
+  memories: readonly MemoryNode[],
+  limit: number,
+  env: NodeJS.ProcessEnv = process.env,
+): MemoryNode[] {
+  const visible = filterEphemeralTier(memories, (m) => m.metadata, env);
+  return [...visible].slice(0, limit);
+}
+
+/** `memos_context_resume` 显示的条数上限。 */
+const RESUME_LIMIT = 10;
+
+/**
+ * 取数时的超额系数。
+ *
+ * API 回退路径的 limit 由服务端施加，过滤只能在取回之后做，所以必须多取 ——
+ * 每条记忆恰好有一个 WorkingMemory 副本，2 倍即可覆盖，取 3 倍留余量
+ * （旧节点可能没有副本，多取的部分会被 slice 丢掉，无副作用）。
+ *
+ * temporal 路径不需要这个：Cypher 的 LIMIT 在过滤之后。
+ */
+const RESUME_OVERFETCH = 3;
+
 export async function handleMemosContextResume(
   arguments_: Record<string, unknown>,
 ): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
   const localProvider = getMemoryProvider(MEMOS_CUBES_DIR);
   if (localProvider) {
-    const recentMemories = await localProvider.recent(cubeId, 24, 10);
-    return renderContextResume(cubeId, recentMemories);
+    // Lite 的 JSONL 不写 memory_type，filterEphemeralTier 按缺失即可见处理，
+    // 所以这里过滤是空操作 —— 保留它是为了后端哪天开始写该字段时自动生效。
+    const recentMemories = await localProvider.recent(cubeId, 24, RESUME_LIMIT);
+    return renderContextResume(
+      cubeId,
+      prepareResumeMemories(recentMemories, RESUME_LIMIT),
+    );
   }
 
   const [regSuccess, regError] = await ensureCubeRegistered(cubeId);
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
-  // Try temporal query first
-  let recentMemories = await getTemporalMemories(cubeId, 10, 24);
+  // Try temporal query first. Cypher 已排除 WorkingMemory 且 LIMIT 在过滤之后，
+  // 所以按原样取 RESUME_LIMIT 条就是 RESUME_LIMIT 条真记忆。
+  let recentMemories = await getTemporalMemories(cubeId, RESUME_LIMIT, 24);
 
   // Fallback to API list
   if (recentMemories.length === 0) {
@@ -676,7 +764,15 @@ export async function handleMemosContextResume(
       "GET",
       `${MEMOS_URL}/memories`,
       cubeId,
-      { params: { user_id: MEMOS_USER, mem_cube_id: cubeId, limit: 10 } },
+      {
+        params: {
+          user_id: MEMOS_USER,
+          mem_cube_id: cubeId,
+          // 超额取：服务端施加 limit，过滤只能在取回后做，不多取则 limit 被
+          // 随即隐藏的副本吃掉。
+          limit: RESUME_LIMIT * RESUME_OVERFETCH,
+        },
+      },
       ensureCubeRegistered,
     );
     if (result.success && result.data) {
@@ -685,6 +781,8 @@ export async function handleMemosContextResume(
       );
     }
   }
+
+  recentMemories = prepareResumeMemories(recentMemories, RESUME_LIMIT);
 
   const lines = ["## Context Resumed", ""];
 
@@ -699,7 +797,7 @@ export async function handleMemosContextResume(
       `**Recent memories** (${recentMemories.length} items, last 24h):`,
       "",
     );
-    for (let i = 0; i < Math.min(recentMemories.length, 10); i++) {
+    for (let i = 0; i < Math.min(recentMemories.length, RESUME_LIMIT); i++) {
       const mem = recentMemories[i];
       const content = mem.memory ?? "";
       const summary = content.slice(0, 120).split("\n")[0];
