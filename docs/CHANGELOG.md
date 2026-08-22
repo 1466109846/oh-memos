@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-08-22
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。
+<!-- en: MCP server only (npm `oh-memos-mcp`). Python package and container image unchanged at 3.1.0. -->
+
+### 🐛 修复：`memos_context_resume` 每条记忆成对出现
+<!-- en: 🐛 Fix: memos_context_resume showed every memory twice -->
+
+3.1.0 装好后 `memos_search` 与 `memos_list_v2` 都已正确隐藏 `WorkingMemory` 短期副本，
+但 `memos_context_resume` 仍成对显示（10 条 = 5 对，内容逐字相同、UUID 不同）。
+<!-- en: After 3.1.0, memos_search and memos_list_v2 correctly hid WorkingMemory copies,
+     but memos_context_resume still showed pairs (10 items = 5 pairs, identical content, different UUIDs). -->
+
+**根因不止是漏接一条路径。** temporal 查询的 Cypher 不返回 `memory_type`，
+构造出的 metadata 只有 `relativity`/`temporal_rank`/`source` —— 于是分层判定永远
+读到 undefined 并判为可见，**下游任何过滤对 temporal 记忆都是空转**。
+<!-- en: Root cause was deeper than one missed call site: the temporal Cypher never
+     returned memory_type, so tier checks always read undefined and any downstream
+     filter was a no-op for temporal memories. -->
+
+受影响的是四个调用点，不只是 `memos_context_resume`：
+<!-- en: Four call sites were affected, not just memos_context_resume: -->
+
+| 路径 | 3.1.0 的状态 |
+|---|---|
+| `memos_context_resume` | 成对显示（用户实测发现） |
+| `memos_search` temporal intent（两处） | 有过滤代码，但读不到字段 |
+| `memos_think` | 同上 |
+
+后三处一直漏着且不易察觉 —— 过滤代码存在且看起来合理，只是作用对象缺字段。
+<!-- en: The latter three were silently affected: the filter code exists and looks
+     correct; the objects it filtered simply lacked the field. -->
+
+修法：在 Cypher 里排除 `WorkingMemory` 并返回 `memory_type`。这是唯一对四处
+都成立的做法，且 `LIMIT` 在过滤之后 —— 要 N 条就得 N 条真记忆，无需超额取数。
+`memos_context_resume` 的 API 回退路径由服务端施加 limit，无法先过滤，故超额取 3 倍。
+<!-- en: Fix: exclude WorkingMemory in the Cypher and return memory_type. This is the
+     only fix that covers all four sites, and LIMIT applies after the filter — N rows
+     means N real memories. The API fallback path over-fetches 3× since its limit is
+     server-side. -->
+
+逃生开关 `MEMOS_SHOW_WORKING_MEMORY=true` 仍然有效：为真时不加排除条件，
+但仍返回 `memory_type` —— 开关只关过滤，不关可观测性。
+<!-- en: The MEMOS_SHOW_WORKING_MEMORY=true escape hatch still works: it drops the
+     exclusion but still returns memory_type — the switch gates filtering, not visibility. -->
+
+### 🧪 测试
+<!-- en: 🧪 Tests -->
+
+新增 `src/context-resume.test.ts`（22 项），**9 个变异全部被捕获**，
+其中 W1「API 路径不过滤」即回到本次报告的原缺陷。
+<!-- en: New src/context-resume.test.ts (22 cases); all 9 mutations caught, including
+     W1 "API path does not filter" which reproduces the reported defect. -->
+
+新增 `npm run test:host-env-smoke`：用 MCP host 配置里的**原样环境**驱动 server，
+且不继承外层环境变量。已有的 spread smoke 自带硬编码 Neo4j 凭据兜底，
+因此「host 读不到凭据」这一失败形态它测不出来 —— 实测该形态下检索照常返回记忆、
+但联想标注为 0，属静默降级。
+<!-- en: New npm run test:host-env-smoke drives the server with the MCP host's verbatim
+     env and does not inherit the outer environment. The existing spread smoke supplies
+     hardcoded Neo4j credentials, so it cannot detect "the host cannot read credentials" —
+     a silent degradation where retrieval still returns memories but spreading is absent. -->
+
+门禁：vitest 416/416、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke、spread smoke、host-env smoke。
+<!-- en: Gates: vitest 416/416, tsc, pack contract, schema budget +0.0%, semantic
+     snapshot 17 tools, protocol v2, lite smoke, spread smoke, host-env smoke. -->
+
 ## [3.1.0] - 2026-08-22
 
 ### 🧠 检索排序：衰减、强化、分档去重与图扩散联想
