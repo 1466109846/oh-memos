@@ -33,6 +33,7 @@
 
 # Container build and runtime files execute on Linux; keep LF even on Windows.
 .gitattributes text eol=lf
+.git-blame-ignore-revs text eol=lf
 .dockerignore text eol=lf
 docker/Dockerfile text eol=lf
 docker/*.sh text eol=lf
