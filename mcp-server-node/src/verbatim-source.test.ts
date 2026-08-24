@@ -36,6 +36,35 @@ const extracted = (
   },
 });
 
+/**
+ * list 端点形态：`sources[0]` 是 **JSON 字符串**而非对象。
+ *
+ * 这是线上实测出的第二种形态 —— 单条 get 给对象，列表给字符串。初版只处理对象，
+ * 于是同源查找在列表数据上永远匹配不到（原文能返回，但同源区块从不出现），
+ * 而 fixture 只造了对象形态，测试全绿放过了它。
+ */
+const extractedListForm = (
+  id: string,
+  key: string,
+  original: string,
+  summary = `概括 ${key}`,
+): MemoryNode => ({
+  id,
+  memory: summary,
+  metadata: {
+    key,
+    session_id: "same-session-for-all",
+    sources: [
+      JSON.stringify({
+        type: "chat",
+        role: "user",
+        chat_time: "03:53 AM on 23 August, 2026",
+        content: original,
+      }),
+    ],
+  },
+});
+
 /** fast-path 写出的节点：memory 就是原文，没有 sources。 */
 const verbatimStored = (id: string, text: string): MemoryNode => ({
   id,
@@ -118,6 +147,59 @@ describe("verbatimOf", () => {
     expect(verbatimOf({ id: "a", memory: "x" })).toBeNull();
     expect(verbatimOf(undefined)).toBeNull();
     expect(verbatimOf(null)).toBeNull();
+  });
+});
+
+describe("verbatimOf —— list 端点的字符串形态", () => {
+  it("sources[0] 是 JSON 字符串时也能取出原文", () => {
+    expect(verbatimOf(extractedListForm("a", "k1", ORIGINAL))).toBe(ORIGINAL);
+  });
+
+  it("字符串与对象两种形态得到相同指纹 —— 否则跨端点无法配对", () => {
+    // 这正是缺陷的后果：单条 get 走对象、list 走字符串，指纹不一致就永远配不上。
+    expect(sourceFingerprint(extractedListForm("a", "k", ORIGINAL))).toBe(
+      sourceFingerprint(extracted("b", "k", ORIGINAL)),
+    );
+  });
+
+  it("同源查找能在 list 形态的候选集里找到碎片", () => {
+    const target = extracted("t", "目标", ORIGINAL); // 单条 get 形态
+    const candidates = [
+      extractedListForm("s1", "碎片一", ORIGINAL), // list 形态
+      extractedListForm("s2", "碎片二", ORIGINAL),
+      extractedListForm("u", "无关", OTHER),
+    ];
+    expect(findSiblings(target, candidates).map((x) => x.id)).toEqual(["s1", "s2"]);
+  });
+
+  it("非 JSON 字符串返回 null —— 不猜它是裸原文", () => {
+    // 若把任意字符串当原文，无关记忆会被归成同源。
+    for (const bad of ["就是一段普通文字", "not json at all", "[]", ""]) {
+      expect(
+        verbatimOf({ id: "a", memory: "x", metadata: { sources: [bad] } }),
+      ).toBeNull();
+    }
+  });
+
+  it("JSON 字符串但 content 缺失或为空时返回 null", () => {
+    for (const obj of [{ type: "chat" }, { content: "" }, { content: "   " }, { content: 42 }]) {
+      expect(
+        verbatimOf({
+          id: "a",
+          memory: "x",
+          metadata: { sources: [JSON.stringify(obj)] },
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("坏 JSON 不抛异常 —— 展示层不该因脏数据失败", () => {
+    expect(() =>
+      verbatimOf({ id: "a", memory: "x", metadata: { sources: ['{"content":'] } }),
+    ).not.toThrow();
+    expect(
+      verbatimOf({ id: "a", memory: "x", metadata: { sources: ['{"content":'] } }),
+    ).toBeNull();
   });
 });
 

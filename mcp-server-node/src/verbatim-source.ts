@@ -46,6 +46,38 @@ interface SourceMessage {
 }
 
 /**
+ * 取一条 source 的 content —— **同一个字段有两种线上形态**。
+ *
+ * 实测（3.1.2 上线后才暴露）：
+ *   `GET /memories/{cube}/{id}`（单条）→ `sources[0]` 是**对象** `{type,role,content}`
+ *   `GET /memories`（列表）        → `sources[0]` 是**JSON 字符串** `'{"type":...}'`
+ *
+ * 初版只处理对象那种，于是同源查找在列表数据上永远匹配不到 —— 原文能返回，
+ * 但「同源碎片」区块从不出现。单测用的 fixture 也只造了对象形态，所以测试全绿。
+ *
+ * 解析失败按无 content 处理，不抛：这是展示层，坏数据不该让 `memos_get` 失败。
+ */
+function contentOf(entry: unknown): string | null {
+  if (typeof entry === "string") {
+    // 列表端点的形态。不是 JSON 就当没有 —— 不去猜它是不是裸原文，
+    // 否则任何字符串都会被当成原文，把无关记忆归成同源。
+    if (!entry.trimStart().startsWith("{")) return null;
+    try {
+      const parsed = JSON.parse(entry) as SourceMessage;
+      const c = parsed?.content;
+      return typeof c === "string" && c.trim() !== "" ? c : null;
+    } catch {
+      return null;
+    }
+  }
+  if (entry && typeof entry === "object") {
+    const c = (entry as SourceMessage).content;
+    return typeof c === "string" && c.trim() !== "" ? c : null;
+  }
+  return null;
+}
+
+/**
  * 取出逐字原文。
  *
  * 没有 sources、sources 为空、或第一条没有非空 content 时返回 null —— 调用方据此
@@ -58,10 +90,7 @@ export function verbatimOf(node: MemoryNode | undefined | null): string | null {
   const sources = (node?.metadata as Record<string, unknown> | undefined)
     ?.sources;
   if (!Array.isArray(sources) || sources.length === 0) return null;
-  const first = sources[0] as SourceMessage | null | undefined;
-  const content = first?.content;
-  if (typeof content !== "string" || content.trim() === "") return null;
-  return content;
+  return contentOf(sources[0]);
 }
 
 /**

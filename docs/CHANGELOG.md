@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.3] - 2026-08-24
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。
+<!-- en: MCP server only (npm `oh-memos-mcp`). Python package and container image unchanged at 3.1.0. -->
+
+### 🐛 修复：同源碎片区块从不出现 —— `sources` 有两种线上形态
+<!-- en: 🐛 Fix: the sibling-fragments section never appeared — sources has two wire shapes -->
+
+3.1.2 上线后实测：原文能正确返回，但「同源碎片」区块**从不出现**。
+<!-- en: Measured after 3.1.2 shipped: the original text came back correctly, but the
+     sibling-fragments section never appeared. -->
+
+根因是同一个字段在两个端点上形态不同：
+<!-- en: Root cause: the same field has different shapes on the two endpoints. -->
+
+| 端点 | `sources[0]` 的形态 |
+|---|---|
+| `GET /memories/{cube}/{id}`（单条） | **对象** `{type, role, chat_time, content}` |
+| `GET /memories`（列表） | **JSON 字符串** `'{"type":...,"content":"..."}'` |
+
+`verbatimOf` 初版只处理对象形态。单条取回走对象 → 原文正常；同源查找的候选集来自
+列表端点 → 全部返回 null → 永远匹配不到。**原文层可用，配对层静默失效。**
+<!-- en: The first verbatimOf handled only the object shape. Single get uses objects, so the
+     original worked; sibling candidates come from the list endpoint and all returned null,
+     so nothing ever matched. The verbatim layer worked while pairing silently failed. -->
+
+单测没抓住的原因很直接：fixture 只造了对象形态，两种形态里只测了一种。
+<!-- en: The unit tests missed it for a plain reason: the fixture only built the object shape,
+     so only one of the two wire shapes was ever exercised. -->
+
+修法：抽出 `contentOf(entry)` 同时接受对象与 JSON 字符串。非 JSON 字符串返回 null
+而**不猜它是裸原文** —— 否则任意字符串都会被当原文，把无关记忆归成同源。
+坏 JSON 按无 content 处理不抛异常：这是展示层，脏数据不该让 `memos_get` 失败。
+<!-- en: Fix: extract contentOf(entry) accepting both objects and JSON strings. A non-JSON
+     string returns null rather than being guessed as a raw original — otherwise any string
+     would be treated as one, grouping unrelated memories. Malformed JSON is treated as
+     missing content and never throws: this is presentation, and bad data must not break
+     memos_get. -->
+
+### 🧪 测试
+<!-- en: 🧪 Tests -->
+
+新增 6 项断言与一个 list 形态 fixture（共 43 项）。三个变异全部被捕获，
+其中「不处理字符串形态」即回到本次修复前的行为，另两个覆盖「非 JSON 当裸原文」
+与「坏 JSON 抛异常」。跨形态指纹一致性单独断言 —— 否则单条与列表永远配不上。
+<!-- en: Six new assertions plus a list-shape fixture (43 total). All three mutations caught:
+     "does not handle the string shape" reproduces the pre-fix behavior, the other two cover
+     "treats non-JSON as a raw original" and "throws on malformed JSON". Cross-shape
+     fingerprint equality is asserted separately, since otherwise single-get and list can
+     never pair up. -->
+
+门禁：vitest 442 passed、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke、host-env smoke。
+<!-- en: Gates: vitest 442 passed, tsc, pack contract, schema budget +0.0%, semantic snapshot
+     17 tools, protocol v2, lite smoke, host-env smoke. -->
+
 ## [3.1.2] - 2026-08-23
 
 仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。
