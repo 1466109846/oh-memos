@@ -35,6 +35,7 @@
  * 设计讨论见 docs/design/memory-retrieval-optimization.md。
  */
 
+import { isEphemeralTier, showsEphemeralTier } from "./memory-tier.js";
 import type { MemoryNode } from "./types.js";
 
 /** `metadata.sources[]` 的元素形态（后端 SourceMessage）。 */
@@ -159,16 +160,29 @@ export function renderVerbatimSections(
 /**
  * 在候选集里找与 target 同源的其他碎片。
  *
- * 排除 target 自身，也排除没有原文的节点。顺序按候选集原顺序，由调用方决定
- * 候选集怎么排（后端返回顺序通常已按 created_at）。
+ * 排除三类：target 自身、没有原文的节点、**scheduler 管理的短期副本**。
+ *
+ * ## 为什么必须滤层级
+ *
+ * 后端对每条抽取结果写两个节点：一个 `WorkingMemory` 短期副本 + 一个
+ * `LongTermMemory`（或 `UserMemory`）持久节点，`key` 与 `created_at` 逐字相同。
+ * 不滤的话同源列表里每个 key 成对出现 —— 实测一条被切成 6 段的记忆列出了 12 条同源。
+ *
+ * 这不是新决策，是 3.1.0 已经做过的决定（`memory-tier.ts`）。`search` 与
+ * `list_v2` 早已在滤，`findSiblings` 是 3.1.2 新增的路径 —— 又漏了一处。
+ * **新写的检索路径必须继承既有的分层过滤决定**，这是同一形态的第五次。
+ *
+ * 顺序按候选集原顺序，由调用方决定候选集怎么排（后端通常已按 updated_at 倒序）。
  */
 export function findSiblings(
   target: MemoryNode | undefined | null,
   candidates: readonly (MemoryNode | undefined | null)[],
   limit = 12,
+  env: NodeJS.ProcessEnv = process.env,
 ): SiblingRef[] {
   const fp = sourceFingerprint(target);
   if (fp === null) return [];
+  const showEphemeral = showsEphemeralTier(env);
   const targetId = String(target?.id ?? "");
   const out: SiblingRef[] = [];
   const seen = new Set<string>();
@@ -177,6 +191,8 @@ export function findSiblings(
     const id = String(node?.id ?? "");
     if (!id || id === targetId || seen.has(id)) continue;
     if (sourceFingerprint(node) !== fp) continue;
+    // 逃生开关打开时不滤 —— 与 filterEphemeralTier 的语义保持一致。
+    if (!showEphemeral && isEphemeralTier(node?.metadata)) continue;
     seen.add(id);
     const meta = (node?.metadata ?? {}) as Record<string, unknown>;
     const key = String(meta.key ?? "").trim();

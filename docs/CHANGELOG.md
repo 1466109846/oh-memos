@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.4] - 2026-08-24
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。
+<!-- en: MCP server only (npm `oh-memos-mcp`). Python package and container image unchanged at 3.1.0. -->
+
+### 🐛 修复：同源节点列表混入 scheduler 短期副本
+<!-- en: 🐛 Fix: the sibling-nodes list included scheduler short-term copies -->
+
+3.1.3 上线后实测：同源列表里每个 `key` **成对出现** —— 一条被切成 6 段的记忆
+列出了 12 条同源。
+<!-- en: Measured after 3.1.3 shipped: every key in the sibling list appeared twice —
+     a memory split into 6 fragments listed 12 siblings. -->
+
+后端对每条抽取结果写两个节点：一个 `WorkingMemory` 短期副本 +
+一个 `LongTermMemory`（少数为 `UserMemory`）持久节点，`key` 与 `created_at` 逐字相同。
+`findSiblings` 没有滤层级，于是短期副本一并列出。
+<!-- en: The backend writes two nodes per extracted fragment: a WorkingMemory short-term copy
+     plus a LongTermMemory (sometimes UserMemory) persistent node, with identical key and
+     created_at. findSiblings did not filter tiers, so the copies were listed too. -->
+
+**这不是新决策，是 3.1.0 已经做过的决定**（`memory-tier.ts`）。`memos_search` 与
+`memos_list_v2` 早已在滤，`findSiblings` 是 3.1.2 新增的路径 —— 又漏了一处。
+同一形态在本项目已出现五次：**新写的检索路径必须继承既有的分层过滤决定。**
+<!-- en: This was not a new decision but one already made in 3.1.0 (memory-tier.ts).
+     memos_search and memos_list_v2 already filtered; findSiblings was a path added in 3.1.2
+     and missed it. The same shape has now occurred five times in this project: a newly
+     written retrieval path must inherit the existing tier-filter decision. -->
+
+逃生开关 `MEMOS_SHOW_WORKING_MEMORY=true` 时不滤，与 `filterEphemeralTier` 语义一致。
+缺 `memory_type` 视为可见 —— Lite 的 JSONL 不写该字段。
+<!-- en: With MEMOS_SHOW_WORKING_MEMORY=true no filtering happens, matching
+     filterEphemeralTier. A missing memory_type counts as visible: Lite's JSONL omits it. -->
+
+### 🧪 测试
+<!-- en: 🧪 Tests -->
+
+新增 5 项分层断言（共 48 项），三个变异全部被捕获：不滤层级（回到本次缺陷）、
+忽略逃生开关、忽略 limit。其中「limit 在滤层级之后生效」用交错排列的候选集断言 ——
+顺序反了会让 limit 被随即隐藏的副本吃掉，只返回一半。
+<!-- en: Five new tier assertions (48 total); all three mutations caught: no tier filter
+     (reproduces this defect), ignoring the escape hatch, and ignoring limit. The
+     "limit applies after tier filtering" case uses an interleaved candidate list — with the
+     order reversed, limit would be consumed by copies that are then hidden, returning half. -->
+
+门禁：vitest 447 passed、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke、host-env smoke。
+<!-- en: Gates: vitest 447 passed, tsc, pack contract, schema budget +0.0%, semantic snapshot
+     17 tools, protocol v2, lite smoke, host-env smoke. -->
+
 ## [3.1.3] - 2026-08-24
 
 仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。

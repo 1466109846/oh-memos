@@ -294,6 +294,78 @@ describe("findSiblings", () => {
   });
 });
 
+describe("findSiblings —— 分层过滤", () => {
+  // 后端对每条抽取结果写两个节点：WorkingMemory 短期副本 + LongTermMemory 持久节点，
+  // key 与 created_at 逐字相同。实测一条切成 6 段的记忆列出了 12 条同源。
+  const tiered = (id: string, key: string, tier: string): MemoryNode => ({
+    id,
+    memory: `概括 ${key}`,
+    metadata: {
+      key,
+      memory_type: tier,
+      sources: [{ type: "chat", role: "user", content: ORIGINAL }],
+    },
+  });
+
+  const target = tiered("t", "目标", "LongTermMemory");
+
+  it("默认滤掉 WorkingMemory 副本 —— 每个 key 只出现一次", () => {
+    const out = findSiblings(
+      target,
+      [
+        tiered("L1", "待办事项", "LongTermMemory"),
+        tiered("W1", "待办事项", "WorkingMemory"),
+        tiered("L2", "版本信息", "LongTermMemory"),
+        tiered("W2", "版本信息", "WorkingMemory"),
+      ],
+      12,
+      {},
+    );
+    expect(out.map((x) => x.id)).toEqual(["L1", "L2"]);
+    expect(out.map((x) => x.key)).toEqual(["待办事项", "版本信息"]);
+  });
+
+  it("UserMemory 保留 —— 只有 WorkingMemory 是短期层", () => {
+    const out = findSiblings(
+      target,
+      [tiered("U1", "待办事项", "UserMemory"), tiered("W1", "待办事项", "WorkingMemory")],
+      12,
+      {},
+    );
+    expect(out.map((x) => x.id)).toEqual(["U1"]);
+  });
+
+  it("缺 memory_type 视为可见 —— Lite 的 JSONL 不写该字段", () => {
+    const noTier: MemoryNode = {
+      id: "n1",
+      memory: "概括",
+      metadata: { key: "无层级", sources: [{ content: ORIGINAL }] },
+    };
+    expect(findSiblings(target, [noTier], 12, {}).map((x) => x.id)).toEqual(["n1"]);
+  });
+
+  it("MEMOS_SHOW_WORKING_MEMORY=true 时不滤", () => {
+    const out = findSiblings(
+      target,
+      [tiered("L1", "待办事项", "LongTermMemory"), tiered("W1", "待办事项", "WorkingMemory")],
+      12,
+      { MEMOS_SHOW_WORKING_MEMORY: "true" },
+    );
+    expect(out.map((x) => x.id)).toEqual(["L1", "W1"]);
+  });
+
+  it("limit 在滤层级之后生效 —— 不被随即隐藏的副本吃掉", () => {
+    // 顺序反了会只剩一半：交错排列时前 4 条里有 2 条是副本。
+    const candidates = [];
+    for (let i = 0; i < 6; i++) {
+      candidates.push(tiered(`L${i}`, `k${i}`, "LongTermMemory"));
+      candidates.push(tiered(`W${i}`, `k${i}`, "WorkingMemory"));
+    }
+    const out = findSiblings(target, candidates, 4, {});
+    expect(out.map((x) => x.id)).toEqual(["L0", "L1", "L2", "L3"]);
+  });
+});
+
 describe("renderVerbatimSections", () => {
   it("无原文时返回空数组 —— 渲染层保持原有行为", () => {
     expect(renderVerbatimSections(null, [], "概括")).toEqual([]);
