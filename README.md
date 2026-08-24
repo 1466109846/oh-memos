@@ -396,12 +396,12 @@ The six most recent entries from the [changelog](docs/CHANGELOG.md), generated b
 from the `<!-- en: ... -->` comment under each changelog heading.
 
 <!-- changelog-recent:start -->
+- `3.1.2 · 2026-08-23` — 📄 memos_get returns the verbatim original, not just the LLM summary
+- `3.1.2 · 2026-08-23` — 🧪 Tests
 - `3.1.1 · 2026-08-22` — 🐛 Fix: memos_context_resume showed every memory twice
 - `3.1.1 · 2026-08-22` — 🧪 Tests
 - `3.1.0 · 2026-08-22` — 🧠 Retrieval ranking: decay, reinforcement, tiered dedupe, spreading activation
 - `3.1.0 · 2026-08-22` — 🔁 New `memos_import_wiki`: round-trip Markdown wiki back into memory
-- `3.1.0 · 2026-08-22` — 🧭 Architecture-aware graph and Graphify adapter layer
-- `3.1.0 · 2026-08-22` — 🧠 Auto-capture, retrieval quality layer, Lite policy, and skill candidates
 <!-- changelog-recent:end -->
 
 See the [changelog](docs/CHANGELOG.md) for the full history and the

@@ -12,6 +12,12 @@ import { ensureCubeRegistered } from "../cube-manager.js";
 import { parseMemoryWriteResponse } from "../memory-write-response.js";
 import { recordAccess } from "../access-tracker.js";
 import { filterEphemeralTier } from "../memory-tier.js";
+import {
+  findSiblings,
+  renderVerbatimSections,
+  verbatimOf,
+  type SiblingRef,
+} from "../verbatim-source.js";
 // formatMemoriesForDisplay intentionally not imported here — list output is built
 // from the truncated allMemories in handleMemosList (avoids printing the full cube).
 import {
@@ -303,6 +309,34 @@ export async function handleMemosList(
 // memos_get
 // ============================================================================
 
+/**
+ * 取同源碎片。只在当前记忆确实带原文时才发这次请求 —— fast-path 写入不会付这个代价。
+ *
+ * 失败即返回空数组：同源列表是附加信息，取不到时 `memos_get` 仍应给出原文。
+ * 拉取量上限 200，避免大 cube 上把整库拉回来（碎片来自同一次写入，时间相邻，
+ * 后端按 updated_at 倒序返回，200 条足以覆盖）。
+ */
+async function fetchSiblings(
+  cubeId: string,
+  target: MemoryNode,
+): Promise<SiblingRef[]> {
+  try {
+    const result = await apiCallWithRetry(
+      "GET",
+      `${MEMOS_URL}/memories`,
+      cubeId,
+      { params: { user_id: MEMOS_USER, mem_cube_id: cubeId, limit: 200 } },
+      ensureCubeRegistered,
+    );
+    if (!result.success || !result.data) return [];
+    const data = (result.data as Record<string, unknown>).data as SearchData;
+    return findSiblings(target, extractMemoriesFromData(data ?? {}));
+  } catch (err) {
+    logger.debug(`sibling lookup failed: ${String(err)}`);
+    return [];
+  }
+}
+
 export async function handleMemosGet(
   arguments_: Record<string, unknown>,
 ): Promise<TextContent[]> {
@@ -334,10 +368,11 @@ export async function handleMemosGet(
           `**Cube**: ${full.cubeId} (local)`,
           full.tags.length ? `**Tags**: ${full.tags.join(", ")}` : "",
           full.createdAt ? `**Created**: ${full.createdAt}` : "",
-          "",
-          "### Content",
-          "",
-          full.content,
+          // Lite 的 JSONL 不写 sources，verbatimOf 返回 null → 保持原有输出。
+          // 保留这个分支是为了后端哪天开始写该字段时自动生效。
+          ...(verbatimOf(node) === null
+            ? ["", "### Content", "", full.content]
+            : renderVerbatimSections(verbatimOf(node), [], full.content)),
         ]
           .filter(Boolean)
           .join("\n"),
@@ -363,6 +398,7 @@ export async function handleMemosGet(
       // Full 模式同样记在本机侧车 —— 使用度是本机数据，不需要后端端点。
       recordAccess(MEMOS_CUBES_DIR, cubeId, [memoryId]);
       const fullMem = toFull(resultData, cubeId, MEMOS_USER);
+      const verbatim = verbatimOf(resultData);
       const lines = [
         "## 📝 Memory Details",
         "",
@@ -376,7 +412,19 @@ export async function handleMemosGet(
         lines.push(`**Tags**: ${fullMem.tags.join(", ")}`);
       if (fullMem.createdAt) lines.push(`**Created**: ${fullMem.createdAt}`);
 
-      lines.push("", "### Content", "", fullMem.content);
+      // 有原文时原文即正文，`memory` 字段（LLM 概括）降级到下方的「抽取概括」区块。
+      // 无原文（fast-path 写入）时保持原有行为。
+      if (verbatim === null) {
+        lines.push("", "### Content", "", fullMem.content);
+      } else {
+        lines.push(
+          ...renderVerbatimSections(
+            verbatim,
+            await fetchSiblings(cubeId, resultData),
+            fullMem.content,
+          ),
+        );
+      }
 
       if (fullMem.background) {
         lines.push("", "### Background", "", fullMem.background);

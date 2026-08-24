@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-08-23
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。
+<!-- en: MCP server only (npm `oh-memos-mcp`). Python package and container image unchanged at 3.1.0. -->
+
+### 📄 `memos_get` 返回原文，不再只返回 LLM 概括
+<!-- en: 📄 memos_get returns the verbatim original, not just the LLM summary -->
+
+开启 LLM 抽取（`MOS_TYPED_SAVE_FAST=false`）时，后端把一次写入拆成多条细粒度记忆：
+每条的 `memory` 字段是 LLM 概括，而**逐字原文完整保留在 `metadata.sources[0].content`**。
+实测一条 1056 字的写入被拆成 5 条，每条 `memory` 约 244 字，5 条共享同一份原文。
+`memos_get` 此前只读 `memory`，于是完整上下文取不回来。
+<!-- en: With LLM extraction enabled (MOS_TYPED_SAVE_FAST=false) the backend splits one
+     write into several fine-grained memories: each memory field holds an LLM summary,
+     while the verbatim original is preserved in metadata.sources[0].content. Measured:
+     one 1056-char write became 5 memories of ~244 chars each, all sharing one original.
+     memos_get read only the memory field, so the full context was unreachable. -->
+
+这不是取舍问题 —— 库里本来就是两份数据，各有各的用途：
+<!-- en: This is not a tradeoff: the store already holds both, each with its own purpose. -->
+
+| 层 | 内容 | 用途 |
+|---|---|---|
+| `memory` | LLM 概括（细粒度） | 向量化输入、建边对象 → 决定图谱节点与联想质量 |
+| `metadata.sources[].content` | 逐字原文 | `memos_get` 的完整上下文来源 |
+
+因此图谱拿细粒度节点、`memos_get` 拿原文，两者不冲突。
+<!-- en: So the graph gets fine-grained nodes and memos_get gets the original; no conflict. -->
+
+**新输出结构**（有原文时）：原文作为 `### Content` 正文；LLM 概括降级到
+`### 抽取概括` 区块并保留 —— 它是向量化与建边的实际输入，看得见才能判断图谱节点切得对不对；
+`### 同源碎片` 列出由同一次写入抽出的其他记忆（id + key），从而能看出 LLM 的切分方式。
+无原文时（fast-path 写入）输出与此前完全一致。
+<!-- en: New output when a verbatim original exists: the original becomes the Content body;
+     the LLM summary moves to an "extraction summary" section and is kept, since it is the
+     actual input to embedding and edge building — visible so node granularity can be judged;
+     a "sibling fragments" section lists the other memories from the same write (id + key),
+     revealing how the LLM split it. Without an original (fast-path writes) output is unchanged. -->
+
+同源判定用原文全文，不用 `session_id` —— 同一会话里的无关写入会被错误归组。
+<!-- en: Sibling grouping keys on the full original text, not session_id: unrelated writes
+     in the same session would otherwise be grouped together. -->
+
+新增 `src/verbatim-source.ts`：`verbatimOf` / `sourceFingerprint` / `findSiblings` /
+`renderVerbatimSections`，四个纯函数，handler 与测试调用同一份实现。
+Full 与 Lite 两条路径都已接线（Lite 的 JSONL 无同源概念，列表恒空）。
+同源查询失败时返回空列表，不影响原文返回。
+<!-- en: New src/verbatim-source.ts with four pure functions shared by handler and tests.
+     Both Full and Lite paths are wired (Lite's JSONL has no sibling concept, so the list is
+     always empty). A failed sibling lookup returns an empty list and never blocks the original. -->
+
+### 🧪 测试
+<!-- en: 🧪 Tests -->
+
+新增 `src/verbatim-source.test.ts`（37 项）。**变异验证抓出三个断言缺乏判别力**，
+每一个都是「测试写了但等于没写」的形态：
+<!-- en: New src/verbatim-source.test.ts (37 cases). Mutation testing exposed three
+     assertions with no discriminating power — each a "written but vacuous" test: -->
+
+- 接线守卫数两条路径**合计**调用次数 `>= 2`，而 Lite 路径自身就有 2 次，
+  砍掉 Full 路径那次仍然通过。改为按路径分别断言。
+- 「原文不截断」用 30 字测试原文，而变异截断到 200 字 —— 改不动它。
+  测试原文改为 600+ 字并加尾部标记。**这条正是本次要修的缺陷，却最后才抓住。**
+- `"not-an-array"[0]` 是字符 `"n"`、无 `.content`，宽松实现也返回 null。
+  改用伪装成数组的对象才有判别力。
+<!-- en: - The wiring guard counted combined call sites (>= 2) while the Lite path alone had 2,
+       so removing the Full path's call still passed. Now asserted per path.
+     - "does not truncate" used a 30-char original while the mutation truncated at 200 —
+       unreachable. The fixture is now 600+ chars with a tail marker. This was the very defect
+       being fixed, yet the last one caught.
+     - "not-an-array"[0] is the character "n" with no .content, so a lax implementation also
+       returned null. An object masquerading as an array was needed. -->
+
+顺带删除 `sourceFingerprint` 的长度前缀：变异验证时构造不出它能防住的碰撞，
+无测试支撑的防御代码比没有更糟。
+<!-- en: Also removed the length prefix from sourceFingerprint: mutation testing could not
+     construct a collision it prevents, and unbacked defensive code is worse than none. -->
+
+12 个变异被捕获（W1「Full 路径不读原文」即回到本次修复前的行为）。
+门禁：vitest 436/436、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke。
+<!-- en: 12 mutations caught (W1 "Full path does not read the original" reproduces the
+     pre-fix behavior). Gates: vitest 436/436, tsc, pack contract, schema budget +0.0%,
+     semantic snapshot 17 tools, protocol v2, lite smoke. -->
+
 ## [3.1.1] - 2026-08-22
 
 仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.0。
