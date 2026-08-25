@@ -75,7 +75,7 @@ data/memos_cubes/
         "backend": "http_bge",
         "config": {
           "url": "https://api.siliconflow.cn/v1/rerank",
-          "model": "netease-youdao/bce-reranker-base_v1",
+          "model": "BAAI/bge-reranker-v2-m3",
           "headers_extra": "{}"
         }
       },

@@ -40,7 +40,7 @@ class RerankerFactory:
         if backend in {"http_bge", "bge"}:
             return HTTPBGEReranker(
                 reranker_url=c.get("url") or c.get("endpoint") or c.get("reranker_url"),
-                model=c.get("model", "bge-reranker-v2-m3"),
+                model=c.get("model", "BAAI/bge-reranker-v2-m3"),
                 timeout=int(c.get("timeout", 10)),
                 max_query_tokens=min(max(c.get("max_query_tokens", 8000), 100), 8000),
                 concate_len=min(max(c.get("concate_len", 1000), 4), 8000),
@@ -66,7 +66,7 @@ class RerankerFactory:
         if backend in {"http_bge_strategy", "bge_strategy"}:
             return HTTPBGERerankerStrategy(
                 reranker_url=c.get("url") or c.get("endpoint") or c.get("reranker_url"),
-                model=c.get("model", "bge-reranker-v2-m3"),
+                model=c.get("model", "BAAI/bge-reranker-v2-m3"),
                 timeout=int(c.get("timeout", 10)),
                 max_query_tokens=min(max(c.get("max_query_tokens", 8000), 100), 8000),
                 concate_len=min(max(c.get("concate_len", 1000), 4), 8000),

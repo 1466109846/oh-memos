@@ -118,29 +118,43 @@ oh-memos provides Claude Code hooks in `project-memory/hooks/node/`. See `projec
 
 ## API Endpoints
 
+本地 API 由 `src/oh_memos/api/start_api.py` 提供(端口 18000)。以下是它**实际注册**的端点。
+
+### Search API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/search` | POST | Search memories(`SearchRequest`: `query` 必填,`user_id` / `install_cube_ids` / `top_k` 可选)|
+
 ### Graph API
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/product/graph/data` | POST | Export graph nodes and edges |
-| `/product/graph/trace_path` | POST | Trace paths between two nodes |
-| `/product/graph/schema` | POST | Export graph schema and statistics |
-| `/product/search` | POST | Search with optional `enable_context_analysis` |
+| `/product/graph/data`(别名 `/graph/data`)| POST | Export graph nodes and edges |
+| `/product/graph/trace_path`(别名 `/graph/trace_path`)| POST | Trace paths between two nodes |
+| `/product/graph/schema`(别名 `/graph/schema`)| POST | Export graph schema and statistics |
+| `/product/graph/relation` | POST | Add graph relation |
 
-### Example: Context-Aware Search
+### Example: Search
 
 ```json
-POST /product/search
+POST /search
 {
   "user_id": "dev_user",
   "query": "what was the solution?",
-  "readable_cube_ids": ["oh_memos_cube"],
-  "enable_context_analysis": true,
-  "chat_history": [
-    {"role": "user", "content": "I'm debugging login errors"}
-  ]
+  "install_cube_ids": ["oh_memos_cube"],
+  "top_k": 10
 }
 ```
+
+> ⚠️ **不要写 `/product/search`**。它不在 `start_api.py` 里,只挂在另外两个独立 app
+> 上(`product_api.py` / `server_api.py`,各自 `include_router(prefix="/product")`),
+> 本地不启动。同理:
+> - `readable_cube_ids` 只属于 `server_api.py` 的 `APISearchRequest`,`/search` 用的是 `install_cube_ids`
+> - `chat_history` 同上,也只在 `APISearchRequest` 上
+> - `enable_context_analysis` 在 `src/` 内**没有任何声明**,任何 app 都不认
+>
+> Pydantic 会静默丢弃模型上不存在的字段——传错字段不会报错,只会不生效。
 
 ---
 

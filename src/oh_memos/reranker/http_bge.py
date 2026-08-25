@@ -78,7 +78,7 @@ class HTTPBGEReranker(BaseReranker):
         self,
         reranker_url: str,
         token: str = "",
-        model: str = "bge-reranker-v2-m3",
+        model: str = "BAAI/bge-reranker-v2-m3",
         timeout: int = 10,
         max_query_tokens: int | None = None,
         concate_len: int | None = None,

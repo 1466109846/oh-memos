@@ -146,8 +146,11 @@ ollama pull dengcao/bge-m3:567m
 
 | 模型 | 后端 | 备注 |
 |------|------|------|
-| BAAI/bge-reranker-v2-m3 | http_bge | **推荐，硅基流动免费** |
-| netease-youdao/bce-reranker-base_v1 | http_bge | 硅基流动免费 |
+| BAAI/bge-reranker-v2-m3 | http_bge | **推荐，568M / 8K 上下文，硅基流动免费** |
+| netease-youdao/bce-reranker-base_v1 | http_bge | ⛔ 已被供应商停用（HTTP 403 `code 30003 Model disabled.`），不要再用 |
+
+> ⚠️ 远程重排失败时 `HTTPBGEReranker.rerank` 会静默降级为全 `0.0` 分数且不打日志，
+> 表现为检索恒定返回同一批 `WorkingMemory`。若看到 `relativity` 全为 `0.0`，先查重排模型是否可用。
 
 ---
 

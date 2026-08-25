@@ -246,7 +246,7 @@ class EnvConfig:
     # -------------------------------------------------------------------------
     reranker_backend: str = "http_bge"
     reranker_url: str = ""
-    reranker_model: str = "netease-youdao/bce-reranker-base_v1"
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
     reranker_api_key: str = ""
     reranker_headers_extra: str = ""
     reranker_strategy: str = "single_turn"
@@ -399,7 +399,7 @@ def _load_config_from_env() -> EnvConfig:
         # Reranker
         reranker_backend=_get_env("MOS_RERANKER_BACKEND", "http_bge"),
         reranker_url=_get_env("MOS_RERANKER_URL", ""),
-        reranker_model=_get_env("MOS_RERANKER_MODEL", "netease-youdao/bce-reranker-base_v1"),
+        reranker_model=_get_env("MOS_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
         reranker_api_key=_get_env("MOS_RERANKER_API_KEY", ""),
         reranker_headers_extra=_get_env("MOS_RERANKER_HEADERS_EXTRA", ""),
         reranker_strategy=_get_env("MOS_RERANKER_STRATEGY", "single_turn"),

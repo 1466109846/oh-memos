@@ -30,7 +30,7 @@ MOS_EMBEDDER_API_KEY=  # API 密钥
 # ============================================================================
 MOS_RERANKER_BACKEND=http_bge                       # 后端类型 (http_bge / cosine_local / noop)
 MOS_RERANKER_URL=https://api.siliconflow.cn/v1      # API 地址
-MOS_RERANKER_MODEL=netease-youdao/bce-reranker-base_v1  # 模型名称
+MOS_RERANKER_MODEL=BAAI/bge-reranker-v2-m3          # 模型名称 (568M, 8K 上下文)
 MOS_RERANKER_API_KEY= # API 密钥
 MOS_RERANKER_HEADERS_EXTRA=                         # 额外请求头
 MOS_RERANKER_STRATEGY=single_turn                   # 重排策略
