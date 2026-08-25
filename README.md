@@ -396,12 +396,12 @@ The six most recent entries from the [changelog](docs/CHANGELOG.md), generated b
 from the `<!-- en: ... -->` comment under each changelog heading.
 
 <!-- changelog-recent:start -->
+- `3.1.5 · 2026-08-26` — 🔧 Reranker model switched to BAAI/bge-reranker-v2-m3 (fixes search returning only WorkingMemory)
+- `3.1.5 · 2026-08-26` — 🔊 Silent fail-open degradation is now observable (upstream root cause of the entry above)
+- `3.1.5 · 2026-08-26` — 🔒 Structural enforcement for tier filtering
+- `3.1.5 · 2026-08-26` — 🐳 Bare .dockerignore patterns match the top level only — a password file reached the build context and 8.4 MB of stale bytecode reached the image
+- `3.1.5 · 2026-08-26` — 🐛 Open: three graph.ts routes do not project the tier field
 - `3.1.4 · 2026-08-24` — 🐛 Fix: the sibling-nodes list included scheduler short-term copies
-- `3.1.4 · 2026-08-24` — 🧪 Tests
-- `3.1.3 · 2026-08-24` — 🐛 Fix: the sibling-fragments section never appeared — sources has two wire shapes
-- `3.1.3 · 2026-08-24` — 🧪 Tests
-- `3.1.2 · 2026-08-23` — 📄 memos_get returns the verbatim original, not just the LLM summary
-- `3.1.2 · 2026-08-23` — 🧪 Tests
 <!-- changelog-recent:end -->
 
 See the [changelog](docs/CHANGELOG.md) for the full history and the

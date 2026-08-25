@@ -5,7 +5,295 @@ All notable changes to the MemOS project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.1.5] - 2026-08-26
+
+3.1.1～3.1.4 都是「仅 MCP server」的版本，Python 包与容器镜像一直停在 3.1.0。
+**本版两侧同时有改动**：Python 侧 7 个文件（重排换型 4 个 + 可观测性 3 个），
+MCP 侧 4 个文件加 1 个新守卫模块。三个版本串（`pyproject.toml`、
+`src/oh_memos/__init__.py`、`mcp-server-node/package.json`）因此重新对齐到 3.1.5 ——
+`docker-publish.yml` 的 `version-check` 要求 tag 与前两者逐字一致，
+而它只在 commit 触及 `src/**` / `docker/**` / `pyproject.toml` 时才会被触发，
+所以这是第一个会真正过这道检查的 tag。
+<!-- en: 3.1.1 through 3.1.4 were MCP-server-only releases, with the Python package and
+     container image pinned at 3.1.0. This version changes both sides: seven files on the
+     Python side (four for the reranker switch, three for observability) plus four files and
+     one new guard module on the MCP side. All three version strings (pyproject.toml,
+     src/oh_memos/__init__.py, mcp-server-node/package.json) are therefore realigned to
+     3.1.5 — docker-publish.yml's version-check requires the tag to match the first two
+     verbatim, and it only fires when a commit touches src/**, docker/** or pyproject.toml,
+     so this is the first tag that will actually go through that check. -->
+
+### 🔧 重排模型换成 `BAAI/bge-reranker-v2-m3`（修复检索只返回 WorkingMemory）
+<!-- en: 🔧 Reranker model switched to BAAI/bge-reranker-v2-m3 (fixes search returning only WorkingMemory) -->
+
+`POST /search` 对 5 个 cube 恒定返回同一批 `WorkingMemory`、`relativity` 全为 `0.0`。
+根因是供应商停用了 `netease-youdao/bce-reranker-base_v1`（HTTP 403 `{"code":30003,"message":"Model disabled."}`），
+而 `HTTPBGEReranker.rerank` 的 `@timed_with_status(fallback=...)` 把异常吞成全 `0.0` 分数，
+且**控制台一个字都不出**（fallback 分支本身无日志；装饰器 `finally` 里那条带 `status: FAILED` 的
+`logger.info` 只落日志文件——控制台 handler 等级是 WARNING，详见下一条）。
+分数全部相等后 `_sort_and_trim` 的稳定排序退化为保留插入顺序，`_retrieve_paths` 又是 Path A（WorkingMemory）
+先 append，于是短期副本按位置而非相关度占满全部 `top_k`。
+<!-- en: POST /search returned an identical batch of WorkingMemory items with relativity 0.0 for five
+     cubes. Root cause: the vendor disabled netease-youdao/bce-reranker-base_v1 (HTTP 403, code 30003
+     "Model disabled."), and the @timed_with_status(fallback=...) decorator on HTTPBGEReranker.rerank
+     swallowed the exception into all-0.0 scores, printing nothing to the console: the fallback branch
+     itself logged nothing, and the status: FAILED logger.info in the decorator's finally block only
+     reached the file handler, since the console handler sits at WARNING (see the next entry).
+     With every score tied,
+     the stable sort in _sort_and_trim degenerated into insertion order, and _retrieve_paths appends
+     Path A (WorkingMemory) first — so short-term copies filled every top_k slot by position, not
+     relevance. -->
+
+改动全部指向 `BAAI/bge-reranker-v2-m3`（568M，8K 上下文）：
+
+- **cube 配置**（5 个）：`.text_mem.config.reranker.config.model` — `claude_cube` / `ddsp_svc_6_3_cube` /
+  `memos_cube` / `new_api_cube` / `oh_memos_cube`。其余 36 个 cube 用本地 `rrf` 后端，从未受影响。
+- **env 文件**（8 个）：`MOS_RERANKER_MODEL`。其中两个模板此前写的是缺 `BAAI/` 前缀的
+  `bge-reranker-v2-m3`（siliconflow 上无效），一并补全。
+- **代码兜底默认值**（3 处）：`configs/env_loader.py:249`、`:402`、`oh-memos-cli/oh_memosctl/init_wizard.py:114`
+  硬编码的仍是被停用的模型 —— 没有显式设 `MOS_RERANKER_MODEL` 的新部署会原地复现这个 bug。
+- **裸名兜底**（7 处）：`api/config.py:385`、`:411`、`reranker/factory.py:43`、`:69`、
+  `reranker/http_bge.py:81`、`reranker/http_bge_strategy.py:81`、`examples/basic_modules/reranker.py:156`
+  写的是不带 `BAAI/` 前缀的裸名，只在自建 vLLM 且显式 `--served-model-name` 改名时才成立，
+  换成全限定名后 siliconflow 和自建两边都对。
+- **用户文档**（3 处）：`docs/Free API/Free api.md`、`docs/DB/EMBEDDER_CONFIG_CN.md`、
+  `docs/DB/CUBE_CONFIG_CN.md` —— 这些是会被照抄的配置样例。停用的模型在模型表里标注保留作为警示。
+
+<!-- en: Everything now points at BAAI/bge-reranker-v2-m3 (568M params, 8K context):
+     - Cube configs (5): .text_mem.config.reranker.config.model in claude_cube, ddsp_svc_6_3_cube,
+       memos_cube, new_api_cube, oh_memos_cube. The other 36 cubes use the local rrf backend and were
+       never affected.
+     - Env files (8): MOS_RERANKER_MODEL. Two templates carried bge-reranker-v2-m3 without the BAAI/
+       prefix (invalid on siliconflow) and were corrected.
+     - Hardcoded code defaults (3): configs/env_loader.py:249, :402 and
+       oh-memos-cli/oh_memosctl/init_wizard.py:114 still named the disabled model — any fresh
+       deployment without an explicit MOS_RERANKER_MODEL would have reproduced the bug.
+     - Bare-name fallbacks (7): api/config.py:385, :411, reranker/factory.py:43, :69,
+       reranker/http_bge.py:81, reranker/http_bge_strategy.py:81,
+       examples/basic_modules/reranker.py:156 used the unprefixed name, which only resolves on a
+       self-hosted vLLM with an explicit --served-model-name. The fully qualified name works both on
+       siliconflow and self-hosted.
+     - User docs (3): docs/Free API/Free api.md, docs/DB/EMBEDDER_CONFIG_CN.md,
+       docs/DB/CUBE_CONFIG_CN.md — these are copy-pasted config samples. The disabled model stays in
+       the model table, annotated as a warning. -->
+
+**验证方式**：两个语义无关的查询打同一个 cube。修复前逐字节返回相同的 id 序列；修复后 id 序列不同，
+`relativity` 是 0.91 → 0.05 的单调递减真实分数，命中也从清一色 WorkingMemory 变为
+LongTermMemory / UserMemory。容器环境变量在启动时固定，改 env 文件后必须 `up -d --force-recreate`，
+`docker restart` 不重读 env。
+<!-- en: How it was verified: two semantically unrelated queries against the same cube. Before the fix
+     they returned byte-identical id sequences; after it the sequences differ, relativity carries real
+     monotonically decreasing scores (0.91 down to 0.05), and hits shifted from all-WorkingMemory to
+     LongTermMemory/UserMemory. Container env vars are fixed at start, so editing the env file requires
+     up -d --force-recreate; docker restart does not re-read it. -->
+
+### 🔊 静默 fail-open 退化改为可观测（上一条的上游根因）
+<!-- en: 🔊 Silent fail-open degradation is now observable (upstream root cause of the entry above) -->
+
+换模型只是止血：把异常转成全 `0.0` 的那条通路本身没变，下一个模型下线时会以完全相同的方式
+无声退化。这次补上三处告警，退化行为一律保持原样（仍返回 fallback、不改变任何返回值），
+只是不再无声。
+
+- **`src/oh_memos/utils.py:54`** — `timed_with_status` 的 fallback 分支在调用 `fallback(...)` 前
+  打 `logger.warning`，带函数名、异常类型与 `repr`，并点明「返回的是降级结果，下游排序/打分可能无效」。
+- **`src/oh_memos/reranker/http_bge.py:243`** — 响应 schema 不符的 `else` 分支。这条路 HTTP 调用是
+  **成功**的、不抛异常，因此装饰器的 fallback 永远不会触发，必须自己上报；日志带 `data` 的顶层键名
+  （非 dict 时带类型名），便于直接判断对方返回了什么。
+- **`.../retrieve/searcher.py:779`** — `_sort_and_trim` 在排序前检测「候选数 >1 且分数全为 `0.0`」，
+  这是降级通路的正向指纹：RRF 下界是 `1/(60+rank)`，0 不可达。命中即告警"结果是检索顺序、不是相关度顺序"。
+
+**为什么原先看不到**：`fallback` 分支本身确实一行日志都没有，但装饰器 `finally` 里那条
+`logger.info` 是带 `status: FAILED` + `error_type` 的 —— 问题在等级。`log.py:29`
+`selected_log_level = DEBUG if settings.DEBUG else WARNING` 决定控制台 handler 等级，
+而 `MEMOS_DEBUG` 在 `.env` / `.env.example` / `docker/.env.migration` / `docker/.env.docker.example`
+四处一致为 `false`，于是那条 INFO 只落日志文件，控制台一个字都不出。现在三条都是 WARNING，两边都到。
+
+**影响面**：`src/` 里传 `fallback=` 的只有 `http_bge.py:126` 一处；另外三个
+`timed_with_status` 调用点（`embedders/universal_api.py:33`、`llms/openai.py:55`、`:100`）
+不传 fallback，异常照常 `raise`，走的是 `else` 分支，不受影响。
+
+**验证**：装饰器路径实测触发 —— 修复前控制台 0 行、修复后 1 行 WARNING 且带异常类型，
+fallback 返回值与异常不外传的行为均未变。退化判定跑了 7 个用例 0 误报（全零 5 项/2 项→告警；
+健康 RRF、健康 reranker、真实分数里夹一个合法 `0.0`、单项 `0.0`、空集→均不告警）；
+单项与空集刻意不告警，避免把正常边界当故障。`tests/` 98 passed。
+<!-- en: Switching models only stopped the bleeding: the code path that turns an exception into
+     all-0.0 scores was untouched, so the next model retirement would degrade in exactly the same
+     silent way. Three warnings were added. Degradation behaviour is unchanged — the fallback is
+     still returned and no return value differs — it is simply no longer silent.
+     - src/oh_memos/utils.py:54 — the fallback branch of timed_with_status now logs a warning before
+       calling fallback(...), naming the function, exception type and repr, and stating that the
+       result is degraded so downstream ranking/scoring may be invalid.
+     - src/oh_memos/reranker/http_bge.py:243 — the unexpected-schema else branch. Here the HTTP call
+       SUCCEEDS and raises nothing, so the decorator's fallback never fires and this branch must
+       report itself; the log carries the top-level keys of data (or its type name when not a dict).
+     - .../retrieve/searcher.py:779 — _sort_and_trim now detects "more than one candidate and every
+       score exactly 0.0" before sorting. That is a positive fingerprint of the degraded path: RRF is
+       floored at 1/(60+rank), so 0 is unreachable. On a hit it warns that results are in retrieval
+       order, not relevance order.
+     Why it was invisible before: the fallback branch itself had no log line at all, but the
+     logger.info in the decorator's finally did carry status: FAILED plus error_type — the problem was
+     the level. log.py:29 sets selected_log_level = DEBUG if settings.DEBUG else WARNING for the
+     console handler, and MEMOS_DEBUG is false in all four env files (.env, .env.example,
+     docker/.env.migration, docker/.env.docker.example), so that INFO record only reached the log file
+     and never the console. All three new lines are WARNING, so they reach both.
+     Blast radius: http_bge.py:126 is the only site in src/ passing fallback=. The other three
+     timed_with_status call sites (embedders/universal_api.py:33, llms/openai.py:55 and :100) pass no
+     fallback and still raise, taking the else branch, so they are unaffected.
+     Verification: the decorator path was triggered for real — 0 console lines before, 1 WARNING with
+     the exception type after, with the fallback return value and the non-propagation of the exception
+     both unchanged. The degeneracy guard was run against 7 cases with 0 false positives (all-zero
+     with 5 and 2 items warn; healthy RRF, healthy reranker, a legitimate 0.0 among real scores, a
+     single 0.0 item, and an empty set do not). Single-item and empty sets deliberately do not warn,
+     so normal boundaries are not reported as failures. tests/ 98 passed. -->
+
+### 🔒 分层过滤的强制机制
+<!-- en: 🔒 Structural enforcement for tier filtering -->
+
+同一个缺陷已复发 7 次：新增一条检索路径，忘了把 `WorkingMemory` 短期副本过滤掉，
+于是把一个几分钟后就失效的 id 交给了 agent。每次都靠 review 抓到。这次改成结构性拦截。
+<!-- en: The same defect has recurred seven times: a new retrieval path forgets to filter out
+     WorkingMemory short-term copies and hands the agent an id that expires within minutes.
+     Every time it was caught by review. This change makes it structurally impossible instead. -->
+
+**为什么普通单测拦不住**：实测把所有层级过滤切断后，319 项 vitest 依然全绿。
+单测问的是"过滤函数算得对不对"，而缺陷形态是"过滤函数没被调用" —— 两个问题不同。
+<!-- en: Why ordinary unit tests cannot catch it: with every tier filter cut, all 319 vitest
+     specs still passed. Unit tests ask whether the filter function computes correctly, while
+     the defect is that the function is never called. Those are different questions. -->
+
+新增 `mcp-server-node/src/memory-tier-boundary.ts`（清单）与同名 `.test.ts`（守卫，18 项，
+经 `ci.yml` 的 `npm test` 自动执行）。清单把 `handlers/index.ts` 的 28 条分派路由逐条分类，
+每条附实测证据；守卫扫描源码与分派表做双向比对。
+<!-- en: Adds mcp-server-node/src/memory-tier-boundary.ts (the manifest) and its .test.ts
+     (the guard, 18 assertions, run by npm test in ci.yml). The manifest classifies all 28
+     dispatch routes in handlers/index.ts with measured evidence for each; the guard scans the
+     sources and compares manifest against dispatch table in both directions. -->
+
+四条 fail-closed 棘轮，均以变异测试验证过确实会红：
+<!-- en: Four fail-closed ratchets, each verified by mutation testing to actually go red: -->
+
+- 分派表新增路由却没在清单里分类 → 失败；清单有而分派表已无（陈旧条目）→ 也失败
+- 静默新增已知缺口 → 失败（`KNOWN_GAPS` 为冻结集合，计数上限硬编码）
+- 修好缺口却忘了从 `KNOWN_GAPS` 移除 → 失败，否则集合会膨胀成一张无人清理的豁免名单
+- `CYPHER_PROJECTION_BASELINE` 按严格相等断言，修好了不调基线同样失败 —— 棘轮只能往紧的方向走
+<!-- en:
+     - A new dispatch route that is not classified in the manifest fails the build; so does a
+       manifest entry whose route no longer exists (a stale entry).
+     - Silently adding a known gap fails: KNOWN_GAPS is a frozen set with a hardcoded ceiling.
+     - Fixing a gap without removing it from KNOWN_GAPS also fails, otherwise the set grows
+       into an exemption list nobody ever prunes.
+     - CYPHER_PROJECTION_BASELINE is asserted by strict equality, so fixing an entry without
+       lowering the baseline fails too. The ratchet only turns in the tightening direction. -->
+
+**覆盖了第二种复发形态**：过滤接上了，但构造 metadata 时漏掉 `memory_type`，
+判定函数恒读到 `undefined` 并判为可见。`search.ts` 曾因此让四个调用点的过滤同时空转，
+而没有任何测试失败。守卫现在会检查投影记忆的 Cypher `RETURN` 是否带出该字段。
+<!-- en: Covers the second recurrence shape: the filter is wired, but the constructed metadata
+     omits memory_type, so the predicate always reads undefined and judges the row visible.
+     In search.ts this left four call sites' filters silently inert with no test failing. The
+     guard now checks that Cypher RETURN clauses projecting a memory also carry that field. -->
+
+**已记录但尚未修的缺口**（`memos_think`、`memos_graph` 的三条路由）：
+`think.ts` 上朴素过滤会把语义召回从 15 条砍到 5 条，正确解法是按 `metadata.key`
+换成持久层孪生节点的 id，而不是加过滤。不变式的准确表述是"永不把易失 id 交给 agent"，
+"过滤掉 WorkingMemory" 只是其中一种（有损的）满足方式。
+<!-- en: Gaps recorded but not yet fixed (memos_think and three memos_graph routes): on think.ts
+     naive filtering would cut semantic recall from 15 evidences to 5. The correct fix is to
+     substitute the persistent twin's id, matched by metadata.key, rather than to filter. The
+     invariant is better stated as "never hand an ephemeral id to the agent"; filtering out
+     WorkingMemory is only one — lossy — way to satisfy it. -->
+
+门禁：vitest 491 通过（新增 18），`tsc --noEmit` 无输出。
+<!-- en: Gates: vitest 491 passed (18 new), tsc --noEmit clean. -->
+
+### 🐳 `.dockerignore` 的裸模式只匹配顶层 —— 密码文件进了 build context，8.4 MB 陈旧字节码进了镜像
+<!-- en: 🐳 Bare .dockerignore patterns match the top level only — a password file reached the build context and 8.4 MB of stale bytecode reached the image -->
+
+重建镜像时发现的。`.dockerignore` 的模式若不含 `/`，Docker 只用它匹配**顶层**路径，
+不递归。原文件里 `__pycache__`、`*.py[cod]`、`.env.*`、`*.pem`、`*.key` 全是这种裸模式，
+于是嵌套路径一个都没被排除。最小实验证实：裸模式下 `pkg/sub/__pycache__/nested.pyc`
+进入 context，改成 `**/__pycache__` 后为空。
+<!-- en: Found while rebuilding the image. A .dockerignore pattern without a slash is matched
+     against the top level only — it does not recurse. The original file used bare patterns for
+     __pycache__, *.py[cod], .env.*, *.pem and *.key, so nothing nested was ever excluded. A
+     minimal experiment confirms it: with the bare pattern pkg/sub/__pycache__/nested.pyc enters
+     the context; with **/__pycache__ the context is empty. -->
+
+两个实际后果：
+<!-- en: Two concrete consequences: -->
+
+- **`docker/.env.migration` 一直在被上传到 Docker daemon**。该文件含真实 Neo4j 密码与
+  7 个 API 键，已 gitignore，但 `.env.*` 这条裸模式覆盖不到 `docker/` 子目录。
+  它没进镜像 —— Dockerfile 只 COPY 五个明确路径 —— 但离泄漏只差一行 `COPY . .`，
+  且远程 builder / CI 场景下密钥本就不该出现在 context 里。
+- **`src/oh_memos` 下 46 个 `__pycache__` 被 COPY 进了镜像**：8.4 MB，占该目录 66%，
+  其中 288 个是 `cpython-312` 字节码 —— 而基础镜像是 `python:3.11`，永远加载不了。
+  更糟的是每个 `.pyc` 内嵌编译时的绝对 `co_filename`，实测某个文件里是
+  `G:\test\MemOS\src\memos\...\searcher.py`，把构建机路径和项目改名前的旧结构一起发了出去。
+<!-- en:
+     - docker/.env.migration was being uploaded to the Docker daemon on every build. It holds a
+       real Neo4j password and seven API keys and is gitignored, but the bare .env.* pattern
+       never covered the docker/ subdirectory. It did not reach the image — the Dockerfile COPYs
+       five explicit paths — but it was one `COPY . .` away, and on a remote builder or in CI a
+       secret has no business being in the context at all.
+     - 46 __pycache__ directories under src/oh_memos were copied into the image: 8.4 MB, 66% of
+       that directory, including 288 cpython-312 files that a python:3.11 base can never load.
+       Worse, every .pyc embeds the absolute co_filename it was compiled from — one of them read
+       G:\test\MemOS\src\memos\...\searcher.py, publishing both the build host's path and the
+       project's pre-rename layout. -->
+
+**不是正确性问题**，这一点实测过：运行时从 `site-packages` 导入（`pip install --no-deps .`
+装的那份），`/app/src` 下的 pyc 一个都没被加载 —— 抽查的 `searcher.cpython-311.pyc`
+其 header 记录的源文件 mtime 与 size 都与容器内实际值不符，Python 判为 stale；
+且 `PYTHONDONTWRITEBYTECODE=1`，不会就地重写。所以是纯粹的死重量加路径泄漏。
+<!-- en: This was not a correctness bug, and that was verified: the runtime imports from
+     site-packages (the copy installed by pip install --no-deps .), and none of the .pyc files
+     under /app/src were ever loaded — the sampled searcher.cpython-311.pyc records a source
+     mtime and size that do not match the actual file in the container, so Python treats it as
+     stale, and PYTHONDONTWRITEBYTECODE=1 means it is never rewritten in place. Pure dead weight
+     plus a path leak. -->
+
+修法是给该递归的模式加 `**/`，并把白名单从 `!.env.example` 放宽到 `!**/.env*.example`
+（否则 `.env.windows.example`、`docker/.env.migration.example` 等模板会被一起排除）。
+**`data`、`runtime`、`logs` 等目录名刻意保持顶层限定** —— `src/oh_memos/data` 与
+`src/oh_memos/data/runtime` 是包内真实目录，加 `**/` 会把源码排除掉。
+<!-- en: The fix adds **/ to the patterns that should recurse, and widens the allow-list from
+     !.env.example to !**/.env*.example (otherwise templates such as .env.windows.example and
+     docker/.env.migration.example would be excluded too). The directory names data, runtime and
+     logs deliberately stay top-level-only: src/oh_memos/data and src/oh_memos/data/runtime are
+     real package directories, and **/ would exclude source. -->
+
+**验证**：7 项断言全过（密码文件排除、四个 `*.example` 模板保留、嵌套 pyc 排除、源码 `.py`
+保留、裸 `.env` 排除）。重建后镜像内 `__pycache__` 与 `*.pyc` 均为 0，
+`src/oh_memos` 从 12572 KB 降到 4204 KB，镜像 2.22 GB → 2.21 GB。
+`docker-publish.yml` 的 5 步 smoke test 原样跑过：`pip check` 无破损、
+`torch.version.cuda is None`、`from oh_memos.api.start_api import app` 成功、
+无 `nvidia-*`/`triton`/`pytest`、`uid=10001` 非 root、entrypoint 正常播种 `dev_cube`。
+<!-- en: Verification: all seven assertions pass (password file excluded, four *.example
+     templates kept, nested pyc excluded, source .py kept, bare .env excluded). After the
+     rebuild the image contains zero __pycache__ directories and zero .pyc files, src/oh_memos
+     drops from 12572 KB to 4204 KB, and the image from 2.22 GB to 2.21 GB. The five-step smoke
+     test from docker-publish.yml passes verbatim: pip check clean, torch.version.cuda is None,
+     the api import succeeds, no nvidia-*/triton/pytest, uid=10001 (non-root), and the
+     entrypoint seeds dev_cube. -->
+
+### 🐛 待修：`graph.ts` 三条路由的 Cypher 未带出层级字段
+<!-- en: 🐛 Open: three graph.ts routes do not project the tier field -->
+
+守卫首次运行即发现 `graph.ts` 有 4 处 `RETURN` 投影了记忆但未带 `memory_type`
+（`graph.ts:273` path、`407`/`419` default、`688` impact），与 `search.ts` 已修的形态相同。
+这 4 处已作为冻结基线记入 `CYPHER_PROJECTION_BASELINE`，新增一处会立即失败。
+<!-- en: On its first run the guard found four RETURN clauses in graph.ts that project a memory
+     without memory_type (graph.ts:273 path, 407/419 default, 688 impact) — the same shape
+     already fixed in search.ts. The four are recorded as a frozen baseline in
+     CYPHER_PROJECTION_BASELINE; adding a fifth fails immediately. -->
+
+`memos_graph` 的默认模式另有一个功能性缺陷：实测 172 个 `WorkingMemory` 节点之间共 0 条边，
+其种子查询恒空，永远静默退化到关键词兜底。这不只是 id 外泄，是召回失效。
+<!-- en: The default memos_graph mode has a separate functional defect: measured, the 172
+     WorkingMemory nodes have zero edges between them, so its seeded query is always empty and
+     silently degrades to the keyword fallback. That is not just id leakage but broken recall. -->
+
 
 ## [3.1.4] - 2026-08-24
 
@@ -1412,6 +1700,15 @@ Similarity = 1 - (1/13) = 0.92 > 0.75 threshold
   - **`/graph/trace_path`**: Trace causality paths between two memory nodes (supports max_depth up to 10 hops)
   - **`/graph/schema`**: Export knowledge graph statistics including node/edge counts, relationship distribution, tag frequency, health metrics
   - **`/search` enhancement**: Added `enable_context_analysis` and `chat_history` parameters for LLM-powered context-aware search
+    > ⚠️ **2026-08-25 更正**：这条记载不成立，当时就写错了。`start_api.py` 的
+    > `SearchRequest` 从未声明这两个字段 —— `enable_context_analysis` 在整个 `src/`
+    > 里没有任何定义，`chat_history` 只属于 `server_api.py` 的 `APISearchRequest`。
+    > Pydantic 静默丢弃模型上不存在的字段，所以传了也不报错、只是不生效。
+    > <!-- en: Correction 2026-08-25: this entry was wrong when written. start_api.py's
+    >      SearchRequest never declared either field — enable_context_analysis has no
+    >      definition anywhere under src/, and chat_history belongs only to
+    >      server_api.py's APISearchRequest. Pydantic silently drops unknown fields, so
+    >      sending them raises no error and has no effect. -->
 
 - **🧠 New MCP Tools** (memos_mcp_server.py)
   - **`memos_export_schema`**: Export graph structure with health assessment (orphan ratio, connectivity)

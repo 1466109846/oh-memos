@@ -6,6 +6,240 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.1.5] - 2026-08-26
+
+3.1.1～3.1.4 都是「仅 MCP server」的版本，Python 包与容器镜像停在 3.1.0。
+**3.1.5 两侧同时有改动**，三个版本串（npm 包、`pyproject.toml`、`src/oh_memos/__init__.py`）
+因此重新对齐到 3.1.5。Python/容器侧的内容见仓库根的 `docs/CHANGELOG.md`。
+
+### 🧾 `memos_get` 的 not-found 文案指向真正的成因
+
+旧文案让用户「核对 id 是否正确（从 `memos_search` 结果复制）」，但实测中最常见的成因恰恰是
+**从搜索结果复制来的 id 过一会儿就失效**：`POST /search` 返回的是 `WorkingMemory` 层的副本 id，
+该层按 `user_name` 只保留 20 条（后端 `manager.py` 的 `memory_size["WorkingMemory"]`），
+每次检索都重写并淘汰最旧的。实测 `oh_memos_cube` 的那 20 条只覆盖 22 分钟。
+
+因此新文案把 `memos_list_v2` 指出来是有实质区别的：它返回 `LongTermMemory` 的 id，
+那一层不淘汰（实测同一批 id 隔天仍可取回）。措辞上不把淘汰断言成事实 ——
+Lite 模式（本地 JSONL）没有 `WorkingMemory` 层，那里的 not-found 就是单纯的 id 不存在。
+
+`notFoundText` 同时改为导出，便于测试直接断言文案而不经由 handler。
+
+### 🌐 API 客户端保留 400 响应体
+
+`apiCallWithRetry` 此前把非 2xx 一律丢弃响应体，于是后端在 400 里给出的
+校验错误说明拿不到，工具层只能报一个无信息的失败。现在 400 单独放行并解析 JSON，
+后端的错误描述可以原样呈现给调用方。
+
+### 🔒 分层过滤的强制机制
+
+同一个缺陷已复发 7 次：新增一条检索路径，忘了把 `WorkingMemory` 短期副本滤掉，
+于是把一个几分钟后就失效的 id 交给了 agent。每次都靠 review 抓到，这次改成结构性拦截。
+
+**为什么普通单测拦不住**：实测把所有层级过滤切断后，319 项 vitest 依然全绿。
+单测问的是"过滤函数算得对不对"，而缺陷形态是"过滤函数没被调用" —— 两个问题不同。
+
+新增 `src/memory-tier-boundary.ts`（清单）与同名 `.test.ts`（守卫，18 项）。
+清单把 `handlers/index.ts` 的 28 条分派路由逐条分类并附实测证据，守卫扫描源码与分派表做双向比对。
+四条 fail-closed 棘轮，均以变异测试验证过确实会红：
+
+- 分派表新增路由却没在清单里分类 → 失败；清单有而分派表已无（陈旧条目）→ 也失败
+- 静默新增已知缺口 → 失败（`KNOWN_GAPS` 为冻结集合，计数上限硬编码）
+- 修好缺口却忘了从 `KNOWN_GAPS` 移除 → 失败，否则集合会膨胀成一张无人清理的豁免名单
+- `CYPHER_PROJECTION_BASELINE` 按严格相等断言，修好了不调基线同样失败 —— 棘轮只能往紧的方向走
+
+**覆盖了第二种复发形态**：过滤接上了，但构造 metadata 时漏掉 `memory_type`，
+判定函数恒读到 `undefined` 并判为可见。`search.ts` 曾因此让四个调用点的过滤同时空转，
+而没有任何测试失败。守卫现在会检查投影记忆的 Cypher `RETURN` 是否带出该字段。
+
+**已记录但尚未修的缺口**（`memos_think`、`memos_graph` 的三条路由）：
+`think.ts` 上朴素过滤会把语义召回从 15 条砍到 5 条，正确解法是按 `metadata.key`
+换成持久层孪生节点的 id，而不是加过滤。不变式的准确表述是"永不把易失 id 交给 agent"，
+"过滤掉 `WorkingMemory`" 只是其中一种（有损的）满足方式。
+
+门禁：vitest 491 通过（新增 18），`tsc --noEmit` 无输出。
+
+## [3.1.4] - 2026-08-24
+
+### 🐛 修复：同源节点列表混入 scheduler 短期副本
+
+3.1.3 上线后实测：同源列表里每个 `key` **成对出现** —— 一条被切成 6 段的记忆列出了 12 条同源。
+
+后端对每条抽取结果写两个节点：一个 `WorkingMemory` 短期副本 + 一个 `LongTermMemory`
+（少数为 `UserMemory`）持久节点，`key` 与 `created_at` 逐字相同。`findSiblings` 没有滤层级，
+于是短期副本一并列出。
+
+**这不是新决策，是 3.1.0 已经做过的决定**（`memory-tier.ts`）。`memos_search` 与
+`memos_list_v2` 早已在滤，`findSiblings` 是 3.1.2 新增的路径 —— 又漏了一处。
+同一形态在本项目已出现五次：**新写的检索路径必须继承既有的分层过滤决定。**
+
+逃生开关 `MEMOS_SHOW_WORKING_MEMORY=true` 时不滤，与 `filterEphemeralTier` 语义一致。
+缺 `memory_type` 视为可见 —— Lite 的 JSONL 不写该字段。
+
+#### 测试
+
+新增 5 项分层断言（共 48 项），三个变异全部被捕获：不滤层级（回到本次缺陷）、
+忽略逃生开关、忽略 limit。其中「limit 在滤层级之后生效」用交错排列的候选集断言 ——
+顺序反了会让 limit 被随即隐藏的副本吃掉，只返回一半。
+
+门禁：vitest 447 passed、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke、host-env smoke。
+
+## [3.1.3] - 2026-08-24
+
+### 🐛 修复：同源碎片区块从不出现 —— `sources` 有两种线上形态
+
+3.1.2 上线后实测：原文能正确返回，但「同源碎片」区块**从不出现**。根因是同一个字段
+在两个端点上形态不同：
+
+| 端点 | `sources[0]` 的形态 |
+|---|---|
+| `GET /memories/{cube}/{id}`（单条） | **对象** `{type, role, chat_time, content}` |
+| `GET /memories`（列表） | **JSON 字符串** `'{"type":...,"content":"..."}'` |
+
+`verbatimOf` 初版只处理对象形态。单条取回走对象 → 原文正常；同源查找的候选集来自
+列表端点 → 全部返回 null → 永远匹配不到。**原文层可用，配对层静默失效。**
+
+单测没抓住的原因很直接：fixture 只造了对象形态，两种形态里只测了一种。
+
+修法：抽出 `contentOf(entry)` 同时接受对象与 JSON 字符串。非 JSON 字符串返回 null
+而**不猜它是裸原文** —— 否则任意字符串都会被当原文，把无关记忆归成同源。
+坏 JSON 按无 content 处理不抛异常：这是展示层，脏数据不该让 `memos_get` 失败。
+
+#### 测试
+
+新增 6 项断言与一个 list 形态 fixture（共 43 项）。三个变异全部被捕获，
+其中「不处理字符串形态」即回到本次修复前的行为，另两个覆盖「非 JSON 当裸原文」
+与「坏 JSON 抛异常」。跨形态指纹一致性单独断言 —— 否则单条与列表永远配不上。
+
+门禁：vitest 442 passed、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke、host-env smoke。
+
+## [3.1.2] - 2026-08-23
+
+### 📄 `memos_get` 返回原文，不再只返回 LLM 概括
+
+开启 LLM 抽取（后端 `MOS_TYPED_SAVE_FAST=false`）时，后端把一次写入拆成多条细粒度记忆：
+每条的 `memory` 字段是 LLM 概括，而**逐字原文完整保留在 `metadata.sources[0].content`**。
+实测一条 1056 字的写入被拆成 5 条，每条 `memory` 约 244 字，5 条共享同一份原文。
+`memos_get` 此前只读 `memory`，于是完整上下文取不回来。
+
+这不是取舍问题 —— 库里本来就是两份数据，各有各的用途：
+
+| 层 | 内容 | 用途 |
+|---|---|---|
+| `memory` | LLM 概括（细粒度） | 向量化输入、建边对象 → 决定图谱节点与联想质量 |
+| `metadata.sources[].content` | 逐字原文 | `memos_get` 的完整上下文来源 |
+
+**新输出结构**（有原文时）：原文作为 `### Content` 正文；LLM 概括降级到
+`### 抽取概括` 区块并保留 —— 它是向量化与建边的实际输入，看得见才能判断图谱节点切得对不对；
+`### 同源碎片` 列出由同一次写入抽出的其他记忆（id + key），从而能看出 LLM 的切分方式。
+无原文时（fast-path 写入）输出与此前完全一致。
+
+同源判定用原文全文，不用 `session_id` —— 同一会话里的无关写入会被错误归组。
+
+新增 `src/verbatim-source.ts`：`verbatimOf` / `sourceFingerprint` / `findSiblings` /
+`renderVerbatimSections`，四个纯函数，handler 与测试调用同一份实现。
+Full 与 Lite 两条路径都已接线（Lite 的 JSONL 无同源概念，列表恒空）。
+同源查询失败时返回空列表，不影响原文返回。
+
+#### 测试
+
+新增 `src/verbatim-source.test.ts`（37 项）。**变异验证抓出三个断言缺乏判别力**，
+每一个都是「测试写了但等于没写」的形态：
+
+- 接线守卫数两条路径**合计**调用次数 `>= 2`，而 Lite 路径自身就有 2 次，
+  砍掉 Full 路径那次仍然通过。改为按路径分别断言。
+- 「原文不截断」用 30 字测试原文，而变异截断到 200 字 —— 改不动它。
+  测试原文改为 600+ 字并加尾部标记。**这条正是本次要修的缺陷，却最后才抓住。**
+- `"not-an-array"[0]` 是字符 `"n"`、无 `.content`，宽松实现也返回 null。
+  改用伪装成数组的对象才有判别力。
+
+顺带删除 `sourceFingerprint` 的长度前缀：变异验证时构造不出它能防住的碰撞，
+无测试支撑的防御代码比没有更糟。
+
+12 个变异被捕获（W1「Full 路径不读原文」即回到本次修复前的行为）。
+门禁：vitest 436/436、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke。
+
+## [3.1.1] - 2026-08-22
+
+### 🐛 修复：`memos_context_resume` 每条记忆成对出现
+
+3.1.0 装好后 `memos_search` 与 `memos_list_v2` 都已正确隐藏 `WorkingMemory` 短期副本，
+但 `memos_context_resume` 仍成对显示（10 条 = 5 对，内容逐字相同、UUID 不同）。
+
+**根因不止是漏接一条路径。** temporal 查询的 Cypher 不返回 `memory_type`，
+构造出的 metadata 只有 `relativity`/`temporal_rank`/`source` —— 于是分层判定永远
+读到 `undefined` 并判为可见，**下游任何过滤对 temporal 记忆都是空转**。
+受影响的是四个调用点，不只是 `memos_context_resume`：
+
+| 路径 | 3.1.0 的状态 |
+|---|---|
+| `memos_context_resume` | 成对显示（用户实测发现） |
+| `memos_search` temporal intent（两处） | 有过滤代码，但读不到字段 |
+| `memos_think` | 同上 |
+
+后三处一直漏着且不易察觉 —— 过滤代码存在且看起来合理，只是作用对象缺字段。
+
+修法：在 Cypher 里排除 `WorkingMemory` 并返回 `memory_type`。这是唯一对四处都成立的做法，
+且 `LIMIT` 在过滤之后 —— 要 N 条就得 N 条真记忆，无需超额取数。
+`memos_context_resume` 的 API 回退路径由服务端施加 limit，无法先过滤，故超额取 3 倍。
+
+逃生开关 `MEMOS_SHOW_WORKING_MEMORY=true` 仍然有效：为真时不加排除条件，
+但仍返回 `memory_type` —— 开关只关过滤，不关可观测性。
+
+#### 测试
+
+新增 `src/context-resume.test.ts`（22 项），**9 个变异全部被捕获**，
+其中 W1「API 路径不过滤」即回到本次报告的原缺陷。
+
+新增 `npm run test:host-env-smoke`：用 MCP host 配置里的**原样环境**驱动 server，
+且不继承外层环境变量。已有的 spread smoke 自带硬编码 Neo4j 凭据兜底，
+因此「host 读不到凭据」这一失败形态它测不出来 —— 实测该形态下检索照常返回记忆、
+但联想标注为 0，属静默降级。
+
+门禁：vitest 416/416、tsc、pack 契约、schema budget +0.0%、semantic 快照 17 工具、
+protocol v2、lite smoke、spread smoke、host-env smoke。
+
+## [3.1.0] - 2026-08-22
+
+### 🧠 检索排序：衰减、强化、分档去重与图扩散联想
+
+本版把检索侧的排序从「纯相似度」改为「相似度 + 时间衰减 + 访问强化」，并加入按类型分档的
+近重复折叠与一跳图扩散联想。
+
+#### 记忆层级：`WorkingMemory` 默认隐藏
+
+后端 scheduler 会为每条持久记忆写一份 `WorkingMemory` 短期副本，该层按用户仅保留最近 20 条、
+每次检索都会重写淘汰。把这些 id 交给 agent 意味着它拿到的引用几分钟后就失效。
+新增 `src/memory-tier.ts`，`memos_search` 与 `memos_list_v2` 默认滤掉该层；
+逃生开关 `MEMOS_SHOW_WORKING_MEMORY=true` 可关闭过滤。缺 `memory_type` 视为可见
+（Lite 的 JSONL 不写该字段）。
+
+#### 衰减与强化
+
+排序分数加入按 `created_at` 的时间衰减与按访问次数的强化项，两者都可用环境变量关掉，
+默认开启。访问计数由 `src/access-tracker.ts` 本地维护，不写回后端。
+
+#### 近重复折叠（按类型分档）
+
+同类型内容高度重合的记忆折叠为一条并标注折叠数。分档按 `memory_type` ——
+不同类型的相似文本（一条 `DECISION` 与一条 `BUGFIX`）不应互相折叠。
+
+#### 一跳图扩散联想（`MEMOS_SPREAD_ACTIVATION`，默认关闭）
+
+命中记忆沿知识图谱做一跳扩散，把强关联但关键词不匹配的记忆带进结果并标注来源。
+默认关闭，因为它需要可用的 Neo4j 凭据；读不到凭据时静默返回 0 条联想。
+
+#### 检索期注解
+
+结果里标注衰减后分数、访问次数与折叠数，使排序结果可解释而非黑箱。
+
+#### graph schema 四处缺陷修复
+
+`memos_graph` 的 schema 模式修正四处：节点计数口径、边类型去重、孤立节点统计与采样上限。
+
 ## [3.0.1] - 2026-08-19
 
 ### 🩹 修复 3.0.0 打包出的多余依赖与失效仓库链接
