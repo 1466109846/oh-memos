@@ -153,7 +153,7 @@ def main():
                 "backend": "http_bge",
                 "config": {
                     "url": bge_url,
-                    "model": os.getenv("BGE_RERANKER_MODEL", "bge-reranker-v2-m3"),
+                    "model": os.getenv("BGE_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
                     "timeout": int(os.getenv("BGE_RERANKER_TIMEOUT", "10")),
                     "boost_weights": {"user_id": 0.5, "tags": 0.2},
                 },
@@ -170,9 +170,9 @@ def main():
 
         # --- NEW: search_filter with rerank ---
         # hit rule:
-        # - user_id == "u_123" â†?score * (1 + 0.5) = 1.5
-        # - tags including "paris" â†?score * (1 + 0.2) = 1.2
-        # - project_id(not exist) â†?warning unrelated with score
+        # - user_id == "u_123" â†’ score * (1 + 0.5) = 1.5
+        # - tags including "paris" â†’ score * (1 + 0.2) = 1.2
+        # - project_id(not exist) â†’ warning unrelated with score
         search_filter = {"session_id": "germany", "tags": "germany", "project_id": "demo-p1"}
         ranked_http_boosted = http_reranker.rerank(
             query=query,

@@ -8,17 +8,17 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from .modes import get_mode
 
 _env = Environment(
-    loader=PackageLoader("memosctl", "templates"),
+    loader=PackageLoader("oh_memosctl", "templates"),
     autoescape=select_autoescape(),
 )
 
 INTENT_SUGGESTIONS = {
-    "history_query": "â†?Consider: memos_search to find related past work",
-    "error_report": "â†?Consider: memos_search(query='ERROR_PATTERN ...') for past solutions",
-    "decision_making": "â†?After deciding: memos_save(..., memory_type='DECISION')",
-    "task_completion": "â†?Consider saving: MILESTONE (big feature) / BUGFIX (fix) / FEATURE (new)",
-    "concept_query": "â†?Consider: memos_search(query='CONCEPT ...') for definitions",
-    "citation_needed": "â†?Consider: memos_search(query='CITATION ...') for references",
+    "history_query": "â†’ Consider: memos_search to find related past work",
+    "error_report": "â†’ Consider: memos_search(query='ERROR_PATTERN ...') for past solutions",
+    "decision_making": "â†’ After deciding: memos_save(..., memory_type='DECISION')",
+    "task_completion": "â†’ Consider saving: MILESTONE (big feature) / BUGFIX (fix) / FEATURE (new)",
+    "concept_query": "â†’ Consider: memos_search(query='CONCEPT ...') for definitions",
+    "citation_needed": "â†’ Consider: memos_search(query='CITATION ...') for references",
 }
 
 
@@ -36,7 +36,7 @@ def generate_skill_file(mode: str, cube_id: str, output_path: Path) -> None:
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(content)
+    output_path.write_text(content, encoding="utf-8")
 
 
 def generate_hook_file(mode: str, output_path: Path) -> None:
@@ -51,7 +51,7 @@ def generate_hook_file(mode: str, output_path: Path) -> None:
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(content)
+    output_path.write_text(content, encoding="utf-8")
 
 
 def generate_claude_files(mode: str, cube_id: str, project_dir: Path) -> dict[str, Path]:

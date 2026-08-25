@@ -39,7 +39,7 @@ print("Step 1: Initialize server")
 print("=" * 60)
 
 components = init_server()
-print("‚ú?Server initialized")
+print("‚úì Server initialized")
 
 # =============================================================================
 # Step 2: Create SingleCubeView
@@ -58,7 +58,7 @@ view = SingleCubeView(
     searcher=components["searcher"],
     feedback_server=components["feedback_server"],
 )
-print("‚ú?SingleCubeView created")
+print("‚úì SingleCubeView created")
 
 # =============================================================================
 # Step 3: Load memories from dump
@@ -71,7 +71,7 @@ load_dir = "examples/data/mem_cube_tree"
 memory_file = os.path.join(load_dir, "textual_memory.json")
 
 if not os.path.exists(memory_file):
-    print(f"‚ù?File not found: {memory_file}")
+    print(f"‚ùå File not found: {memory_file}")
     print("   Run dump_cube.py first to create data!")
     exit(1)
 
@@ -84,7 +84,7 @@ text_mem.graph_store.import_graph(json_data, user_name=EXAMPLE_CUBE_ID)
 
 nodes = json_data.get("nodes", [])
 edges = json_data.get("edges", [])
-print(f"‚ú?Imported {len(nodes)} nodes, {len(edges)} edges")
+print(f"‚úì Imported {len(nodes)} nodes, {len(edges)} edges")
 
 # =============================================================================
 # Step 4: Display loaded memories
@@ -124,7 +124,7 @@ memories = []
 for group in text_mem_results:
     memories.extend(group.get("memories", []))
 
-print(f"\n‚ú?Found {len(memories)} relevant memories:")
+print(f"\n‚úì Found {len(memories)} relevant memories:")
 for i, mem in enumerate(memories[:3], 1):
     content = mem.get("metadata", {}).get("memory", "N/A")[:70]
     print(f"  [{i}] {content}...")
@@ -133,5 +133,5 @@ for i, mem in enumerate(memories[:3], 1):
 # Done
 # =============================================================================
 print("\n" + "=" * 60)
-print("‚ú?Example completed!")
+print("‚úÖ Example completed!")
 print("=" * 60)

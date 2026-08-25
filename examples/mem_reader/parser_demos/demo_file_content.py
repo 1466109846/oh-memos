@@ -33,7 +33,7 @@ class FileContentParserDemo(BaseParserDemo):
             # Create source from file content part
             source = self.parser.create_source(part, info)
 
-            print("  �?Created SourceMessage:")
+            print("  ✅ Created SourceMessage:")
             print(f"     - Type: {source.type}")
             print(f"     - Doc Path: {source.doc_path}")
             if source.content:
@@ -56,7 +56,7 @@ class FileContentParserDemo(BaseParserDemo):
 
             try:
                 source = self.parser.create_source(FILE_CONTENT_REAL_FILE_PART, info)
-                print(f"  �?Created SourceMessage for file: {source.doc_path}")
+                print(f"  ✅ Created SourceMessage for file: {source.doc_path}")
                 # The parser would parse the file content if the file exists
             except Exception as e:
                 print(f"  ⚠️  File parsing note: {e}")

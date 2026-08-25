@@ -175,14 +175,14 @@ def main():
     # 1. Simulate Chat History
     # Simulate a conversation between user and assistant, where the assistant's response contains a statement about user preferences.
     history = [
-        {"role": "user", "content": "我喜欢什么水�?不喜欢什么水�?},
-        {"role": "assistant", "content": "你喜欢苹�?不喜欢香�?},
+        {"role": "user", "content": "我喜欢什么水果,不喜欢什么水果"},
+        {"role": "assistant", "content": "你喜欢苹果,不喜欢香蕉"},
     ]
 
     # 2. Simulate Initial Memory
     # We manually add a memory to the database, representing what the system currently believes to be a "fact".
-    # This memory content is "你喜欢苹�?不喜欢香�?, which we will later correct via feedback.
-    mem_text = "你喜欢苹�?不喜欢香�?
+    # This memory content is "你喜欢苹果,不喜欢香蕉", which we will later correct via feedback.
+    mem_text = "你喜欢苹果,不喜欢香蕉"
     memory_manager.add(
         [
             make_mem_item(

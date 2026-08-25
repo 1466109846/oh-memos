@@ -175,7 +175,7 @@ def example_multi_db(db_name: str = "paper"):
         graph.add_edge(source_id=concept.id, target_id=topic.id, type="RELATED")
         print(f"Creating edge: ({concept.id}) -[:{type}]-> ({topic.id})")
 
-    # Define concept â†?fact
+    # Define concept â†’ fact
     fact_pairs = [
         {
             "concept_key": "Reward Function Design",

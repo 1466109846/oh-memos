@@ -17,7 +17,7 @@ class ImageParserDemo(BaseParserDemo):
 
     def run(self):
         print("🚀 Initializing ImageParserDemo...")
-        print("�?Initialization complete.")
+        print("✅ Initialization complete.")
         print("=== ImageParser Demo ===\n")
 
         info = {"user_id": "user1", "session_id": "session1"}
@@ -46,20 +46,20 @@ class ImageParserDemo(BaseParserDemo):
             # 1. Create SourceMessage
             print(f"📝 Creating SourceMessage from: {msg}")
             source = self.parser.create_source(msg, info)
-            print("  �?Created SourceMessage:")
+            print("  ✅ Created SourceMessage:")
             print(f"     - Type: {source.type}")
             print(f"     - URL: {getattr(source, 'url', 'N/A')}")
 
             # 2. Rebuild from Source
             print("🔄 Rebuilding message from source...")
             rebuilt = self.parser.rebuild_from_source(source)
-            print(f"  �?Rebuilt result: {rebuilt}")
+            print(f"  ✅ Rebuilt result: {rebuilt}")
 
             # 3. Fast Parse (Expected Empty)
             print("⚡️ Running parse_fast (expecting empty)...")
             fast_results = self.parser.parse_fast(msg, info)
             if not fast_results:
-                print("  �?Got empty list as expected (images require fine mode).")
+                print("  ✅ Got empty list as expected (images require fine mode).")
             else:
                 print(f"  ⚠️  Unexpected fast results: {len(fast_results)} items")
 
@@ -77,7 +77,7 @@ class ImageParserDemo(BaseParserDemo):
                     for item in fine_results:
                         print(f"     - Memory: {item.memory[:100]}...")
             except Exception as e:
-                print(f"  �?Error during fine parsing: {e}")
+                print(f"  ❌ Error during fine parsing: {e}")
 
             print()
 

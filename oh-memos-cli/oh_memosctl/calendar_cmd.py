@@ -106,7 +106,7 @@ def display_calendar_list(memories: list[dict], semester: str, course: Optional[
         t = mem.get("memory_type", "OTHER")
         type_counts[t] = type_counts.get(t, 0) + 1
 
-    stats = f"📊 总计: {total} 条笔�?
+    stats = f"📊 总计: {total} 条笔记"
     if type_counts:
         type_str = ", ".join(f"{k}:{v}" for k, v in sorted(type_counts.items(), key=lambda x: -x[1]))
         stats += f"\n   类型分布: {type_str}"
@@ -119,7 +119,7 @@ def display_calendar_week(memories: list[dict], semester: str, week: Optional[in
 
     title = f"📅 {semester}"
     if week:
-        title += f" �?{week} �?
+        title += f" 第 {week} 周"
 
     console.print(Panel(title, style="bold cyan"))
 
@@ -159,7 +159,7 @@ def display_calendar_month(memories: list[dict], semester: str):
 
     table = Table(title=title, show_header=True, header_style="bold cyan")
     table.add_column("日期", width=12)
-    table.add_column("笔记�?, justify="right", width=8)
+    table.add_column("笔记数", justify="right", width=8)
     table.add_column("类型分布")
 
     # Group by date

@@ -51,7 +51,7 @@ config_path = os.path.join(config_dir, "tree_config_shared_database.json")
 with open(config_path) as f:
     config_data = json.load(f)
 
-print(f"\n‚ú?Loaded configuration from: {config_path}")
+print(f"\n‚úì Loaded configuration from: {config_path}")
 
 # ============================================================================
 # Step 1: Initialize Embedder
@@ -60,7 +60,7 @@ print(f"\n‚ú?Loaded configuration from: {config_path}")
 embedder_config = EmbedderConfigFactory.model_validate(config_data["embedder"])
 embedder = EmbedderFactory.from_config(embedder_config)
 
-print(f"‚ú?Initialized embedder: {embedder_config.backend}")
+print(f"‚úì Initialized embedder: {embedder_config.backend}")
 
 # ============================================================================
 # Step 2: Initialize Graph Store
@@ -69,7 +69,7 @@ print(f"‚ú?Initialized embedder: {embedder_config.backend}")
 graph_config = GraphDBConfigFactory(**config_data["graph_db"])
 graph_store = GraphStoreFactory.from_config(graph_config)
 
-print(f"‚ú?Initialized graph store: {graph_config.backend}")
+print(f"‚úì Initialized graph store: {graph_config.backend}")
 
 # ============================================================================
 # Step 3: Clean up old mock data (optional)
@@ -81,11 +81,11 @@ try:
     if hasattr(graph_store, "delete_node_by_prams"):
         graph_store.delete_node_by_prams(filter={"key": "LGBTQ support group"})
         graph_store.delete_node_by_prams(filter={"key": "LGBTQ community"})
-        print("‚ú?Old mock data cleaned")
+        print("‚úì Old mock data cleaned")
     else:
-        print("‚ö?Graph store doesn't support delete_node_by_prams, skipping cleanup")
+        print("‚ö† Graph store doesn't support delete_node_by_prams, skipping cleanup")
 except Exception as exc:
-    print(f"‚ö?Cleanup warning: {exc}")
+    print(f"‚ö† Cleanup warning: {exc}")
 
 # ============================================================================
 # Step 4: Insert mock memories into the graph store
@@ -132,7 +132,7 @@ for idx, mem_data in enumerate(mock_memories, 1):
     graph_store.add_node(item.id, item.memory, item.metadata.model_dump())
     print(f"  [{idx}/{len(mock_memories)}] Added: {mem_data['memory'][:60]}...")
 
-print("‚ú?Mock memories inserted successfully")
+print("‚úì Mock memories inserted successfully")
 
 # ============================================================================
 # Step 5: Define a query and retrieval goal
@@ -178,7 +178,7 @@ retrieved_items: list[TextualMemoryItem] = retriever.retrieve(
     query_embedding=[query_embedding],
 )
 
-print(f"‚ú?Retrieved {len(retrieved_items)} memories")
+print(f"‚úì Retrieved {len(retrieved_items)} memories")
 
 # ============================================================================
 # Step 7: Display results
@@ -188,7 +188,7 @@ print("Retrieved Memory Items:")
 print(f"{'=' * 70}\n")
 
 if not retrieved_items:
-    print("‚ù?No memories retrieved.")
+    print("‚ùå No memories retrieved.")
     print("   This might indicate:")
     print("   - The mock data wasn't inserted correctly")
     print("   - The query doesn't match any stored memories")

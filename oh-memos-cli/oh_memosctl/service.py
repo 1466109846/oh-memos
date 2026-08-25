@@ -92,9 +92,9 @@ def display_status(status: dict[str, ServiceStatus], mode_status: dict[str, tupl
     config = load_config()
 
     status_icons = {
-        ServiceStatus.RUNNING: "[green]‚ó?running[/green]",
-        ServiceStatus.STOPPED: "[red]‚ó?stopped[/red]",
-        ServiceStatus.ERROR: "[yellow]‚ö?error[/yellow]",
+        ServiceStatus.RUNNING: "[green]‚óè running[/green]",
+        ServiceStatus.STOPPED: "[red]‚óã stopped[/red]",
+        ServiceStatus.ERROR: "[yellow]‚ö† error[/yellow]",
         ServiceStatus.UNKNOWN: "[dim]? unknown[/dim]",
     }
 
@@ -133,12 +133,12 @@ def start_services(modes: list[str] | None = None, project_dir: Path | None = No
     status = get_service_status()
 
     if status["neo4j"] != ServiceStatus.RUNNING:
-        console.print("[yellow]‚ö?Neo4j is not running.[/yellow]")
+        console.print("[yellow]‚ö† Neo4j is not running.[/yellow]")
         console.print("  Start Neo4j first: scripts/local/start.bat or neo4j console")
         # Don't return False - let user decide
 
     if status["qdrant"] != ServiceStatus.RUNNING:
-        console.print("[yellow]‚ö?Qdrant is not running.[/yellow]")
+        console.print("[yellow]‚ö† Qdrant is not running.[/yellow]")
         # Don't return False - let user decide
 
     # Start MCP servers for each mode
@@ -148,11 +148,11 @@ def start_services(modes: list[str] | None = None, project_dir: Path | None = No
     for mode_name in modes:
         pid = start_mcp_server(mode_name, project_dir)
         if pid is None:
-            console.print(f"[red]‚ú?Failed to start MCP for {mode_name}[/red]")
+            console.print(f"[red]‚úó Failed to start MCP for {mode_name}[/red]")
             success = False
 
     if success:
-        console.print("[green]‚ú?All MCP servers started[/green]")
+        console.print("[green]‚úÖ All MCP servers started[/green]")
     
     return success
 
@@ -173,6 +173,6 @@ def stop_services(modes: list[str] | None = None, project_dir: Path | None = Non
             success = False
 
     if success:
-        console.print("[green]‚ú?All MCP servers stopped[/green]")
+        console.print("[green]‚úÖ All MCP servers stopped[/green]")
     
     return success

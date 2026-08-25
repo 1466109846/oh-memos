@@ -69,7 +69,7 @@ config_path = os.path.join(config_dir, "tree_config_shared_database.json")
 with open(config_path) as f:
     config_data = json.load(f)
 
-print(f"\n‚ú?Loaded configuration from: {config_path}")
+print(f"\n‚úì Loaded configuration from: {config_path}")
 
 # ============================================================================
 # Step 1: Initialize Embedder
@@ -80,7 +80,7 @@ print("\n[Step 1] Initializing embedder for web content...")
 embedder_config = EmbedderConfigFactory.model_validate(config_data["embedder"])
 embedder = EmbedderFactory.from_config(embedder_config)
 
-print(f"‚ú?Embedder initialized: {embedder_config.backend}")
+print(f"‚úì Embedder initialized: {embedder_config.backend}")
 
 # ============================================================================
 # Step 2: Configure Internet Retriever (BochaAI)
@@ -92,7 +92,7 @@ reader_config_path = os.path.join(config_dir, "simple_struct_reader_config.json"
 with open(reader_config_path) as f:
     reader_config_data = json.load(f)
 
-print(f"‚ú?Loaded reader configuration from: {reader_config_path}")
+print(f"‚úì Loaded reader configuration from: {reader_config_path}")
 
 # NOTE: You need to set your BochaAI API key here or in environment variable
 # For this example, we'll read from environment variable
@@ -116,7 +116,7 @@ retriever_config = InternetRetrieverConfigFactory.model_validate(
     }
 )
 
-print(f"‚ú?Retriever configured: {retriever_config.backend}")
+print(f"‚úì Retriever configured: {retriever_config.backend}")
 print(f"  Max results per search: {retriever_config.config.max_results}")
 
 # ============================================================================
@@ -126,7 +126,7 @@ print("\n[Step 3] Creating internet retriever instance...")
 
 retriever = InternetRetrieverFactory.from_config(retriever_config, embedder)
 
-print("‚ú?Retriever initialized and ready")
+print("‚úì Retriever initialized and ready")
 
 # ============================================================================
 # Step 4: Perform Web Search
@@ -136,7 +136,7 @@ print("\n[Step 4] Performing web search...")
 # Define the search query
 query = "Alibaba 2024 ESG report"
 print(f"  üîç Query: '{query}'")
-print("  ‚è?Searching the web and processing results...\n")
+print("  ‚è≥ Searching the web and processing results...\n")
 
 # Execute the search
 # This will:
@@ -147,8 +147,8 @@ print("  ‚è?Searching the web and processing results...\n")
 # 5. Return as TextualMemoryItem objects
 results = retriever.retrieve_from_internet(query)
 
-print("‚ú?Search completed!")
-print(f"‚ú?Retrieved {len(results)} memory items from web search\n")
+print("‚úì Search completed!")
+print(f"‚úì Retrieved {len(results)} memory items from web search\n")
 
 # ============================================================================
 # Step 5: Display Results
@@ -158,7 +158,7 @@ print("WEB SEARCH RESULTS")
 print("=" * 80)
 
 if not results:
-    print("\n‚ù?No results found.")
+    print("\n‚ùå No results found.")
     print("   This might indicate:")
     print("   - Invalid or missing BochaAI API key")
     print("   - Network connectivity issues")
@@ -228,22 +228,22 @@ if google_api_key and google_search_engine_id:
         }
     )
 
-    print("‚ú?Google retriever configured")
+    print("‚úì Google retriever configured")
     print(f"  Max results: {google_retriever_config.config.max_results}")
 
     print("\n[Step 6.2] Creating Google retriever instance...")
     google_retriever = InternetRetrieverFactory.from_config(google_retriever_config, embedder)
-    print("‚ú?Google retriever initialized")
+    print("‚úì Google retriever initialized")
 
     print("\n[Step 6.3] Performing Google web search...")
     google_query = "Python best practices 2024"
     print(f"  üîç Query: '{google_query}'")
-    print("  ‚è?Searching via Google Custom Search API...\n")
+    print("  ‚è≥ Searching via Google Custom Search API...\n")
 
     google_results = google_retriever.retrieve_from_internet(google_query)
 
-    print("‚ú?Google search completed!")
-    print(f"‚ú?Retrieved {len(google_results)} memory items from Google search\n")
+    print("‚úì Google search completed!")
+    print(f"‚úì Retrieved {len(google_results)} memory items from Google search\n")
 
     # Display Google search results
     print("=" * 80)
@@ -251,7 +251,7 @@ if google_api_key and google_search_engine_id:
     print("=" * 80)
 
     if not google_results:
-        print("\n‚ù?No results found from Google.")
+        print("\n‚ùå No results found from Google.")
         print("   This might indicate:")
         print("   - Invalid Google API key or Search Engine ID")
         print("   - API quota exceeded")
@@ -292,9 +292,9 @@ print("\n" + "=" * 80)
 print("ALL TESTS COMPLETED")
 print("=" * 80)
 print("\nüí° Summary:")
-print("  ‚ú?Tested BochaAI web search retriever")
+print("  ‚úì Tested BochaAI web search retriever")
 if google_api_key and google_search_engine_id:
-    print("  ‚ú?Tested Google Custom Search API")
+    print("  ‚úì Tested Google Custom Search API")
 else:
     print("  ‚è≠Ô∏è  Skipped Google Custom Search API (credentials not set)")
 print("\nüí° Quick Start:")

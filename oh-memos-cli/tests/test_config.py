@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from oh_memosctl.config import oh_memosConfig, load_config, save_config
+from oh_memosctl.config import MemosConfig, load_config, save_config
 
 
 def test_default_config_values():

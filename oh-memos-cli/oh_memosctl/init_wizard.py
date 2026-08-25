@@ -111,7 +111,7 @@ def generate_cube_config(
                     "backend": "http_bge",
                     "config": {
                         "url": "https://api.siliconflow.cn/v1/rerank",
-                        "model": "netease-youdao/bce-reranker-base_v1",
+                        "model": "BAAI/bge-reranker-v2-m3",
                         "headers_extra": "{}",
                     },
                 },
@@ -176,7 +176,7 @@ MEMOS_TIMEOUT_STARTUP=30
 MEMOS_ENABLE_DELETE=false
 MEMOS_LOG_LEVEL=WARNING
 """
-    output_path.write_text(content)
+    output_path.write_text(content, encoding="utf-8")
 
 
 def show_welcome():
@@ -252,7 +252,7 @@ def run_init_wizard(
     else:
         console.print("\n[bold]? 选择 LLM 后端:[/bold]")
         console.print("  [cyan]1[/cyan]  Ollama (本地运行，免费，推荐)")
-        console.print("  [cyan]2[/cyan]  OpenAI (需�?API Key)")
+        console.print("  [cyan]2[/cyan]  OpenAI (需要 API Key)")
         console.print("  [cyan]3[/cyan]  SiliconFlow (国内可用)")
         llm_choice = Prompt.ask("选择", default="1")
         llm_backend = {"1": "ollama", "2": "openai", "3": "siliconflow"}.get(llm_choice, "ollama")
@@ -287,21 +287,21 @@ def run_init_wizard(
     if not non_interactive:
         console.print()
         console.print(Panel(
-            f"""[green]�?配置完成！[/green]
+            f"""[green]✅ 配置完成！[/green]
 
 📁 配置目录: [cyan]{project_dir}[/cyan]
 🧊 Cube ID:   [cyan]{cube_id}[/cyan]
 📝 模式:      [cyan]{mode_obj.emoji} {mode_obj.display_name}[/cyan]
 
-📄 生成的文�?
+📄 生成的文件:
    - Cube Config: {config_path}
    - .env: {env_path}
    - SKILL.md: {claude_files.get('skill', 'N/A')}
    - Hook: {claude_files.get('hook', 'N/A')}
 
-🚀 下一�?
+🚀 下一步:
    1. 启动服务:  [bold]memosctl start[/bold]
-   2. 查看状�?  [bold]memosctl status[/bold]
+   2. 查看状态:  [bold]memosctl status[/bold]
 """,
             title="Setup Complete",
             border_style="green",

@@ -16,7 +16,7 @@ automatically discover relationships between memories and infer new knowledge.
 **Use case:**
 You have stored multiple facts about a user (e.g., "Caroline's work stress",
 "joining support group", "improved mental health"). This detector can:
-1. Find causal links: "Work stress" ‚Ü?"Joining support group" ‚Ü?"Better mental health"
+1. Find causal links: "Work stress" ‚Üí "Joining support group" ‚Üí "Better mental health"
 2. Infer new facts: "Support groups help reduce work-related stress"
 3. Build aggregate concepts: "Caroline's stress management journey"
 
@@ -66,7 +66,7 @@ config_path = os.path.join(config_dir, "tree_config_shared_database.json")
 with open(config_path) as f:
     config_data = json.load(f)
 
-print(f"\n‚ú?Loaded configuration from: {config_path}")
+print(f"\n‚úì Loaded configuration from: {config_path}")
 
 # ============================================================================
 # Step 1: Initialize Embedder
@@ -76,7 +76,7 @@ print("\n[Step 1] Initializing embedder...")
 embedder_config = EmbedderConfigFactory.model_validate(config_data["embedder"])
 embedder = EmbedderFactory.from_config(embedder_config)
 
-print(f"‚ú?Embedder initialized: {embedder_config.backend}")
+print(f"‚úì Embedder initialized: {embedder_config.backend}")
 
 # ============================================================================
 # Step 2: Initialize Graph Store
@@ -87,7 +87,7 @@ print("\n[Step 2] Initializing graph database...")
 graph_config = GraphDBConfigFactory(**config_data["graph_db"])
 graph_store = GraphStoreFactory.from_config(graph_config)
 
-print(f"‚ú?Graph store initialized: {graph_config.backend}")
+print(f"‚úì Graph store initialized: {graph_config.backend}")
 print(f"  Connected to: {graph_config.config.get('uri', 'N/A')}")
 print(f"  Database: {graph_config.config.get('db_name', 'N/A')}")
 
@@ -102,7 +102,7 @@ print("\n[Step 3] Initializing LLM for relation detection...")
 llm_config = LLMConfigFactory.model_validate(config_data["extractor_llm"])
 llm = LLMFactory.from_config(llm_config)
 
-print(f"‚ú?LLM initialized: {llm_config.backend}")
+print(f"‚úì LLM initialized: {llm_config.backend}")
 
 # ============================================================================
 # Step 4: Create Mock Memory Nodes
@@ -140,7 +140,7 @@ node_b = GraphDBNode(
         updated_at="2024-07-10T12:00:00Z",
     ),
 )
-print("  ‚ú?Node B: Improved mental health")
+print("  ‚úì Node B: Improved mental health")
 
 # Node C: General research about support groups
 node_c = GraphDBNode(
@@ -157,9 +157,9 @@ node_c = GraphDBNode(
         updated_at="2024-06-29T14:00:00Z",
     ),
 )
-print("  ‚ú?Node C: Support group benefits")
+print("  ‚úì Node C: Support group benefits")
 
-# Node D: Work pressure ‚Ü?stress (causal chain element)
+# Node D: Work pressure ‚Üí stress (causal chain element)
 node_d = GraphDBNode(
     id=str(uuid.uuid4()),
     memory="Excessive work pressure increases stress levels among employees.",
@@ -174,9 +174,9 @@ node_d = GraphDBNode(
         updated_at="2024-06-15T08:00:00Z",
     ),
 )
-print("  ‚ú?Node D: Work pressure ‚Ü?stress")
+print("  ‚úì Node D: Work pressure ‚Üí stress")
 
-# Node E: Stress ‚Ü?poor sleep (causal chain element)
+# Node E: Stress ‚Üí poor sleep (causal chain element)
 node_e = GraphDBNode(
     id=str(uuid.uuid4()),
     memory="High stress levels often result in poor sleep quality.",
@@ -191,9 +191,9 @@ node_e = GraphDBNode(
         updated_at="2024-06-18T10:00:00Z",
     ),
 )
-print("  ‚ú?Node E: Stress ‚Ü?poor sleep")
+print("  ‚úì Node E: Stress ‚Üí poor sleep")
 
-# Node F: Poor sleep ‚Ü?low performance (causal chain element)
+# Node F: Poor sleep ‚Üí low performance (causal chain element)
 node_f = GraphDBNode(
     id=str(uuid.uuid4()),
     memory="Employees with poor sleep show reduced work performance.",
@@ -208,7 +208,7 @@ node_f = GraphDBNode(
         updated_at="2024-06-20T12:00:00Z",
     ),
 )
-print("  ‚ú?Node F: Poor sleep ‚Ü?low performance")
+print("  ‚úì Node F: Poor sleep ‚Üí low performance")
 
 # Main Node: The central fact we want to analyze
 # This node will be used as the "anchor" to find related memories
@@ -228,7 +228,7 @@ node = GraphDBNode(
         updated_at="2024-07-01T10:00:00Z",
     ),
 )
-print("  ‚ú?Main Node: Caroline's support group action\n")
+print("  ‚úì Main Node: Caroline's support group action\n")
 
 # ============================================================================
 # Step 5: Insert Nodes into Graph Store
@@ -239,7 +239,7 @@ all_nodes = [node, node_a, node_b, node_c, node_d, node_e, node_f]
 for n in all_nodes:
     graph_store.add_node(n.id, n.memory, n.metadata.dict())
 
-print(f"‚ú?Successfully inserted {len(all_nodes)} memory nodes into the graph\n")
+print(f"‚úì Successfully inserted {len(all_nodes)} memory nodes into the graph\n")
 
 # ============================================================================
 # Step 6: Initialize Relation & Reasoning Detector
@@ -252,7 +252,7 @@ relation_detector = RelationAndReasoningDetector(
     embedder=embedder,
 )
 
-print("‚ú?Detector initialized and ready\n")
+print("‚úì Detector initialized and ready\n")
 
 # ============================================================================
 # Step 7: Run Relation Detection & Reasoning
@@ -272,7 +272,7 @@ results = relation_detector.process_node(
     top_k=5,  # Consider top 5 most similar nodes
 )
 
-print("‚ú?Analysis complete!\n")
+print("‚úì Analysis complete!\n")
 
 # ============================================================================
 # Step 8: Display Results
@@ -291,7 +291,7 @@ if results["relations"]:
         print(f"    Target: {rel['target_id'][:8]}...")
         print(f"    Type: {rel['relation_type']}")
 else:
-    print("  ‚ù?No pairwise relations detected")
+    print("  ‚ùå No pairwise relations detected")
     print("     Try adjusting similarity threshold or adding more related nodes")
 
 # Display inferred new facts
@@ -302,7 +302,7 @@ if results["inferred_nodes"]:
         print(f"\n  Inferred Fact #{idx}:")
         print(f"    üí¨ {inferred_node.memory}")
         print(f"    üìå Sources: {inferred_node.metadata.sources}")
-        print(f"    üè∑Ô∏? Key: {inferred_node.metadata.key}")
+        print(f"    üè∑Ô∏è  Key: {inferred_node.metadata.key}")
 else:
     print("  ‚ÑπÔ∏è  No new facts inferred")
     print("     This is normal if relations are simple or insufficient for reasoning")
@@ -312,7 +312,7 @@ print("\n\n‚è±Ô∏è  [3] Sequence Links (FOLLOWS relationships)")
 print("-" * 80)
 if results["sequence_links"]:
     for idx, link in enumerate(results["sequence_links"], 1):
-        print(f"  {idx}. {link['from_id'][:8]}... ‚Ü?{link['to_id'][:8]}...")
+        print(f"  {idx}. {link['from_id'][:8]}... ‚Üí {link['to_id'][:8]}...")
 else:
     print("  ‚ÑπÔ∏è  No sequential patterns detected")
 

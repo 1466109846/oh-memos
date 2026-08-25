@@ -170,7 +170,7 @@ def factory_initialization() -> tuple[DeepSearchMemAgent, dict[str, Any]]:
         config_factory=agent_config_factory, llm=llm, memory_retriever=naive_mem_cube.text_mem
     )
 
-    logger.info("âœ?DeepSearchMemAgent created successfully")
+    logger.info("âœ“ DeepSearchMemAgent created successfully")
     logger.info(f"  - Agent name: {deep_search_agent.config.agent_name}")
     logger.info(f"  - Max iterations: {deep_search_agent.max_iterations}")
     logger.info(f"  - Timeout: {deep_search_agent.timeout} seconds")

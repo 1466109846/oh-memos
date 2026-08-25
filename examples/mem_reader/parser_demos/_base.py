@@ -14,7 +14,7 @@ class BaseParserDemo:
         print(f"\nðŸš€ Initializing {self.__class__.__name__}...")
         self.embedder, self.llm = build_llm_and_embedder()
         self.parser = self.create_parser()
-        print("âœ?Initialization complete.\n")
+        print("âœ… Initialization complete.\n")
 
     def create_parser(self):
         """Create and return the specific parser instance."""
@@ -32,11 +32,11 @@ class BaseParserDemo:
         source = self.parser.create_source(message, info, **kwargs)
 
         if isinstance(source, list):
-            print(f"  âœ?Created {len(source)} SourceMessage(s)")
+            print(f"  âœ… Created {len(source)} SourceMessage(s)")
             for i, s in enumerate(source):
                 print(f"    [{i}] Type: {s.type}, Role: {getattr(s, 'role', 'N/A')}")
         else:
-            print("  âœ?Created SourceMessage:")
+            print("  âœ… Created SourceMessage:")
             print(f"     - Type: {source.type}")
             if hasattr(source, "role"):
                 print(f"     - Role: {source.role}")
@@ -53,7 +53,7 @@ class BaseParserDemo:
         src_to_rebuild = source[0] if isinstance(source, list) else source
 
         rebuilt = self.parser.rebuild_from_source(src_to_rebuild)
-        print("  âœ?Rebuilt result:")
+        print("  âœ… Rebuilt result:")
         if isinstance(rebuilt, dict):
             pretty_print_dict(rebuilt)
         else:

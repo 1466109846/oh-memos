@@ -31,8 +31,19 @@ for f in $(git diff --cached --name-only --diff-filter=ACMR); do
     *.example|*.template|*.md|.gitignore|*/pre-commit|tests/test_redact.py) continue ;;
   esac
   [ -f "$f" ] || continue
-  hits=$(git show ":$f" 2>/dev/null | grep -nE \
+  # `-o` prints the matched credential alone, so the placeholder filter below
+  # judges the VALUE rather than the whole line. Judging the line would let a
+  # real key through whenever the word "your" happened to appear beside it.
+  #
+  # The `[A-Za-z0-9/+_-]{16,}` value class includes `-`, so a hyphenated English
+  # placeholder such as `sk-your-bocha-api-key` clears the 16-char threshold and
+  # was reported as a secret. Real keys are high-entropy random strings and do
+  # not contain these words; a documentation placeholder always does. Without
+  # this filter the hook cries wolf on every commit touching an example file,
+  # which is how a guard gets habitually bypassed with --no-verify.
+  hits=$(git show ":$f" 2>/dev/null | grep -noE \
     'sk-[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|(API_KEY|SECRET|TOKEN|PASSWORD)[[:space:]]*=[[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{16,}' \
+    | grep -viE 'your|example|sample|placeholder|change[_-]?me|dummy|fake|redacted|xxxx|<[a-z]|\$\{|todo|replace[_-]?(me|this)|here$' \
     | head -3)
   if [ -n "$hits" ]; then
     echo "✗ Blocked: credential-like content in $f"

@@ -18,7 +18,7 @@ def test_generate_skill_file():
             output_path=output_path,
         )
 
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert "BUGFIX" in content
         assert "ERROR_PATTERN" in content
 
@@ -32,6 +32,6 @@ def test_generate_hook_file():
             output_path=output_path,
         )
 
-        content = output_path.read_text()
+        content = output_path.read_text(encoding="utf-8")
         assert "detectIntents" in content
         assert "history_query" in content

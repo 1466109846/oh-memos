@@ -25,7 +25,7 @@ class UserParserDemo(BaseParserDemo):
                     for i, src in enumerate(sources):
                         print(f"\n🔄 Rebuilding source part {i + 1} ({src.type})...")
                         rebuilt = self.parser.rebuild_from_source(src)
-                        print("  �?Rebuilt result:")
+                        print("  ✅ Rebuilt result:")
                         if isinstance(rebuilt, dict):
                             from examples.mem_reader.utils import pretty_print_dict
 

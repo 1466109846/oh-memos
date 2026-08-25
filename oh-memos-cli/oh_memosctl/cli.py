@@ -51,7 +51,7 @@ def init(
             output_dir=output, non_interactive=non_interactive,
         )
         if non_interactive:
-            console.print(f"âœ?Created project at {result['project_dir']}")
+            console.print(f"âœ… Created project at {result['project_dir']}")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)

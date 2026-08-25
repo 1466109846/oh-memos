@@ -24,7 +24,7 @@ class TextContentParserDemo(BaseParserDemo):
             print("\n🔄 Rebuilding from source...")
             rebuilt = self.parser.rebuild_from_source(source)
             if rebuilt:
-                print("  �?Rebuilt result:")
+                print("  ✅ Rebuilt result:")
                 if isinstance(rebuilt, dict):
                     from examples.mem_reader.utils import pretty_print_dict
 

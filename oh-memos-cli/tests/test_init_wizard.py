@@ -55,7 +55,7 @@ def test_generate_env_file():
             cubes_dir="/path/to/cubes",
         )
 
-        content = env_path.read_text()
+        content = env_path.read_text(encoding="utf-8")
         assert "NEO4J_PASSWORD=secret123" in content
         assert "MEMOS_DEFAULT_CUBE=test_cube" in content
         assert "MEMOS_CUBES_DIR=/path/to/cubes" in content

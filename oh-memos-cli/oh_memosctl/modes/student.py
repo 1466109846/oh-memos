@@ -11,7 +11,7 @@ class StudentMode(BaseMode):
 
     name: str = "student"
     display_name: str = "学习笔记"
-    description: str = "适合学生、课程、论�?
+    description: str = "适合学生、课程、论文"
     emoji: str = "📚"
     port: int = 18002
 
@@ -46,18 +46,18 @@ description: "Academic memory management for courses, thesis, and study notes."
 
 | Type | When to Use | Example |
 |------|-------------|---------|
-| `LECTURE` | 课堂笔记 | 《数据结构》第3�?- 链表 |
-| `CONCEPT` | 概念定义 | 什么是时间复杂�?O(n) |
+| `LECTURE` | 课堂笔记 | 《数据结构》第3章 - 链表 |
+| `CONCEPT` | 概念定义 | 什么是时间复杂度 O(n) |
 | `CITATION` | 文献引用 | Smith et al. 2024, AI综述 |
-| `QUESTION` | 疑问/待解�?| 为什么递归比迭代慢�?|
+| `QUESTION` | 疑问/待解决 | 为什么递归比迭代慢？ |
 '''
 
     def get_hook_patterns(self) -> dict[str, list[str]]:
         return {
-            "history_query": [r"上节�?, r"上次.*�?, r"之前.*�?, r"last lecture"],
+            "history_query": [r"上节课", r"上次.*课", r"之前.*讲", r"last lecture"],
             "concept_query": [r"什么是", r"怎么理解", r"定义", r"what is", r"definition"],
             "citation_needed": [r"引用|cite", r"参考文献|reference", r"出处|source"],
-            "task_completion": [r"上完�?, r"看完�?, r"整理.*笔记"],
+            "task_completion": [r"上完课", r"看完了", r"整理.*笔记"],
         }
 
     def get_cube_config_overrides(self) -> dict:

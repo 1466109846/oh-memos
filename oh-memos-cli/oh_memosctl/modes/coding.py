@@ -10,9 +10,9 @@ class CodingMode(BaseMode):
     """Coding mode for developers."""
 
     name: str = "coding"
-    display_name: str = "编码开�?
+    display_name: str = "编码开发"
     description: str = "适合程序员、AI助手用户"
-    emoji: str = "🖥�?
+    emoji: str = "🖥️"
     port: int = 18001
 
     memory_types: list[str] = field(default_factory=lambda: [
@@ -60,6 +60,6 @@ description: "Proactive coding memory management via MemOS MCP."
         return {
             "history_query": [r"之前.*bug", r"上次.*错误", r"previous.*error", r"last time.*fix"],
             "error_report": [r"error|错误|报错", r"exception|异常", r"traceback", r"failed|失败"],
-            "decision_making": [r"应该(用|选|采用)", r"哪个.*�?, r"vs\.?|versus", r"方案|approach"],
+            "decision_making": [r"应该(用|选|采用)", r"哪个.*好", r"vs\.?|versus", r"方案|approach"],
             "task_completion": [r"修复了|fixed", r"实现了|implemented", r"完成了|completed"],
         }

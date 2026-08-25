@@ -73,7 +73,7 @@ def get_mcp_server_path() -> Path:
     """Get path to MCP server script."""
     # Check relative to memos-cli
     import oh_memosctl
-    cli_pkg = Path(memosctl.__file__).parent
+    cli_pkg = Path(oh_memosctl.__file__).parent
     
     # Go up to MemOS root and find mcp-server
     for parent in [cli_pkg.parent.parent, cli_pkg.parent.parent.parent]:
@@ -100,7 +100,7 @@ def build_mcp_env(mode: str, project_dir: Path) -> dict:
     # Load .env file if exists
     env_file = project_dir / ".env"
     if env_file.exists():
-        for line in env_file.read_text().splitlines():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, _, value = line.partition("=")
@@ -161,7 +161,7 @@ def start_mcp_server(
         
         process = subprocess.Popen(cmd, **kwargs)
         write_pid(mode, process.pid)
-        console.print(f"[green]âœ?Started (PID {process.pid})[/green]")
+        console.print(f"[green]âœ“ Started (PID {process.pid})[/green]")
         return process.pid
 
 
@@ -194,7 +194,7 @@ def stop_mcp_server(mode: str) -> bool:
                 os.kill(pid, signal.SIGKILL)
         
         remove_pid(mode)
-        console.print(f"[green]âœ?Stopped[/green]")
+        console.print(f"[green]âœ“ Stopped[/green]")
         return True
     except Exception as e:
         console.print(f"[red]Failed to stop: {e}[/red]")
