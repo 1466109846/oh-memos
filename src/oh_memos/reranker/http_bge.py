@@ -238,6 +238,15 @@ class HTTPBGEReranker(BaseReranker):
         else:
             # Unexpected response schema: return a 0.0-scored fallback of the first top_k valid docs
             # Note: we use 'pairs' to keep alignment with valid (string) docs.
+            # No exception is raised here, so timed_with_status' fallback never fires --
+            # this branch has to report the degradation itself.
+            logger.warning(
+                "[HTTPBGEReranker] unexpected rerank response schema (top-level keys: %s); "
+                "degrading to 0.0 scores for %d item(s) -- downstream order is input order, "
+                "not relevance",
+                sorted(data.keys()) if isinstance(data, dict) else type(data).__name__,
+                len(graph_results[:top_k]),
+            )
             return [(item, 0.0) for item in graph_results[:top_k]]
 
     def _get_attr_or_key(self, obj: Any, key: str) -> Any:

@@ -51,6 +51,11 @@ def timed_with_status(
                 success_flag = False
 
                 if fallback is not None and callable(fallback):
+                    logger.warning(
+                        f"[TIMER_WITH_STATUS] {log_prefix or fn.__name__} raised "
+                        f"{exc_type.__name__}: {e!r} -- returning DEGRADED fallback result "
+                        f"instead of propagating. Downstream ranking/scoring may be invalid."
+                    )
                     result = fallback(e, *args, **kwargs)
                     return result
                 else:

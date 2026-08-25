@@ -770,6 +770,19 @@ class Searcher:
             if item.metadata.memory_type not in ["ToolSchemaMemory", "ToolTrajectoryMemory"]
         ]
 
+        # Degeneracy guard: if every candidate scored exactly 0.0, the reranker fell back
+        # (see HTTPBGEReranker / timed_with_status) and the sort below is a no-op --
+        # stable sort keeps insertion order, so "top_k" becomes "whichever path was
+        # appended first in _retrieve_paths", not "most relevant". RRF scores are
+        # floored at 1/(k+rank) and never reach 0, so an all-zero set is a positive
+        # fingerprint of the degraded path rather than a legitimate result.
+        if len(results) > 1 and all(score == 0.0 for _, score in results):
+            logger.warning(
+                "[Searcher] all %d candidate(s) scored 0.0 -- reranker almost certainly "
+                "degraded; results are in retrieval order, NOT relevance order",
+                len(results),
+            )
+
         sorted_results = sorted(results, key=lambda pair: pair[1], reverse=True)[:top_k]
 
         for item, score in sorted_results:
