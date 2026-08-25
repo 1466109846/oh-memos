@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -9,6 +10,44 @@ const scriptPath = resolve(
   "scripts",
   "generate-readme-changelog.mjs",
 );
+
+/**
+ * 导入仓库根的 `scripts/*.mjs`，绕开 shebang。
+ *
+ * 该脚本首行是 `#!/usr/bin/env node`。Vite 的 module runner 加载非入口
+ * `.mjs` 时**不剥 shebang**，`#` 作为非法 token 让整个 suite 收集失败
+ * （`SyntaxError: Invalid or unexpected token`，报在 import 那一行，
+ * 看起来像测试文件自己的语法错，实际错在被导入的模块）。
+ *
+ * 实测排除的三条路：
+ *   - 裸绝对路径 → Windows 上 `G:` 被当 URL scheme
+ *   - `pathToFileURL` 单独用 → 仍走 Vite runner，shebang 照旧不剥
+ *   - `/* @vite-ignore *&#47;` → runner 依然接管动态 import
+ *   - `server.deps.external` → 3.2.7 下对项目内文件不生效
+ *
+ * 所以剥掉首行写到临时文件再导入。**必须是真实文件路径**而非 data URL：
+ * 脚本末尾的 main-guard 会求值 `fileURLToPath(import.meta.url)`
+ * （`process.argv[1]` 在 vitest 下非空，短路不掉），data URL 会让它抛错。
+ * 临时文件路径与 `process.argv[1]` 不同，guard 判假，`main()` 不会跑。
+ *
+ * 不选「删掉脚本的 shebang」—— 那是为了过测试去改被测对象。所有调用点
+ * （CI、README）都是 `node scripts/...`，shebang 无害。
+ */
+async function importWithoutShebang(
+  path: string,
+): Promise<Record<string, unknown>> {
+  const source = readFileSync(path, "utf8");
+  const stripped = source.replace(/^#![^\n]*/, "");
+  const dir = mkdtempSync(join(tmpdir(), "ohm-readme-"));
+  const copy = join(dir, "generate-readme-changelog.mjs");
+  try {
+    writeFileSync(copy, stripped, "utf8");
+    return (await import(pathToFileURL(copy).href)) as Record<string, unknown>;
+  } finally {
+    // import 完成后模块已在内存里，删掉临时目录不影响后续断言。
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 const {
   CHANGELOG,
@@ -22,7 +61,7 @@ const {
   parseEntries,
   renderBlock,
   replaceMarkedBlock,
-} = await import(scriptPath);
+} = (await importWithoutShebang(scriptPath)) as any;
 
 const changelog = readFileSync(resolve(repoRoot, CHANGELOG), "utf8");
 const readmes = (TARGETS as { file: string; lang: string }[]).map(

@@ -454,14 +454,33 @@ export async function handleMemosGet(
   }
 }
 
-function notFoundText(memoryId: string): string {
+/**
+ * not-found 文案。
+ *
+ * 旧文案说「核对 id 是否正确（从 memos_search 结果复制）」，但实测中最常见的
+ * 成因恰恰是**从搜索结果复制的 id 过了一会儿就失效**：`POST /search` 返回的
+ * 是 `WorkingMemory` 层的副本 id，而该层按 `user_name` 只保留 20 条
+ * （`manager.py` 的 `memory_size["WorkingMemory"]`），每次检索都重写并淘汰最旧的。
+ * 实测 `oh_memos_cube` 的 20 条只覆盖 22 分钟。
+ *
+ * 所以把 `memos_list_v2` 指出来是有实质区别的：它返回 `LongTermMemory` 的 id，
+ * 那一层不淘汰（实测同一批 id 隔天仍可取回）。
+ *
+ * 措辞上不把淘汰断言成事实 —— Lite 模式（本地 JSONL）根本没有 WorkingMemory
+ * 层，那里的 not-found 就是单纯的 id 不存在。
+ */
+export function notFoundText(memoryId: string): string {
   return [
     `❌ Memory not found: \`${memoryId}\``,
     "",
-    "💡 **Tips**:",
-    "- Verify the ID is correct (copy from memos_search results)",
-    "- The memory may have been deleted",
-    "- Try `memos_search` to find the memory again",
+    "💡 **可能原因**:",
+    "- **id 已失效**（最常见）：`memos_search` 返回的是短期层（WorkingMemory）id，",
+    "  该层每用户仅保留最近 20 条，新检索会淘汰旧的。取回长期 id 请用 `memos_list_v2`。",
+    "- 记忆确实已被删除",
+    "- cube 不对：确认传了正确的 `project_path`",
+    "",
+    "✅ **下一步**: 用 `memos_search` 重新检索拿到当前有效 id，",
+    "或用 `memos_list_v2` 拿持久 id。",
   ].join("\n");
 }
 

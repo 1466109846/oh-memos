@@ -4,7 +4,14 @@
  * HTTP fetch wrapper with timeout, retry, and health check.
  */
 
-import { MEMOS_URL, MEMOS_API_WAIT_MAX, MEMOS_TIMEOUT_HEALTH, MEMOS_TIMEOUT_TOOL, logger, registeredCubes } from "./config.js";
+import {
+  MEMOS_URL,
+  MEMOS_API_WAIT_MAX,
+  MEMOS_TIMEOUT_HEALTH,
+  MEMOS_TIMEOUT_TOOL,
+  logger,
+  registeredCubes,
+} from "./config.js";
 
 // ============================================================================
 // Fetch with Timeout
@@ -12,7 +19,7 @@ import { MEMOS_URL, MEMOS_API_WAIT_MAX, MEMOS_TIMEOUT_HEALTH, MEMOS_TIMEOUT_TOOL
 
 export async function fetchWithTimeout(
   url: string,
-  options: RequestInit & { timeoutMs?: number } = {}
+  options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<Response> {
   const timeoutMs = (options.timeoutMs ?? MEMOS_TIMEOUT_TOOL) * 1000;
   const { timeoutMs: _, ...fetchOptions } = options;
@@ -37,7 +44,7 @@ export async function fetchWithTimeout(
 
 export async function waitForApiReady(
   maxWait?: number,
-  interval = 2.0
+  interval = 2.0,
 ): Promise<boolean> {
   const maxWaitMs = (maxWait ?? MEMOS_API_WAIT_MAX) * 1000;
   const intervalMs = interval * 1000;
@@ -80,7 +87,10 @@ export interface ApiCallResult {
   status: number;
 }
 
-function buildUrl(base: string, params?: Record<string, string | number | boolean | undefined>): string {
+function buildUrl(
+  base: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): string {
   if (!params) return base;
   const urlParams = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -93,7 +103,7 @@ function buildUrl(base: string, params?: Record<string, string | number | boolea
 async function doFetch(
   method: HttpMethod,
   url: string,
-  options: ApiCallOptions
+  options: ApiCallOptions,
 ): Promise<{ status: number; data: Record<string, unknown> | null }> {
   const finalUrl = buildUrl(url, options.params);
   const headers: Record<string, string> = {
@@ -110,14 +120,17 @@ async function doFetch(
     fetchOptions.body = JSON.stringify(options.body);
   }
 
-  const response = await fetchWithTimeout(finalUrl, fetchOptions as RequestInit & { timeoutMs?: number });
+  const response = await fetchWithTimeout(
+    finalUrl,
+    fetchOptions as RequestInit & { timeoutMs?: number },
+  );
 
   if (!response.ok && response.status !== 400) {
     return { status: response.status, data: null };
   }
 
   try {
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     return { status: response.status, data };
   } catch {
     return { status: response.status, data: null };
@@ -129,7 +142,10 @@ export async function apiCallWithRetry(
   url: string,
   cubeId: string,
   options: ApiCallOptions = {},
-  ensureCubeRegistered?: (cubeId: string, force?: boolean) => Promise<[boolean, string | null]>
+  ensureCubeRegistered?: (
+    cubeId: string,
+    force?: boolean,
+  ) => Promise<[boolean, string | null]>,
 ): Promise<ApiCallResult> {
   const { status, data } = await doFetch(method, url, options);
 
@@ -144,7 +160,11 @@ export async function apiCallWithRetry(
       const [regSuccess] = await ensureCubeRegistered(cubeId, true);
       if (regSuccess) {
         const retry = await doFetch(method, url, options);
-        if (retry.status === 200 && retry.data && (retry.data as Record<string, unknown>).code === 200) {
+        if (
+          retry.status === 200 &&
+          retry.data &&
+          (retry.data as Record<string, unknown>).code === 200
+        ) {
           return { success: true, data: retry.data, status: 200 };
         }
         return { success: false, data: retry.data, status: 200 };
@@ -160,11 +180,20 @@ export async function apiCallWithRetry(
     const [regSuccess] = await ensureCubeRegistered(cubeId, true);
     if (regSuccess) {
       const retry = await doFetch(method, url, options);
-      if (retry.status === 200 && retry.data && (retry.data as Record<string, unknown>).code === 200) {
+      if (
+        retry.status === 200 &&
+        retry.data &&
+        (retry.data as Record<string, unknown>).code === 200
+      ) {
         return { success: true, data: retry.data, status: 200 };
       }
+      // 重注册没救回来 —— 说明这不是「cube 未加载」，而是真实的业务错误。
+      // 必须把正文带回去：后端把 not-found 也映射成 400（start_api.py 的
+      // ValueError handler），唯一能区分的信息就在 message 里。丢掉它会让
+      // 调用方只能打印无用的 "HTTP 400"。重试正文优先，缺失则退回首次的。
+      return { success: false, data: retry.data ?? data, status: 400 };
     }
-    return { success: false, data: null, status: 400 };
+    return { success: false, data, status: 400 };
   }
 
   return { success: false, data, status };
