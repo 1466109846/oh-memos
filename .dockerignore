@@ -3,11 +3,17 @@
 # huge, or irrelevant to a Linux runtime image.
 
 # --- secrets & local configuration ---
+# A pattern without a slash is matched against the top level only, so a bare
+# `.env.*` never covered docker/.env.migration — which holds a real Neo4j
+# password and seven API keys. `**/` is what makes the rule recursive.
+# The allow-list is `**/.env*.example` (not just `.env.example`) so every
+# template survives: .env.windows.example, docker/.env.migration.example, etc.
 .env
-.env.*
-!.env.example
-*.pem
-*.key
+**/.env
+**/.env.*
+!**/.env*.example
+**/*.pem
+**/*.key
 config/mcp-config*.json
 
 # --- version control & agent state ---
@@ -18,14 +24,24 @@ config/mcp-config*.json
 .pre-commit-config.yaml
 
 # --- local Python environments & caches ---
+# Same top-level-only caveat as above. Before `**/` was added, all 46 nested
+# __pycache__ directories under src/oh_memos were copied into the image: 8.4 MB
+# of dead weight (66% of src/oh_memos), half of it cpython-312 bytecode that a
+# python:3.11 base can never load. Worse, each .pyc embeds the absolute
+# co_filename it was compiled from, publishing the build host's local path.
+# Nothing loaded them — the runtime imports from site-packages — so this was
+# pure bloat plus a path leak, not a correctness bug.
+# The cache directory names below stay top-level-only on purpose: `**/data` and
+# `**/runtime` would match the real package directories src/oh_memos/data and
+# src/oh_memos/data/runtime.
 .venv
 conda_venv
-__pycache__
-*.py[cod]
-.pytest_cache
-.ruff_cache
-.mypy_cache
-*.egg-info
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.egg-info
 .memos
 
 # --- runtime data (must come from volumes, never from the image) ---
