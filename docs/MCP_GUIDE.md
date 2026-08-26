@@ -280,7 +280,7 @@ Graph work goes through `memos_graph(mode)`, maintenance through `memos_admin(ac
 | `memos_admin` | 运维 —— `action`: list_cubes / register_cube / create_user / validate_cubes / stats / calendar / capabilities |
 | `memos_export_wiki` | 导出 cube 为互链 markdown wiki \| export a cube as an interlinked wiki |
 | `memos_import_wiki` | 把导出的 wiki 导回 cube；支持 dry-run 与编辑页版本化，从不删除记忆 \| import a wiki back; dry-run and versioning, never deletes |
-| `memos_canvas` | 任务画布：跨压缩存续的任务状态 —— `action`: open / update / show / list |
+| `memos_canvas` | 任务画布：跨压缩存续的任务状态 —— `action`: open / update / show / list / delete（未完成节点需 `confirm=true`）|
 | `memos_distill_skill` | 从复现记忆生成待审 Skill 候选（写在 `skill-candidates/`，不自动安装）\| distill a reviewable Skill candidate; never auto-installs |
 | `memos_list_skill_candidates` | 列出 Skill 候选，不修改也不安装 \| list candidates without modifying or installing |
 | `memos_review_skill_candidate` | 批准或驳回候选（带审阅人审计信息；批准≠安装）\| approve or reject; approval does not install |

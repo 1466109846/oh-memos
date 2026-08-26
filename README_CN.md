@@ -308,7 +308,7 @@ flowchart LR
 | 写入与生命周期 | `memos_save`、`memos_delete` | 保存带类型记忆；删除能力默认关闭 |
 | 知识图谱 | `memos_graph` | 相关节点、带证据路径、影响/schema 查询，以及 Graphify JSON dry-run 校验 |
 | 管理 | `memos_admin`、`memos_list_v2` | cube/user 维护、校验、统计、日历和列表 |
-| 短期任务 | `memos_canvas` | 打开、更新、查看和列出任务画布 |
+| 短期任务 | `memos_canvas` | 打开、更新、查看、列出和删除任务画布 |
 | 导出与回灌 | `memos_export_wiki`、`memos_import_wiki` | 把 cube 导出为互相链接的 Markdown 页面和 Mermaid 图；编辑后可回灌（新页创建、未改动跳过、编辑页可另存为版本） |
 | Skill 候选 | `memos_distill_skill`、`memos_list_skill_candidates` | 生成带记忆证据、等待人工 review 的候选，不自动安装 |
 
@@ -394,12 +394,12 @@ Docker 发布工作流还会导入 API、检查依赖、确认 CPU-only Torch �
 更新日志每条标题下的 `<!-- en: ... -->` 注释。
 
 <!-- changelog-recent:start -->
+- `3.1.7 · 2026-08-27` — 🏷️ 修复：`open` 报出的画布名，`list` 找不到
+- `3.1.6 · 2026-08-26` — 🔤 修复：`memos_canvas` 的 ref 里引号读不回来
+- `3.1.6 · 2026-08-26` — 🗑️ `memos_canvas` 新增 `delete` 动作
+- `3.1.6 · 2026-08-26` — 🔢 修复：`delete` 破坏了「画布前缀永不复用」
 - `3.1.5 · 2026-08-26` — 🔧 重排模型换成 `BAAI/bge-reranker-v2-m3`（修复检索只返回 WorkingMemory）
 - `3.1.5 · 2026-08-26` — 🔊 静默 fail-open 退化改为可观测（上一条的上游根因）
-- `3.1.5 · 2026-08-26` — 🔒 分层过滤的强制机制
-- `3.1.5 · 2026-08-26` — 🐳 `.dockerignore` 的裸模式只匹配顶层 —— 密码文件进了 build context，8.4 MB 陈旧字节码进了镜像
-- `3.1.5 · 2026-08-26` — 🐛 待修：`graph.ts` 三条路由的 Cypher 未带出层级字段
-- `3.1.4 · 2026-08-24` — 🐛 修复：同源节点列表混入 scheduler 短期副本
 <!-- changelog-recent:end -->
 
 完整历史见[更新日志](docs/CHANGELOG.md)，计划中的能力见

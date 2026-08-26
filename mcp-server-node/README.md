@@ -327,7 +327,7 @@ only when `MEMOS_ENABLE_DELETE=true`; the other 16 are available by default.
 | `memos_admin` | Maintenance — `action`: `list_cubes` / `register_cube` / `create_user` / `validate_cubes` / `stats` / `calendar` |
 | `memos_export_wiki` | Export a cube as an interlinked markdown wiki (page per memory + index + mermaid graph) |
 | `memos_import_wiki` | Import an exported wiki back into a cube; supports dry-run and versioning edited pages, never deletes memories |
-| `memos_canvas` | Symbolic task canvas — short-term task state that survives context compaction. `action`: `open` / `update` / `show` / `list`. Nodes carry greppable ids (`000-N1`) and a `ref` anchoring them to evidence: `mem:<memory_id>` / `file:<path>` / `note:<text>` |
+| `memos_canvas` | Symbolic task canvas — short-term task state that survives context compaction. `action`: `open` / `update` / `show` / `list` / `delete` (a canvas with unfinished nodes needs `confirm=true`). Nodes carry greppable ids (`000-N1`) and a `ref` anchoring them to evidence: `mem:<memory_id>` / `file:<path>` / `note:<text>` |
 | `memos_distill_skill` | Create an inert, reviewable Skill candidate under `<project_path>/skill-candidates`; it never installs the candidate automatically |
 | `memos_list_skill_candidates` | List generated Skill candidates without modifying or installing them |
 | `memos_review_skill_candidate` | Approve or reject a candidate with reviewer audit metadata; approval does not install |

@@ -163,12 +163,12 @@
       "schemaSha256": "295e28686f39889ad0a28dcccbfac5eaf5123dd0836f79fae08282b71fb3711e"
     },
     "memos_canvas": {
-      "description": "Task canvas — short-term task state that survives context compaction.\naction: open (needs goal) · update (append node; node_id edits one) · show · list.\nNode ids are greppable (000-N1); ref anchors evidence: mem:<id> / file:<path> / note:<text>.",
+      "description": "Task canvas — short-term task state that survives context compaction.\naction: open (needs goal) · update (append node; node_id edits one) · show · list · delete.\nNode ids are greppable (000-N1); ref anchors evidence: mem:<id> / file:<path> / note:<text>.",
       "annotations": {
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "schemaSha256": "4d8da6ad1a5d951c176d20f631eae893ec22cf6ad5d270ff87217b3733bc0097"
+      "schemaSha256": "5279c78ea730154a1b5a95e242d96120cf6c0b2e30146d58091372ff38db6f19"
     },
     "memos_delete": {
       "description": "⚠️ DELETE memories from project memory. USE WITH CAUTION!\n\nThis tool is DISABLED by default. User must explicitly enable it via MEMOS_ENABLE_DELETE=true.\n\nONLY use this tool when the user EXPLICITLY requests deletion.\nNEVER use this tool proactively or without user confirmation.\n\nOperations:\n- Delete a single memory by ID\n- Delete multiple memories by IDs\n- Delete ALL memories in a cube (requires delete_all=true)\n\nBefore deleting, always:\n1. Confirm with the user what will be deleted\n2. Show the memory content that will be deleted\n3. Get explicit user approval",

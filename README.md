@@ -312,7 +312,7 @@ back to the underlying evidence.
 | Write and lifecycle | `memos_save`, `memos_delete` | Persist typed memories; deletion is disabled unless explicitly enabled |
 | Knowledge graph | `memos_graph` | Related nodes, evidence-aware paths, impact/schema queries, and Graphify JSON dry-run validation |
 | Administration | `memos_admin`, `memos_list_v2` | Cube/user maintenance, validation, statistics, calendar, and listing |
-| Short-term work | `memos_canvas` | Open, update, show, and list task canvases |
+| Short-term work | `memos_canvas` | Open, update, show, list, and delete task canvases |
 | Export / import | `memos_export_wiki`, `memos_import_wiki` | Render a cube as linked Markdown pages and a Mermaid graph; re-import an edited wiki (missing pages are created, unchanged pages skipped, edited pages can be versioned) |
 | Skill candidates | `memos_distill_skill`, `memos_list_skill_candidates` | Generate evidence-linked candidates for human review; never auto-install them |
 
@@ -396,12 +396,12 @@ The six most recent entries from the [changelog](docs/CHANGELOG.md), generated b
 from the `<!-- en: ... -->` comment under each changelog heading.
 
 <!-- changelog-recent:start -->
+- `3.1.7 · 2026-08-27` — 🏷️ Fix: the canvas name open reported was not the one list would show
+- `3.1.6 · 2026-08-26` — 🔤 Fix: quotes in a memos_canvas ref did not survive the round trip
+- `3.1.6 · 2026-08-26` — 🗑️ memos_canvas gains a delete action
+- `3.1.6 · 2026-08-26` — 🔢 Fix: delete broke the never-reissue-a-canvas-prefix invariant
 - `3.1.5 · 2026-08-26` — 🔧 Reranker model switched to BAAI/bge-reranker-v2-m3 (fixes search returning only WorkingMemory)
 - `3.1.5 · 2026-08-26` — 🔊 Silent fail-open degradation is now observable (upstream root cause of the entry above)
-- `3.1.5 · 2026-08-26` — 🔒 Structural enforcement for tier filtering
-- `3.1.5 · 2026-08-26` — 🐳 Bare .dockerignore patterns match the top level only — a password file reached the build context and 8.4 MB of stale bytecode reached the image
-- `3.1.5 · 2026-08-26` — 🐛 Open: three graph.ts routes do not project the tier field
-- `3.1.4 · 2026-08-24` — 🐛 Fix: the sibling-nodes list included scheduler short-term copies
 <!-- changelog-recent:end -->
 
 See the [changelog](docs/CHANGELOG.md) for the full history and the

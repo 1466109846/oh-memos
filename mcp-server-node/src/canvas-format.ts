@@ -62,12 +62,41 @@ const SLUG_MAX = 60;
  *
  * Returns "" when nothing usable remains (a purely CJK title, for instance);
  * callers must have a fallback and must not write a file named "".
+ *
+ * `maxLength` narrows the cap for a caller that must leave room for a prefix.
+ * It is clamped to `SLUG_MAX`, so no caller can widen the invariant that every
+ * canvas filename fits in `SLUG_MAX` characters.
  */
-export function slugify(input: string): string {
+export function slugify(input: string, maxLength: number = SLUG_MAX): string {
+  const cap = Math.max(0, Math.min(maxLength, SLUG_MAX));
   const lowered = String(input ?? "").toLowerCase();
   const kept = lowered.replace(/[^a-z0-9]+/g, "-");
   const collapsed = kept.replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
-  return collapsed.slice(0, SLUG_MAX).replace(/-+$/g, "");
+  return collapsed.slice(0, cap).replace(/-+$/g, "");
+}
+
+/**
+ * Compose a canvas filename from its prefix and the task goal.
+ *
+ * The prefix has to be part of the length budget, and it was not: `actionOpen`
+ * used to slug the goal to `SLUG_MAX` and then prepend `${prefix}-`, producing a
+ * name up to `SLUG_MAX + 4` characters. `canvasPath` slugs again on the way to
+ * disk and cut it back to `SLUG_MAX`, so the name reported by `open` was not the
+ * name `list` would show, and not the file that existed. Nothing was overwritten
+ * — the numeric prefix still made every canvas distinct — but the handle handed
+ * back to the caller was wrong.
+ *
+ * So the composition lives here, next to the cap it has to respect: slug the
+ * goal into what is left after the prefix, and the result is already a fixed
+ * point of `slugify`.
+ *
+ * A goal with no ASCII (a purely CJK title) slugs to "", so fall back to
+ * `<prefix>-task` rather than writing a file named after the prefix alone.
+ */
+export function canvasName(prefix: string, goal: string): string {
+  const head = `${prefix}-`;
+  const slug = slugify(goal, SLUG_MAX - head.length);
+  return slug ? `${head}${slug}` : `${head}task`;
 }
 
 // ============================================================================
@@ -111,7 +140,10 @@ export function escapeLabel(text: string): string {
  * which some JSON consumers reject outright. Spreading into an array iterates
  * code points, so a cut always lands on a boundary.
  */
-export function truncateSummary(text: string, max: number = SUMMARY_MAX): string {
+export function truncateSummary(
+  text: string,
+  max: number = SUMMARY_MAX,
+): string {
   const chars = [...String(text ?? "")];
   if (chars.length <= max) return chars.join("");
   if (max <= 1) return chars.slice(0, Math.max(0, max)).join("");
@@ -154,9 +186,19 @@ export function allocateNodeId(canvas: Canvas): string {
  * Windows paths are the reason: `C:\Users\x` contains backslashes, which JSON
  * escapes and which must come back byte-identical or the anchor stops resolving.
  * Label escaping is for prose; refs get JSON, which is lossless.
+ *
+ * One transform sits on top of JSON: `JSON.stringify` renders a quote as `\"`,
+ * and that bare quote would still close the Mermaid label. Promoting the whole
+ * two-character escape to `\u0022` keeps the label intact while staying valid
+ * JSON, so `parseRef` decodes it back to `"`.
+ *
+ * The `\\` in the pattern is load-bearing. Replacing only the quote leaves
+ * JSON's backslash in front of the substitution, producing `\\u0022` — which
+ * JSON.parse reads as a literal backslash followed by `u0022`, so a ref
+ * containing a quote comes back as the text `\u0022` instead of the quote.
  */
 function renderRef(ref: string): string {
-  return JSON.stringify(ref).slice(1, -1).replace(/"/g, "\\u0022");
+  return JSON.stringify(ref).slice(1, -1).replace(/\\"/g, "\\u0022");
 }
 
 function parseRef(raw: string): string {
@@ -175,10 +217,7 @@ export function renderCanvas(canvas: Canvas): string {
     prefix: canvas.prefix,
   };
 
-  const lines: string[] = [
-    `%%${JSON.stringify(meta)}%%`,
-    "graph LR",
-  ];
+  const lines: string[] = [`%%${JSON.stringify(meta)}%%`, "graph LR"];
 
   for (const node of canvas.nodes) {
     const parts = [
@@ -232,9 +271,12 @@ export function parseCanvas(content: string): Canvas {
     try {
       const raw = metaMatch[0].slice(2, -2);
       const parsed = JSON.parse(raw) as Record<string, unknown>;
-      canvas.taskGoal = typeof parsed.taskGoal === "string" ? parsed.taskGoal : "";
-      canvas.createdTime = typeof parsed.createdTime === "string" ? parsed.createdTime : null;
-      canvas.updatedTime = typeof parsed.updatedTime === "string" ? parsed.updatedTime : null;
+      canvas.taskGoal =
+        typeof parsed.taskGoal === "string" ? parsed.taskGoal : "";
+      canvas.createdTime =
+        typeof parsed.createdTime === "string" ? parsed.createdTime : null;
+      canvas.updatedTime =
+        typeof parsed.updatedTime === "string" ? parsed.updatedTime : null;
       if (typeof parsed.prefix === "string" && /^\d{3}$/.test(parsed.prefix)) {
         canvas.prefix = parsed.prefix;
         prefixFromHeader = true;

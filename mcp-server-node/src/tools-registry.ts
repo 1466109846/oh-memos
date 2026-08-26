@@ -18,7 +18,7 @@ const projectPathParam = z
   .optional()
   .describe(
     "Your current working directory (project root). The cube_id will be auto-derived from this path. " +
-    "PREFERRED over manually specifying cube_id. Example: '/mnt/g/Cyber/AudioCraft Studio' → 'audiocraft_studio_cube'"
+      "PREFERRED over manually specifying cube_id. Example: '/mnt/g/Cyber/AudioCraft Studio' → 'audiocraft_studio_cube'",
   );
 
 const cubeIdParam = z
@@ -27,22 +27,34 @@ const cubeIdParam = z
   .default(MEMOS_DEFAULT_CUBE)
   .describe(
     "Memory cube ID. Only use if you know the exact cube_id. PREFER passing project_path instead — " +
-    "if both project_path and cube_id are omitted, the server falls back to the default cube, " +
-    "which may NOT be your project's cube."
+      "if both project_path and cube_id are omitted, the server falls back to the default cube, " +
+      "which may NOT be your project's cube.",
   );
 
 // Brief variants for every tool except the hot paths (save/search): the full
 // routing story is told once there; repeating it on every tool cost ~1.4k
 // tokens of pure duplication on the tool surface.
-const projectPathBrief = z.string().optional()
+const projectPathBrief = z
+  .string()
+  .optional()
   .describe("Project root; cube_id is derived from it (details: memos_search)");
-const cubeIdBrief = z.string().optional()
+const cubeIdBrief = z
+  .string()
+  .optional()
   .describe("Explicit cube id; prefer project_path");
 const cubeIdBriefDefault = cubeIdBrief.default(MEMOS_DEFAULT_CUBE);
 
 const memoryTypeEnum = z.enum([
-  "ERROR_PATTERN", "DECISION", "MILESTONE", "BUGFIX",
-  "FEATURE", "CONFIG", "CODE_PATTERN", "GOTCHA", "PROGRESS", "SYNTHESIS",
+  "ERROR_PATTERN",
+  "DECISION",
+  "MILESTONE",
+  "BUGFIX",
+  "FEATURE",
+  "CONFIG",
+  "CODE_PATTERN",
+  "GOTCHA",
+  "PROGRESS",
+  "SYNTHESIS",
 ]);
 
 // ============================================================================
@@ -64,17 +76,35 @@ Afterwards use memos tools for ALL memory operations — never mkdir/Write memor
 Query may carry a type prefix ("DECISION auth"). Pass context (recent turns) when the query is ambiguous or refers to earlier conversation — enables LLM intent analysis + query expansion.
 Large results are compacted; use memos_get(memory_id) for full details. NEVER create memory files via mkdir/Write — all memories live here.`,
     inputSchema: z.object({
-      query: z.string().describe(
-        "Search query. Can be natural language or prefixed with memory type (e.g., 'ERROR_PATTERN ModuleNotFoundError')"
-      ),
-      context: z.array(z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.string(),
-      })).optional().describe("Recent conversation turns (last 5-10); triggers context-aware search"),
+      query: z
+        .string()
+        .describe(
+          "Search query. Can be natural language or prefixed with memory type (e.g., 'ERROR_PATTERN ModuleNotFoundError')",
+        ),
+      context: z
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+          }),
+        )
+        .optional()
+        .describe(
+          "Recent conversation turns (last 5-10); triggers context-aware search",
+        ),
       project_path: projectPathParam,
       cube_id: cubeIdParam,
-      top_k: z.number().int().optional().default(10).describe("Max results (default 10)"),
-      compact: z.boolean().optional().default(true).describe("Compact large results (default true)"),
+      top_k: z
+        .number()
+        .int()
+        .optional()
+        .default(10)
+        .describe("Max results (default 10)"),
+      compact: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Compact large results (default true)"),
     }),
   },
 
@@ -85,8 +115,18 @@ YOU synthesize the answer from it, citing [n]; persist valuable syntheses via me
       query: z.string().describe("The question to gather evidence for"),
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
-      top_k: z.number().int().optional().default(15).describe("Evidence pool size (3-30)"),
-      fresh_days: z.number().int().optional().default(30).describe("Days before time-sensitive memories count as stale"),
+      top_k: z
+        .number()
+        .int()
+        .optional()
+        .default(15)
+        .describe("Evidence pool size (3-30)"),
+      fresh_days: z
+        .number()
+        .int()
+        .optional()
+        .default(30)
+        .describe("Days before time-sensitive memories count as stale"),
     }),
   },
 
@@ -96,8 +136,17 @@ Default output <project_path>/docs/memory-wiki; re-export replaces only files it
     inputSchema: z.object({
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
-      output_dir: z.string().optional().describe("Target directory (default: <project_path>/docs/memory-wiki)"),
-      include_archived: z.boolean().optional().default(false).describe("Also export archived memories"),
+      output_dir: z
+        .string()
+        .optional()
+        .describe(
+          "Target directory (default: <project_path>/docs/memory-wiki)",
+        ),
+      include_archived: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Also export archived memories"),
     }),
   },
 
@@ -107,9 +156,22 @@ Use after editing exported pages (fixes, cleanup, migration to a fresh cube). Re
     inputSchema: z.object({
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
-      wiki_dir: z.string().optional().describe("Wiki directory (default: <project_path>/docs/memory-wiki)"),
-      dry_run: z.boolean().optional().default(false).describe("Preview the diff without writing (default false)"),
-      on_edit: z.enum(["skip", "version"]).optional().default("skip").describe("Edited pages: skip (default) or save as new version (old memory kept)"),
+      wiki_dir: z
+        .string()
+        .optional()
+        .describe("Wiki directory (default: <project_path>/docs/memory-wiki)"),
+      dry_run: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Preview the diff without writing (default false)"),
+      on_edit: z
+        .enum(["skip", "version"])
+        .optional()
+        .default("skip")
+        .describe(
+          "Edited pages: skip (default) or save as new version (old memory kept)",
+        ),
     }),
   },
 
@@ -118,11 +180,15 @@ Use after editing exported pages (fixes, cleanup, migration to a fresh cube). Re
 🚨 MUST pass memory_type explicitly (decision tree: memos_suggest). In Lite mode this remains the primary durable write path.
 This is the ONLY way to persist memories — never mkdir/Write memory files.`,
     inputSchema: z.object({
-      content: z.string().describe("Memory content. Be detailed — include context, rationale, relevant code/commands."),
+      content: z
+        .string()
+        .describe(
+          "Memory content. Be detailed — include context, rationale, relevant code/commands.",
+        ),
       memory_type: memoryTypeEnum.describe(
         "**REQUIRED**. bug fix → BUGFIX/ERROR_PATTERN · decision → DECISION · gotcha → GOTCHA · " +
-        "template → CODE_PATTERN · config → CONFIG · feature → FEATURE · achievement → MILESTONE · " +
-        "status update → PROGRESS · synthesized answer → SYNTHESIS. Full rules: memos_suggest"
+          "template → CODE_PATTERN · config → CONFIG · feature → FEATURE · achievement → MILESTONE · " +
+          "status update → PROGRESS · synthesized answer → SYNTHESIS. Full rules: memos_suggest",
       ),
       project_path: projectPathParam,
       cube_id: cubeIdParam,
@@ -134,9 +200,18 @@ This is the ONLY way to persist memories — never mkdir/Write memory files.`,
     inputSchema: z.object({
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
-      limit: z.number().int().optional().default(20).describe("Max memories returned"),
+      limit: z
+        .number()
+        .int()
+        .optional()
+        .default(20)
+        .describe("Max memories returned"),
       memory_type: memoryTypeEnum.optional().describe("Filter by type"),
-      compact: z.boolean().optional().default(true).describe("Compact large results"),
+      compact: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Compact large results"),
     }),
   },
 
@@ -154,7 +229,9 @@ This is the ONLY way to persist memories — never mkdir/Write memory files.`,
 
 Use when: unsure what to search for, or unsure which memory_type \`memos_save\` should use.`,
     inputSchema: z.object({
-      context: z.string().describe("Current context (error message, code, user question)"),
+      context: z
+        .string()
+        .describe("Current context (error message, code, user question)"),
     }),
   },
 
@@ -164,7 +241,10 @@ Use when: unsure what to search for, or unsure which memory_type \`memos_save\` 
       project_path: projectPathBrief,
       title: z.string().describe("Candidate skill title"),
       summary: z.string().describe("Reviewed workflow summary"),
-      memory_ids: z.array(z.string()).min(1).describe("Evidence memory IDs supporting this workflow"),
+      memory_ids: z
+        .array(z.string())
+        .min(1)
+        .describe("Evidence memory IDs supporting this workflow"),
     }),
   },
 
@@ -185,22 +265,45 @@ Use when: unsure what to search for, or unsure which memory_type \`memos_save\` 
 
   memos_install_skill_candidate: {
     description: `Install an approved candidate into <project_path>/.claude/skills/<slug>/SKILL.md. Requires explicit action; refuses overwrite, symlinks, malformed candidates, and unapproved status.`,
-    inputSchema: z.object({ project_path: projectPathBrief, candidate_id: z.string() }),
+    inputSchema: z.object({
+      project_path: projectPathBrief,
+      candidate_id: z.string(),
+    }),
   },
 
   memos_graph: {
     description: `Knowledge-graph queries; mode selects:
 related = nodes+edges around a query · path = trace between two node ids · impact = forward blast radius of one memory · schema = graph structure & statistics · import = validate Graphify node-link JSON (dry-run only).`,
     inputSchema: z.object({
-      mode: z.enum(["related", "path", "impact", "schema", "import"]).describe("Query kind"),
+      mode: z
+        .enum(["related", "path", "impact", "schema", "import"])
+        .describe("Query kind"),
       query: z.string().optional().describe("related: search query"),
       source_id: z.string().optional().describe("path: start node id"),
       target_id: z.string().optional().describe("path: end node id"),
       memory_id: z.string().optional().describe("impact: source memory id"),
-      max_depth: z.number().int().optional().default(3).describe("path/impact: max hops"),
-      sample_size: z.number().int().optional().default(100).describe("schema: nodes sampled"),
-      graph_json: z.string().optional().describe("import: Graphify graph.json contents; validation is dry-run and never writes data"),
-      project_key: z.string().optional().describe("import: stable project namespace label"),
+      max_depth: z
+        .number()
+        .int()
+        .optional()
+        .default(3)
+        .describe("path/impact: max hops"),
+      sample_size: z
+        .number()
+        .int()
+        .optional()
+        .default(100)
+        .describe("schema: nodes sampled"),
+      graph_json: z
+        .string()
+        .optional()
+        .describe(
+          "import: Graphify graph.json contents; validation is dry-run and never writes data",
+        ),
+      project_key: z
+        .string()
+        .optional()
+        .describe("import: stable project namespace label"),
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
     }),
@@ -210,36 +313,81 @@ related = nodes+edges around a query · path = trace between two node ids · imp
     description: `Maintenance & diagnostics; action selects:
 list_cubes · register_cube (fix "not loaded") · create_user (fix "user does not exist") · validate_cubes (repair config mismatches) · stats (per-type counts) · calendar (milestone timeline) · capabilities (Full/Lite behavior and unsupported operations).`,
     inputSchema: z.object({
-      action: z.enum(["list_cubes", "register_cube", "create_user", "validate_cubes", "stats", "calendar", "capabilities"]).describe("Operation"),
+      action: z
+        .enum([
+          "list_cubes",
+          "register_cube",
+          "create_user",
+          "validate_cubes",
+          "stats",
+          "calendar",
+          "capabilities",
+        ])
+        .describe("Operation"),
       cube_id: cubeIdBrief,
       project_path: projectPathBrief,
-      cube_path: z.string().optional().describe("register_cube: cube directory (auto-detected if omitted)"),
+      cube_path: z
+        .string()
+        .optional()
+        .describe("register_cube: cube directory (auto-detected if omitted)"),
       user_id: z.string().optional().describe("create_user: user id"),
       user_name: z.string().optional().describe("create_user: display name"),
-      fix: z.boolean().optional().default(true).describe("validate_cubes: auto-fix"),
-      include_status: z.boolean().optional().default(false).describe("list_cubes: check registration"),
-      mode: z.enum(["project", "student"]).optional().describe("calendar: view mode"),
-      semester: z.string().optional().describe("calendar student: 'YYYY-Season' or 'current'"),
+      fix: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("validate_cubes: auto-fix"),
+      include_status: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("list_cubes: check registration"),
+      mode: z
+        .enum(["project", "student"])
+        .optional()
+        .describe("calendar: view mode"),
+      semester: z
+        .string()
+        .optional()
+        .describe("calendar student: 'YYYY-Season' or 'current'"),
       course: z.string().optional().describe("calendar student: course filter"),
       week: z.number().int().optional().describe("calendar student: week 1-18"),
-      view: z.enum(["list", "week", "month"]).optional().describe("calendar student: format"),
+      view: z
+        .enum(["list", "week", "month"])
+        .optional()
+        .describe("calendar student: format"),
     }),
   },
 
   memos_canvas: {
     description: `Task canvas — short-term task state that survives context compaction.
-action: open (needs goal) · update (append node; node_id edits one) · show · list.
+action: open (needs goal) · update (append node; node_id edits one) · show · list · delete.
 Node ids are greppable (000-N1); ref anchors evidence: mem:<id> / file:<path> / note:<text>.`,
     inputSchema: z.object({
-      action: z.enum(["open", "update", "show", "list"]),
+      action: z.enum(["open", "update", "show", "list", "delete"]),
       project_path: projectPathBrief,
       cube_id: cubeIdBrief,
-      name: z.string().optional().describe("update/show: canvas name (from list)"),
+      name: z
+        .string()
+        .optional()
+        .describe("update/show/delete: canvas name (from list)"),
       goal: z.string().optional().describe("open: the task"),
-      node_id: z.string().optional().describe("update: edit this node, else append"),
-      summary: z.string().optional().describe("update: step text (required to append)"),
+      node_id: z
+        .string()
+        .optional()
+        .describe("update: edit this node, else append"),
+      summary: z
+        .string()
+        .optional()
+        .describe("update: step text (required to append)"),
       status: z.enum(["todo", "doing", "done", "blocked"]).optional(),
       ref: z.string().optional().describe("update: evidence anchor"),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe(
+          "delete: required only when the canvas still has unfinished nodes",
+        ),
     }),
   },
 
@@ -262,11 +410,25 @@ Before deleting, always:
 2. Show the memory content that will be deleted
 3. Get explicit user approval`,
     inputSchema: z.object({
-      memory_id: z.string().optional().describe("ID of the specific memory to delete. Get this from memos_search or memos_list."),
-      memory_ids: z.array(z.string()).optional().describe("List of memory IDs to delete in batch."),
+      memory_id: z
+        .string()
+        .optional()
+        .describe(
+          "ID of the specific memory to delete. Get this from memos_search or memos_list.",
+        ),
+      memory_ids: z
+        .array(z.string())
+        .optional()
+        .describe("List of memory IDs to delete in batch."),
       project_path: projectPathBrief,
       cube_id: cubeIdBriefDefault,
-      delete_all: z.boolean().optional().default(false).describe("Set to true to delete ALL memories in the cube. DANGEROUS! Requires explicit user confirmation."),
+      delete_all: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          "Set to true to delete ALL memories in the cube. DANGEROUS! Requires explicit user confirmation.",
+        ),
     }),
   },
 };
@@ -287,10 +449,10 @@ Before deleting, always:
 export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "memos_save",
   "memos_delete",
-  "memos_admin",       // register_cube / create_user / validate_cubes mutate state
+  "memos_admin", // register_cube / create_user / validate_cubes mutate state
   "memos_export_wiki", // writes: renders wiki .md files into the target project
   "memos_import_wiki", // writes: creates/versions memories from wiki pages
-  "memos_canvas",      // open/update write a .mmd file under the cube
+  "memos_canvas", // open/update write a .mmd file under the cube
   "memos_distill_skill", // writes an inert candidate under the project
   "memos_review_skill_candidate", // auditable status transition
   "memos_install_skill_candidate", // explicit local install
@@ -302,11 +464,11 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
  * Everything else answers from local storage alone.
  */
 const REMOTE_TOOLS: ReadonlySet<string> = new Set([
-  "memos_save",        // LLM extraction + embedding on the way in
+  "memos_save", // LLM extraction + embedding on the way in
   "memos_import_wiki", // embedding on create/version writes
-  "memos_search",      // embeds the query; with context, adds LLM intent analysis
-  "memos_graph",       // mode=related goes through /search, so it embeds too
-  "memos_think",       // evidence retrieval goes through /search, embeds the query
+  "memos_search", // embeds the query; with context, adds LLM intent analysis
+  "memos_graph", // mode=related goes through /search, so it embeds too
+  "memos_think", // evidence retrieval goes through /search, embeds the query
   "memos_distill_skill", // creates a local candidate only
 ]);
 
@@ -321,16 +483,19 @@ export interface ToolAnnotations {
 // so it surfaces on the first build rather than in a client's permission prompt.
 for (const name of [...WRITE_TOOLS, ...REMOTE_TOOLS]) {
   if (!(name in toolSchemas)) {
-    throw new Error(`tools-registry: '${name}' is annotated but has no schema — rename out of sync`);
+    throw new Error(
+      `tools-registry: '${name}' is annotated but has no schema — rename out of sync`,
+    );
   }
 }
 
-export const toolAnnotations: Record<string, ToolAnnotations> = Object.fromEntries(
-  Object.keys(toolSchemas).map((name) => [
-    name,
-    {
-      readOnlyHint: !WRITE_TOOLS.has(name),
-      openWorldHint: REMOTE_TOOLS.has(name),
-    },
-  ])
-);
+export const toolAnnotations: Record<string, ToolAnnotations> =
+  Object.fromEntries(
+    Object.keys(toolSchemas).map((name) => [
+      name,
+      {
+        readOnlyHint: !WRITE_TOOLS.has(name),
+        openWorldHint: REMOTE_TOOLS.has(name),
+      },
+    ]),
+  );

@@ -135,7 +135,7 @@ sequenceDiagram
 | 写入 | `memos_save`, `memos_delete` | 持久化记忆；删除工具由 `MEMOS_ENABLE_DELETE` 控制 |
 | 图谱 | `memos_graph` | 相关节点、带 provenance 的路径/影响、schema，以及 Graphify JSON dry-run 校验 |
 | 管理 | `memos_admin`, `memos_context_resume` | cube/user 管理、统计、日历、能力边界和上下文恢复 |
-| 短期工作区 | `memos_canvas` | 任务画布的 open/update/show/list |
+| 短期工作区 | `memos_canvas` | 任务画布的 open/update/show/list/delete |
 | 导出与回灌 | `memos_export_wiki`, `memos_import_wiki` | 将 cube 渲染为可版本化 Markdown Wiki；编辑后回灌（id 级去重，编辑页可另存版本） |
 | Skill 候选 | `memos_distill_skill`, `memos_list_skill_candidates`, `memos_review_skill_candidate`, `memos_install_skill_candidate` | 生成、审核并显式安装带来源的候选；安装仅进入项目 `.claude/skills` |
 

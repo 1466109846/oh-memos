@@ -5,6 +5,192 @@ All notable changes to the MemOS project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.7] - 2026-08-27
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.5。
+<!-- en: MCP server only (npm `oh-memos-mcp`). Python package and container image unchanged at 3.1.5. -->
+
+### 🏷️ 修复：`open` 报出的画布名，`list` 找不到
+<!-- en: 🏷️ Fix: the canvas name open reported was not the one list would show -->
+
+goal 足够长时，`actionOpen` 报出的名字比磁盘上真实存在的多一个字符：`open` 报
+61 字符，`list` 显示 60 字符，磁盘上是后者。`actionOpen` 先 `slugify(goal)` 拿到最多
+`SLUG_MAX`（60）字符，再拼 `${prefix}-`，总长可达 64；`saveCanvas` → `canvasPath`
+在落盘路上又 slugify 一次，砍回 60。**前缀那 4 个字符的预算从来没被算进去。**
+<!-- en: With a long enough goal, the name actionOpen reported was one character longer than
+     the file that actually existed: open said 61 characters, list showed 60, and the 60 was
+     what sat on disk. actionOpen slugified the goal to at most SLUG_MAX (60) and then
+     prepended `${prefix}-`, reaching 64; saveCanvas → canvasPath slugified again on the way
+     to disk and cut it back to 60. The prefix's four characters were never part of the
+     budget. -->
+
+`canvasPath` 里那处「slug 与原名不同就拒绝」的检查本该拦住它，但它只在名字「像路径」
+（含 `/`、`\` 或 `..`）时抛错 —— 截断不像路径，于是静默放过。
+<!-- en: The check in canvasPath that refuses a name whose slug differs from the original
+     should have caught this, but it only throws when the name looks like a path (containing
+     `/`, `\` or `..`). A truncation does not look like a path, so it passed silently. -->
+
+影响是**报错的句柄，不是损坏的数据**：前缀仍让每个画布互不相同，两个前 60 字符相同的
+长 goal 得到 `000-`/`001-` 两个独立文件，各自节点都在；`update`/`delete` 传 `open`
+报的长名字也照样能用，因为 `canvasPath` 的截断是幂等的。坏的只有一件事：调用方拿到的
+名字，`list` 永远不会显示，磁盘上也不存在。
+<!-- en: The damage was a wrong handle, not corrupted data: the numeric prefix still kept every
+     canvas distinct, so two long goals sharing their first 60 characters became separate
+     000-/001- files with their own nodes intact, and update/delete still worked when handed
+     the long name open had reported, because canvasPath truncates idempotently. Exactly one
+     thing was broken: the name the caller was given is a name list will never show and the
+     filesystem never had. -->
+
+修法是把名字组装收进 `canvas-format.ts` 的新函数 `canvasName(prefix, goal)` —— 让它紧挨着
+自己必须遵守的那个上限，而不是让 handler 去做预算算术。`slugify` 因此多一个可选的
+`maxLength`，**向内钳制到 `SLUG_MAX`**：调用方能收紧上限，不能放宽它，否则「每个画布
+文件名都装得进 `SLUG_MAX`」这个不变量就成了各调用点的自选项。截断后仍走一次尾部连字符
+清理，所以 `000-abc-.mmd` 这种名字不会出现。
+<!-- en: The fix moves name composition into a new canvasName(prefix, goal) in
+     canvas-format.ts, next to the cap it has to respect, rather than leaving the budget
+     arithmetic in the handler. slugify gains an optional maxLength that is clamped inward to
+     SLUG_MAX: a caller may narrow the cap but never widen it, or the invariant that every
+     canvas filename fits in SLUG_MAX would become each call site's option. The trailing-hyphen
+     trim still runs after truncation, so a name like 000-abc-.mmd cannot occur. -->
+
+canvas-format 单测 41 → 50，canvas e2e 34 → 40 项。核心断言是**不动点**而不是长度：
+`slugify(canvasName(p, g)) === canvasName(p, g)`，跨 3 个前缀 × 6 种 goal（超长、纯 CJK、
+尾部连字符诱饵、前 60 字符相同的两个变体）。长度只是症状 —— `canvasPath` 会再 slugify
+一次，任何不是不动点的名字都是「告诉了调用方、但文件系统从没见过」的名字。
+<!-- en: Canvas-format unit tests went 41 → 50 and canvas e2e 34 → 40. The central assertion is
+     a fixed point rather than a length: slugify(canvasName(p, g)) === canvasName(p, g), across
+     3 prefixes × 6 goals (over-long, purely CJK, trailing-hyphen bait, and two variants sharing
+     their first 60 characters). Length is only the symptom — canvasPath slugifies again, so any
+     name that is not a fixed point is a name the caller was told but the filesystem never saw. -->
+
+e2e 补的 5 项跨 open/list/show/delete 与磁盘。反向验证还原实现后 3 项变红（长度 64、
+磁盘上无此名、`list` 显示另一个名字）。另两项在修复前后都通过 —— `canvasPath` 截断幂等
+使然 —— **保留但改名如实**：它们守的是「如果有人改用『让 `canvasPath` 对有损名字抛错』
+来修这个缺陷，这条回归会被抓到」，不是这次的不变量。门禁：vitest 520 passed、tsc、
+canvas e2e 40 项、pack 契约 104 文件、schema budget +0.8%、semantic 快照 17 工具、
+protocol legacy + v2、lite smoke、host-env smoke、spread smoke。
+<!-- en: The five new e2e checks span open/list/show/delete and the disk. Reverting the
+     implementation turns three of them red (length 64, no such name on disk, list showing a
+     different name). Two pass either way — canvasPath truncates idempotently — and are kept but
+     renamed honestly: they guard against someone "fixing" this defect by making canvasPath throw
+     on a lossy name, not this release's invariant. Gates: vitest 520 passed, tsc, canvas e2e 40
+     checks, pack contract 104 files, schema budget +0.8%, semantic snapshot 17 tools, protocol
+     legacy + v2, lite smoke, host-env smoke, spread smoke. -->
+
+---
+
+## [3.1.6] - 2026-08-26
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.5。
+<!-- en: MCP server only (npm `oh-memos-mcp`). Python package and container image unchanged at 3.1.5. -->
+
+### 🔤 修复：`memos_canvas` 的 ref 里引号读不回来
+<!-- en: 🔤 Fix: quotes in a memos_canvas ref did not survive the round trip -->
+
+`ref` 走 JSON 转义而非标签转义，因为 Windows 路径的反斜杠必须逐字返回，否则锚点失效。
+但 `renderRef` 在 `JSON.stringify` 之后又替换了一次裸引号：`JSON.stringify` 已经把 `"`
+写成 `\"`，那个 `replace(/"/g, ...)` 只匹配裸引号，**JSON 留下的反斜杠还在前面**，
+于是落盘成 `\\u0022`；`parseRef` 走 `JSON.parse`，`\\` 解成一个字面反斜杠，
+取回的是 `"` 这串字符而不是引号。少匹配了一个反斜杠。
+<!-- en: A ref is JSON-escaped rather than label-escaped, because a Windows path's backslashes
+     must come back byte-identical or the anchor stops resolving. But renderRef replaced bare
+     quotes *after* JSON.stringify had already written `"` as `\"`: the replace matched only the
+     bare quote and left JSON's backslash in front of it, writing `\\u0022` to disk. parseRef
+     runs JSON.parse, where `\\` decodes to one literal backslash — so it read back the
+     characters `"` instead of a quote. One backslash short in the pattern. -->
+
+现在匹配 `\"` 整体。引号仍须离开标签 —— `"` 会提前终止它所在的 Mermaid `["..."]` ——
+但这次是**替换**已转义的序列，不是在它上面再叠一层。反斜杠一侧一直是对的：
+`\\` 就是 JSON 在磁盘上的正确表示，`parseRef` 会解回单反斜杠。只有引号这一条路径坏了。
+<!-- en: The pattern now matches the whole `\"`. The quote still has to leave the label — `"`
+     would terminate the Mermaid ["..."] it sits in — but this is now a substitution inside the
+     already-escaped string rather than another layer on top of it. The backslash side was always
+     correct: `\\` is JSON's proper on-disk form, and parseRef decodes it back to one backslash.
+     Only the quote path was broken. -->
+
+### 🗑️ `memos_canvas` 新增 `delete` 动作
+<!-- en: 🗑️ memos_canvas gains a delete action -->
+
+此前只有 open/update/show/list，清理必须手动删 `.mmd`。而画布的定位是**短期**状态，
+注定会产生废弃文件 —— 加之全局规则禁止手工改动记忆文件，等于没有合法的清理路径。
+<!-- en: Until now the actions were open/update/show/list, so cleanup meant deleting the .mmd by
+     hand. But a canvas is by definition short-term state and will accumulate dead files — and
+     with a global rule against hand-editing memory files, there was no legitimate cleanup path. -->
+
+`action="delete"` 在有未完成节点（doing/todo/blocked）时**拒绝**并给出 `confirm=true`
+的逃生口，全 done 或空画布直接删。**没有套用 `MEMOS_ENABLE_DELETE`**：那道门是保护
+长期记忆的（走 API、有 embedding 成本、Lite 模式下整个禁用），而画布是本地文件、不走 API，
+且 Lite 模式下它恰恰是少数可用功能之一 —— 套上那道门等于在最需要清理的模式里砍掉清理能力。
+`confirm` 这种「拒绝并给出下一步」与 `MAX_NODES`、非法 status 是同一个既有模式。
+<!-- en: action="delete" refuses when unfinished nodes remain (doing/todo/blocked) and names
+     confirm=true as the escape hatch; an all-done or empty canvas deletes outright. It
+     deliberately does not reuse MEMOS_ENABLE_DELETE: that gate protects long-term memories,
+     which go through the API, cost an embedding, and are disabled entirely in Lite mode. A
+     canvas is a local file that touches no API, and in Lite mode it is one of the few features
+     that still works — putting it behind that gate would remove cleanup from precisely the mode
+     that needs it most. The refuse-and-name-the-next-step shape matches the existing MAX_NODES
+     and invalid-status handling. -->
+
+删除是硬删，不做回收站：画布存在的意义就是任务收尾后被丢弃，回收站只会攒下它本该清掉的文件。
+`deleteCanvas` 复用 `canvasPath`，遍历防护自动继承。
+<!-- en: The delete is hard, with no trash directory: a canvas exists to be discarded once its
+     task closes, and a trash dir would just accumulate the files this is meant to remove.
+     deleteCanvas reuses canvasPath, so traversal protection is inherited. -->
+
+### 🔢 修复：`delete` 破坏了「画布前缀永不复用」
+<!-- en: 🔢 Fix: delete broke the never-reissue-a-canvas-prefix invariant -->
+
+加上 delete 之后有两个 e2e 断言失败。**不是断言写错** —— `nextPrefix` 用现存文件算
+`max+1`，在只增不减的世界里「前缀永不复用」自动成立，delete 打破了这个不变量：
+删掉最高前缀的画布后，那个前缀会被重新发放。后果正是 `nextPrefix` 自己注释里警告过的：
+前缀嵌在它铸出的每个节点 id 里，commit message 或记忆正文引用的 `001-N3`
+会变得指向两个不同画布的节点。
+<!-- en: Adding delete made two e2e assertions fail — and the assertions were not the thing that
+     was wrong. nextPrefix derives max+1 from the files that exist, so "a prefix is never
+     reissued" held automatically in an append-only world; delete broke that invariant, because
+     removing the highest-prefixed canvas makes its prefix available again. The consequence is
+     the one nextPrefix's own comment warns about: a prefix is embedded in every node id it
+     minted, so a `001-N3` cited from a commit message or a memory body would come to point at
+     nodes in two different canvases. -->
+
+修法是 `{cube}/canvas/.prefix-hwm` 水位线文件，`saveCanvas` 与 `deleteCanvas` 都抬升它，
+只增不减。delete 侧必须抬升：文件是该前缀唯一的记录，删掉后若水位线仍低于它，就会被重新发放。
+旧 cube 没有这个文件时（`readPrefixHwm` 返回 -1）从现存文件恢复下限，
+所以升级不会因为水位线缺失而复用前缀。水位线损坏或不可读时退回扫描文件，与 `parseCanvas` 一致 ——
+画布是恢复态，读取时机正是刚丢失上下文的那一刻，抛异常是最坏的选择。
+<!-- en: The fix is a {cube}/canvas/.prefix-hwm watermark file that both saveCanvas and
+     deleteCanvas advance, monotonically. The delete side must advance it: the file was the only
+     record of that prefix, so a watermark left below it would hand the prefix out again. A cube
+     predating the watermark has no such file (readPrefixHwm returns -1) and recovers its floor
+     by scanning the files that remain, so upgrading cannot reissue a prefix for want of a
+     watermark. A corrupt or unreadable watermark falls back to scanning, matching parseCanvas: a
+     canvas is recovered state, read at the moment context was just lost, which is the worst
+     possible moment to throw. -->
+
+canvas 单测 41 → 45（format）、28 → 44（store），canvas e2e 18 → 34 项。两个修复都做了
+反向验证，还原实现后对应用例确实变红：转义 3 项、水位线 1 项。e2e 补了「旧 cube（无水位线）
+删除后不复用前缀」这条真实升级路径 —— 它跨 store 与 handler，单测碰不到。顺带改掉一个
+自己写坏的用例：名字叫 "does not free the prefix it used"，断言却在验证前缀被释放了。
+<!-- en: Canvas unit tests went 41 → 45 (format) and 28 → 44 (store); canvas e2e 18 → 34 checks.
+     Both fixes were verified in reverse — reverting each implementation does turn the matching
+     cases red: three for the escaping, one for the watermark. The e2e adds the real upgrade
+     path, "a legacy cube with no watermark does not reissue a prefix after a delete", which
+     spans store and handler and no unit test can reach. It also fixes a test I had written
+     badly: named "does not free the prefix it used" while asserting that the prefix *was*
+     freed. -->
+
+`memos_canvas` 的 schema 改了（action enum 加 `delete`，新增 `confirm`），两处冻结的哈希
+同步重算：`schema-semantic-baseline.json` 与 `protocol-contract.test.ts` 的
+`EXPECTED_SCHEMA_HASHES`。门禁：vitest 511 passed、tsc、canvas e2e 34 项、pack 契约 104 文件、
+schema budget +0.8%（限 5%）、semantic 快照 17 工具、protocol v2、lite smoke。
+<!-- en: The memos_canvas schema changed (delete added to the action enum, plus a new confirm),
+     so both frozen hashes were recomputed: schema-semantic-baseline.json and
+     EXPECTED_SCHEMA_HASHES in protocol-contract.test.ts. Gates: vitest 511 passed, tsc, canvas
+     e2e 34 checks, pack contract 104 files, schema budget +0.8% (5% allowed), semantic snapshot
+     17 tools, protocol v2, lite smoke. -->
+
+---
+
 ## [3.1.5] - 2026-08-26
 
 3.1.1～3.1.4 都是「仅 MCP server」的版本，Python 包与容器镜像一直停在 3.1.0。

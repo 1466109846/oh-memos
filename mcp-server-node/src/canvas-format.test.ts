@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   allocateNodeId,
+  canvasName,
   escapeLabel,
   parseCanvas,
   renderCanvas,
@@ -80,6 +81,75 @@ describe("slugify", () => {
     // Non-ASCII is dropped, so a purely CJK title yields no slug and the
     // caller must fall back — better than a filename that varies by codepage.
     expect(slugify("任务画布")).toBe("");
+  });
+
+  it("honours a narrower cap", () => {
+    expect(slugify("abcdefghij", 4)).toBe("abcd");
+  });
+
+  it("clamps a wider cap to SLUG_MAX", () => {
+    // Otherwise a caller could opt out of the one invariant this cap exists for.
+    expect(slugify("x".repeat(200), 500).length).toBe(60);
+  });
+
+  it("does not leave a trailing hyphen when the cap lands on one", () => {
+    // A slug ending in `-` would render a filename like `000-abc-.mmd`.
+    expect(slugify("abc def", 4)).toBe("abc");
+  });
+
+  it("is a fixed point: slugging a slug changes nothing", () => {
+    // canvasPath slugs again on the way to disk, so anything that is not a
+    // fixed point is a name the caller was told but the filesystem never saw.
+    const once = slugify("Ship The Canvas!! now", 12);
+    expect(slugify(once)).toBe(once);
+  });
+});
+
+// ============================================================================
+// canvasName
+// ============================================================================
+
+describe("canvasName", () => {
+  it("joins the prefix and the slugified goal", () => {
+    expect(canvasName("000", "Ship The Canvas")).toBe("000-ship-the-canvas");
+  });
+
+  it("falls back to <prefix>-task for a goal with no ASCII", () => {
+    expect(canvasName("007", "任务画布")).toBe("007-task");
+  });
+
+  it("keeps the whole name inside the slug cap", () => {
+    const long =
+      "verify canvas delete and ref escaping over a live mcp connection today";
+    expect(canvasName("000", long).length).toBeLessThanOrEqual(60);
+  });
+
+  it("survives the second slugify unchanged — the reported name is the real one", () => {
+    // The defect this function exists to fix: `open` reported a 61-char name,
+    // canvasPath slugged it back to 60, and `list` showed a name the caller was
+    // never given. Every composed name must be a fixed point of slugify.
+    const goals = [
+      "verify 3.1.6 canvas delete and ref escaping over live MCP",
+      "x".repeat(200),
+      "refactor the retrieval pipeline for cross encoder reranking phase one",
+      "a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9",
+      "任务画布",
+      "trailing hyphen bait ------",
+    ];
+    for (const prefix of ["000", "042", "999"]) {
+      for (const goal of goals) {
+        const name = canvasName(prefix, goal);
+        expect(slugify(name), `${prefix} / ${goal.slice(0, 30)}`).toBe(name);
+      }
+    }
+  });
+
+  it("still distinguishes goals that share their first 60 characters", () => {
+    // The prefix carries the distinction, so truncation must not merge them.
+    const base = "refactor the retrieval pipeline for cross encoder reranking";
+    expect(canvasName("000", `${base} phase one`)).not.toBe(
+      canvasName("001", `${base} phase two`),
+    );
   });
 });
 
@@ -156,13 +226,17 @@ describe("allocateNodeId", () => {
   });
 
   it("continues past the highest existing number", () => {
-    const c = canvas({ nodes: [node({ id: "000-N1" }), node({ id: "000-N2" })] });
+    const c = canvas({
+      nodes: [node({ id: "000-N1" }), node({ id: "000-N2" })],
+    });
     expect(allocateNodeId(c)).toBe("000-N3");
   });
 
   it("does not reuse an id after a gap", () => {
     // Reusing N2 would silently repoint any ref that still cites it.
-    const c = canvas({ nodes: [node({ id: "000-N1" }), node({ id: "000-N3" })] });
+    const c = canvas({
+      nodes: [node({ id: "000-N1" }), node({ id: "000-N3" })],
+    });
     expect(allocateNodeId(c)).toBe("000-N4");
   });
 
@@ -189,10 +263,25 @@ describe("renderCanvas / parseCanvas round trip", () => {
   it("preserves every status and a null ref", () => {
     const c = canvas({
       nodes: [
-        node({ id: "000-N1", status: "done", summary: "a", ref: "mem:abc-123" }),
-        node({ id: "000-N2", status: "doing", summary: "b", ref: "file:G:/x/y.json" }),
+        node({
+          id: "000-N1",
+          status: "done",
+          summary: "a",
+          ref: "mem:abc-123",
+        }),
+        node({
+          id: "000-N2",
+          status: "doing",
+          summary: "b",
+          ref: "file:G:/x/y.json",
+        }),
         node({ id: "000-N3", status: "todo", summary: "c", ref: null }),
-        node({ id: "000-N4", status: "blocked", summary: "d", ref: "note:waiting on api" }),
+        node({
+          id: "000-N4",
+          status: "blocked",
+          summary: "d",
+          ref: "note:waiting on api",
+        }),
       ],
     });
     expect(parseCanvas(renderCanvas(c))).toEqual(c);
@@ -206,7 +295,46 @@ describe("renderCanvas / parseCanvas round trip", () => {
   });
 
   it("does not lose a windows path ref to backslash escaping", () => {
-    const c = canvas({ nodes: [node({ ref: "file:C:\\Users\\x\\tool-results\\a.json" })] });
+    const c = canvas({
+      nodes: [node({ ref: "file:C:\\Users\\x\\tool-results\\a.json" })],
+    });
+    expect(parseCanvas(renderCanvas(c))).toEqual(c);
+  });
+
+  it("round trips a quote inside a ref", () => {
+    // The quote must leave the label (it would close the Mermaid `["..."]`), but
+    // it has to come back. Escaping it twice writes `\\u0022`, which parses as a
+    // literal backslash plus `u0022` — the ref then reads back visibly mangled.
+    const c = canvas({
+      nodes: [node({ ref: 'note:returned "No canvases yet."' })],
+    });
+    expect(parseCanvas(renderCanvas(c))).toEqual(c);
+  });
+
+  it("keeps a quoted ref out of the rendered label", () => {
+    const out = renderCanvas(
+      canvas({ nodes: [node({ ref: 'note:say "hi"' })] }),
+    );
+    const refLine = out.split("\n").find((l) => l.includes("ref:")) ?? "";
+    // One `"` on each end of the label, and none in between.
+    expect(refLine.match(/"/g)).toHaveLength(2);
+    expect(refLine).toContain("\\u0022");
+    expect(refLine).not.toContain("\\\\u0022");
+  });
+
+  it("round trips a ref mixing quotes and backslashes", () => {
+    const c = canvas({
+      nodes: [node({ ref: 'note:C:\\a\\b said "ok" then \\' })],
+    });
+    expect(parseCanvas(renderCanvas(c))).toEqual(c);
+  });
+
+  it("round trips a ref containing a literal backslash-u sequence", () => {
+    // `\u0022` written out by hand must survive as those six characters rather
+    // than being decoded into a quote on the way back.
+    const c = canvas({
+      nodes: [node({ ref: "note:literal \\u0022 stays put" })],
+    });
     expect(parseCanvas(renderCanvas(c))).toEqual(c);
   });
 
@@ -229,7 +357,7 @@ describe("renderCanvas / parseCanvas round trip", () => {
 
   it("chains nodes in declaration order", () => {
     const out = renderCanvas(
-      canvas({ nodes: [node({ id: "000-N1" }), node({ id: "000-N2" })] })
+      canvas({ nodes: [node({ id: "000-N1" }), node({ id: "000-N2" })] }),
     );
     expect(out).toMatch(/000-N1[^\n]*-->[^\n]*000-N2/);
   });
@@ -253,7 +381,7 @@ describe("parseCanvas resilience", () => {
   });
 
   it("tolerates a corrupt metadata header", () => {
-    const parsed = parseCanvas('%%{ not json at all }%%\ngraph LR\n');
+    const parsed = parseCanvas("%%{ not json at all }%%\ngraph LR\n");
     expect(parsed.nodes).toEqual([]);
     expect(parsed.taskGoal).toBe("");
   });
@@ -309,4 +437,3 @@ describe("parseCanvas resilience", () => {
     expect(parseCanvas(text).prefix).toBe("042");
   });
 });
-

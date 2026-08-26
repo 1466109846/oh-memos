@@ -125,7 +125,7 @@ memos_save(content="...", memory_type="FEATURE", cube_id="dev_cube")
 | `memos_list_v2` | See all memories in project (compacted when large) | `project_path: "...", limit: 10` |
 | `memos_get` | Full details of ONE memory after a compacted list/search | `memory_id: "uuid"` |
 | `memos_think` | **Evidence pack for a question** — contradictions, staleness, gaps. You synthesize, citing `[n]` | `query: "why did retrieval regress?"` |
-| `memos_canvas` | **Short-term task state that survives compaction** (Mermaid file per task) | `action: "open", goal: "..."` |
+| `memos_canvas` | **Short-term task state that survives compaction** (Mermaid file per task) | `action: "open", goal: "..."` — also `update` / `show` / `list` / `delete` |
 | `memos_admin(action=list_cubes)` | **Discover available cubes** | `include_status: true` |
 | `memos_suggest` | Get search suggestions + memory_type decision tree | `context: "Connection refused error"` |
 | `memos_graph(mode=related)` | View dependency/causal relationships | `query: "Neo4j"` → shows CAUSE/RELATE/CONFLICT |
@@ -193,6 +193,65 @@ A clean, never-read, fresh memory shows a bare `` ID: `abc123` ``.
 They always rank below every direct match. Edge types are `CAUSE` >
 `CONDITION` > `RELATE` in priority. Requires `MEMOS_SPREAD_ACTIVATION=true`
 and Full mode (Lite has no graph).
+
+---
+
+## Task canvas — `memos_canvas`
+
+记忆回答「我们知道什么」，画布回答「我做到哪一步了」。后者变化频率是每小时数次、
+一周后毫无价值，但必须扛过一件事：**上下文压缩**。所以它不走记忆那条路
+（一次状态翻转不值得一次 LLM 抽取加一次嵌入），而是每个任务一个 Mermaid 文件，
+落在 `{cube}/canvas/{name}.mmd`。
+
+`memos_context_resume` 会先列出**未完成**的画布（仅标题加计数），压缩后第一眼
+看到的是待办任务而不是记忆流水。
+
+| Action | 作用 | 关键参数 |
+|---|---|---|
+| `open` | 建画布，返回其 name | `goal`（必填） |
+| `update` | 追加节点；给 `node_id` 则改那一条 | `summary`（追加时必填）、`status`、`ref`、`node_id` |
+| `show` | 读回单个画布 | `name` |
+| `list` | 列出本 cube 的画布，未完成的排前面 | — |
+| `delete` | 删掉画布文件 | `name`、`confirm` |
+
+`status` 四态：`todo` / `doing` / `done` / `blocked`（省略时为 `todo`）。
+
+**节点 id 可 grep。** 形如 `000-N1`：前三位是画布前缀，`N` 后是节点序号。
+提交信息或记忆正文里写下这个 id，之后就能找回对应的那一步。id 只增不复用 ——
+删掉的节点仍可能被别处引用，回收会让引用静默指向另一条。
+
+**`ref` 是画布通向长期证据的锚点**，必须带 scheme：
+
+- `mem:<memory_id>` — 图里的一条记忆（用 `memos_get` 打开）
+- `file:<path>` — 已落盘的文件（用 Read 打开）
+- `note:<text>` — 行内备注，无外部指向
+
+不带 scheme 会被拒。存在性不校验：`mem:` id 在图里不在磁盘上，`file:` 可能下一秒才写出来。
+
+**删除需要确认。** 画布还有未完成节点（`doing` / `todo` / `blocked`）时
+`delete` 会拒绝并报出计数，要真删就补 `confirm=true`；全部 `done` 或空画布直接删。
+这跟 `memos_delete` 的 `MEMOS_ENABLE_DELETE` 是两回事 —— 画布是本地文件、不走 API，
+Lite 模式下同样可用。
+
+删除**不释放前缀**。画布目录里有个 `.prefix-hwm` 水位线文件只增不减，
+所以删掉 `001-xxx` 之后下一个画布拿到 `002`，不会重发 `001`。
+理由同节点 id：提交信息里的 `001-N3` 不能指向两个不同的画布。
+
+一个画布上限 40 个节点。到顶说明它已经从「符号」变成了「日志」—— 结清它另开一个，
+细节移进 `ref` 而不是继续加节点。
+
+### When to use the canvas
+
+| 场景 | 动作 |
+|---|---|
+| 任务要跨多轮、上下文可能被压缩 | `open` 一个画布，把步骤写成节点 |
+| 完成一步 | `update(node_id=..., status="done")` |
+| 卡住了 | `update(node_id=..., status="blocked", ref="note:<卡在哪>")` |
+| 压缩后不知道做到哪了 | `memos_context_resume`，再 `show` 它列出的画布 |
+| 任务结清 | `delete`（全 done 时无需 confirm） |
+
+画布不是记忆的替代品：任务过程中产生的**结论**照旧用 `memos_save` 存成
+`BUGFIX` / `DECISION` / `GOTCHA`，画布只用 `mem:` 指向它们。
 
 ---
 

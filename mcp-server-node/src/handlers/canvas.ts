@@ -31,9 +31,9 @@ import { MEMOS_CUBES_DIR } from "../config.js";
 import {
   NODE_STATUSES,
   allocateNodeId,
+  canvasName,
   countByStatus,
   formatCanvasHeadline,
-  slugify,
   truncateSummary,
   type Canvas,
   type CanvasNode,
@@ -41,6 +41,7 @@ import {
 } from "../canvas-format.js";
 import {
   CanvasPathError,
+  deleteCanvas,
   listCanvases,
   loadCanvas,
   nextPrefix,
@@ -63,15 +64,21 @@ const MAX_NODES = 40;
 
 function statusIcon(status: NodeStatus): string {
   switch (status) {
-    case "done": return "✓";
-    case "doing": return "▶";
-    case "blocked": return "✗";
-    default: return "○";
+    case "done":
+      return "✓";
+    case "doing":
+      return "▶";
+    case "blocked":
+      return "✗";
+    default:
+      return "○";
   }
 }
 
 function parseStatus(raw: unknown): NodeStatus | null {
-  const value = String(raw ?? "").trim().toLowerCase();
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
   return (NODE_STATUSES as readonly string[]).includes(value)
     ? (value as NodeStatus)
     : null;
@@ -80,8 +87,11 @@ function parseStatus(raw: unknown): NodeStatus | null {
 /** Refs must carry a scheme, so a bare string cannot be mistaken for a path
  *  that happens to exist. Existence is not checked: a `mem:` id lives in the
  *  graph, not on disk, and a `file:` may be written moments later. */
-function validateRef(raw: unknown): { ok: true; ref: string | null } | { ok: false; reason: string } {
-  if (raw === undefined || raw === null || raw === "") return { ok: true, ref: null };
+function validateRef(
+  raw: unknown,
+): { ok: true; ref: string | null } | { ok: false; reason: string } {
+  if (raw === undefined || raw === null || raw === "")
+    return { ok: true, ref: null };
   const value = String(raw).trim();
   if (/^(mem|file|note):/.test(value)) return { ok: true, ref: value };
   return {
@@ -102,7 +112,7 @@ function pathErrorResponse(err: unknown): TextContent[] {
   return errorResponse(
     `Canvas operation failed: ${String(err)}`,
     ERR_OPERATION_FAILED,
-    ["Check that MEMOS_CUBES_DIR is writable"]
+    ["Check that MEMOS_CUBES_DIR is writable"],
   );
 }
 
@@ -126,7 +136,7 @@ function renderCanvasView(name: string, path: string, canvas: Canvas): string {
     lines.push(
       "_No nodes yet._",
       "",
-      `Add one: \`memos_canvas(action="update", name="${name}", summary="<step>")\``
+      `Add one: \`memos_canvas(action="update", name="${name}", summary="<step>")\``,
     );
     return lines.join("\n");
   }
@@ -148,12 +158,19 @@ function renderCanvasView(name: string, path: string, canvas: Canvas): string {
 // Actions
 // ============================================================================
 
-function actionOpen(cubeId: string, args: Record<string, unknown>): TextContent[] {
+function actionOpen(
+  cubeId: string,
+  args: Record<string, unknown>,
+): TextContent[] {
   const goal = String(args.goal ?? "").trim();
   if (!goal) {
-    return errorResponse("`goal` is required to open a canvas", ERR_PARAM_MISSING, [
-      'memos_canvas(action="open", goal="<what this task is>", project_path="<cwd>")',
-    ]);
+    return errorResponse(
+      "`goal` is required to open a canvas",
+      ERR_PARAM_MISSING,
+      [
+        'memos_canvas(action="open", goal="<what this task is>", project_path="<cwd>")',
+      ],
+    );
   }
 
   const prefix = nextPrefix(MEMOS_CUBES_DIR, cubeId);
@@ -161,14 +178,13 @@ function actionOpen(cubeId: string, args: Record<string, unknown>): TextContent[
     return errorResponse(
       `Cube '${cubeId}' already holds 1000 canvases (000-999)`,
       ERR_OPERATION_FAILED,
-      ["Remove finished canvas files from the cube's canvas/ directory"]
+      ["Remove finished canvas files from the cube's canvas/ directory"],
     );
   }
 
-  // The goal supplies the slug; a goal with no ASCII (a Chinese title, say)
-  // yields none, so fall back to the prefix rather than writing a nameless file.
-  const goalSlug = slugify(goal);
-  const name = goalSlug ? `${prefix}-${goalSlug}` : `${prefix}-task`;
+  // The prefix is part of the filename budget, so composing the name is
+  // `canvasName`'s job — see the note there on why doing it inline was wrong.
+  const name = canvasName(prefix, goal);
 
   const now = new Date().toISOString();
   const canvas: Canvas = {
@@ -181,20 +197,25 @@ function actionOpen(cubeId: string, args: Record<string, unknown>): TextContent[
 
   try {
     const path = saveCanvas(MEMOS_CUBES_DIR, cubeId, name, canvas);
-    return [{
-      type: "text",
-      text: [
-        renderCanvasView(name, path, canvas),
-        "",
-        `Canvas \`${name}\` created. Node ids will be \`${prefix}-N1\`, \`${prefix}-N2\`, …`,
-      ].join("\n"),
-    }];
+    return [
+      {
+        type: "text",
+        text: [
+          renderCanvasView(name, path, canvas),
+          "",
+          `Canvas \`${name}\` created. Node ids will be \`${prefix}-N1\`, \`${prefix}-N2\`, …`,
+        ].join("\n"),
+      },
+    ];
   } catch (err) {
     return pathErrorResponse(err);
   }
 }
 
-function actionUpdate(cubeId: string, args: Record<string, unknown>): TextContent[] {
+function actionUpdate(
+  cubeId: string,
+  args: Record<string, unknown>,
+): TextContent[] {
   const name = String(args.name ?? "").trim();
   if (!name) {
     return errorResponse("`name` is required", ERR_PARAM_MISSING, [
@@ -210,10 +231,14 @@ function actionUpdate(cubeId: string, args: Record<string, unknown>): TextConten
   }
 
   if (canvas === null) {
-    return errorResponse(`Canvas '${name}' not found in cube '${cubeId}'`, ERR_PARAM_INVALID, [
-      'List canvases: `memos_canvas(action="list", project_path="<cwd>")`',
-      'Create one: `memos_canvas(action="open", goal="...", project_path="<cwd>")`',
-    ]);
+    return errorResponse(
+      `Canvas '${name}' not found in cube '${cubeId}'`,
+      ERR_PARAM_INVALID,
+      [
+        'List canvases: `memos_canvas(action="list", project_path="<cwd>")`',
+        'Create one: `memos_canvas(action="open", goal="...", project_path="<cwd>")`',
+      ],
+    );
   }
 
   const nodeId = String(args.node_id ?? "").trim();
@@ -235,19 +260,21 @@ function actionUpdate(cubeId: string, args: Record<string, unknown>): TextConten
         [
           `Existing nodes: ${canvas.nodes.map((n) => n.id).join(", ") || "(none)"}`,
           "Omit `node_id` to append a new node",
-        ]
+        ],
       );
     }
-    const status = statusRaw === undefined ? existing.status : parseStatus(statusRaw);
+    const status =
+      statusRaw === undefined ? existing.status : parseStatus(statusRaw);
     if (status === null) {
       return errorResponse(
         `Invalid status: ${JSON.stringify(String(statusRaw))}`,
         ERR_PARAM_INVALID,
-        [`Valid: ${STATUS_LIST}`]
+        [`Valid: ${STATUS_LIST}`],
       );
     }
     existing.status = status;
-    if (summaryRaw !== undefined) existing.summary = truncateSummary(String(summaryRaw));
+    if (summaryRaw !== undefined)
+      existing.summary = truncateSummary(String(summaryRaw));
     if (args.ref !== undefined) existing.ref = refCheck.ref;
     touched = existing;
   } else {
@@ -256,7 +283,9 @@ function actionUpdate(cubeId: string, args: Record<string, unknown>): TextConten
       return errorResponse(
         "`summary` is required when appending a node",
         ERR_PARAM_MISSING,
-        ['memos_canvas(action="update", name="...", summary="<step>", status="doing")']
+        [
+          'memos_canvas(action="update", name="...", summary="<step>", status="doing")',
+        ],
       );
     }
     if (canvas.nodes.length >= MAX_NODES) {
@@ -266,7 +295,7 @@ function actionUpdate(cubeId: string, args: Record<string, unknown>): TextConten
         [
           "A canvas this long has become a log. Close it out and open a new one",
           "Move detail into refs (`mem:` / `file:`) instead of more nodes",
-        ]
+        ],
       );
     }
     const status = statusRaw === undefined ? "todo" : parseStatus(statusRaw);
@@ -274,7 +303,7 @@ function actionUpdate(cubeId: string, args: Record<string, unknown>): TextConten
       return errorResponse(
         `Invalid status: ${JSON.stringify(String(statusRaw))}`,
         ERR_PARAM_INVALID,
-        [`Valid: ${STATUS_LIST}`]
+        [`Valid: ${STATUS_LIST}`],
       );
     }
     touched = {
@@ -290,21 +319,26 @@ function actionUpdate(cubeId: string, args: Record<string, unknown>): TextConten
 
   try {
     const path = saveCanvas(MEMOS_CUBES_DIR, cubeId, name, canvas);
-    return [{
-      type: "text",
-      text: [
-        `${statusIcon(touched.status)} \`${touched.id}\` ${touched.summary}` +
-          (touched.ref ? `\n    ↳ ${touched.ref}` : ""),
-        "",
-        renderCanvasView(name, path, canvas),
-      ].join("\n"),
-    }];
+    return [
+      {
+        type: "text",
+        text: [
+          `${statusIcon(touched.status)} \`${touched.id}\` ${touched.summary}` +
+            (touched.ref ? `\n    ↳ ${touched.ref}` : ""),
+          "",
+          renderCanvasView(name, path, canvas),
+        ].join("\n"),
+      },
+    ];
   } catch (err) {
     return pathErrorResponse(err);
   }
 }
 
-function actionShow(cubeId: string, args: Record<string, unknown>): TextContent[] {
+function actionShow(
+  cubeId: string,
+  args: Record<string, unknown>,
+): TextContent[] {
   const name = String(args.name ?? "").trim();
   if (!name) {
     return errorResponse("`name` is required", ERR_PARAM_MISSING, [
@@ -320,30 +354,122 @@ function actionShow(cubeId: string, args: Record<string, unknown>): TextContent[
   }
 
   if (canvas === null) {
-    return errorResponse(`Canvas '${name}' not found in cube '${cubeId}'`, ERR_PARAM_INVALID, [
-      'List canvases: `memos_canvas(action="list", project_path="<cwd>")`',
-    ]);
+    return errorResponse(
+      `Canvas '${name}' not found in cube '${cubeId}'`,
+      ERR_PARAM_INVALID,
+      ['List canvases: `memos_canvas(action="list", project_path="<cwd>")`'],
+    );
   }
 
   // Recompute the path for display only; load already proved it resolves.
-  const entry = listCanvases(MEMOS_CUBES_DIR, cubeId).find((e) => e.name === name);
-  return [{ type: "text", text: renderCanvasView(name, entry?.path ?? name, canvas) }];
+  const entry = listCanvases(MEMOS_CUBES_DIR, cubeId).find(
+    (e) => e.name === name,
+  );
+  return [
+    { type: "text", text: renderCanvasView(name, entry?.path ?? name, canvas) },
+  ];
+}
+
+/**
+ * Delete a canvas file.
+ *
+ * A canvas with open work is refused unless `confirm=true`. The asymmetry is the
+ * point: a canvas whose nodes are all `done` is finished bookkeeping and deleting
+ * it needs no ceremony, while one still holding `doing`/`todo`/`blocked` nodes is
+ * the only record of where a task stopped — and that record is most valuable at
+ * exactly the moment the model has lost its context and might delete it by
+ * mistake. The refusal names what would be lost so the decision is informed.
+ *
+ * This is not gated behind MEMOS_ENABLE_DELETE. That gate protects long-term
+ * memories behind the HTTP provider; a canvas is a local file with an
+ * hours-long lifetime, and in Lite mode the canvas is one of the few things that
+ * works — gating it there would remove cleanup precisely where it is needed.
+ */
+function actionDelete(
+  cubeId: string,
+  args: Record<string, unknown>,
+): TextContent[] {
+  const name = String(args.name ?? "").trim();
+  if (!name) {
+    return errorResponse(
+      "`name` is required to delete a canvas",
+      ERR_PARAM_MISSING,
+      ['List canvases: `memos_canvas(action="list", project_path="<cwd>")`'],
+    );
+  }
+
+  let canvas: Canvas | null;
+  try {
+    canvas = loadCanvas(MEMOS_CUBES_DIR, cubeId, name);
+  } catch (err) {
+    return pathErrorResponse(err);
+  }
+
+  if (canvas === null) {
+    return errorResponse(
+      `Canvas '${name}' not found in cube '${cubeId}'`,
+      ERR_PARAM_INVALID,
+      ['List canvases: `memos_canvas(action="list", project_path="<cwd>")`'],
+    );
+  }
+
+  const counts = countByStatus(canvas);
+  const open = counts.doing + counts.todo + counts.blocked;
+  if (open > 0 && args.confirm !== true) {
+    return errorResponse(
+      `Canvas '${name}' still has ${open} unfinished node${open === 1 ? "" : "s"} ` +
+        `(${counts.doing} doing · ${counts.todo} todo · ${counts.blocked} blocked)`,
+      ERR_PARAM_INVALID,
+      [
+        `Review it first: \`memos_canvas(action="show", name="${name}")\``,
+        `Delete anyway: \`memos_canvas(action="delete", name="${name}", confirm=true)\``,
+      ],
+    );
+  }
+
+  try {
+    const removed = deleteCanvas(MEMOS_CUBES_DIR, cubeId, name);
+    if (!removed) {
+      // loadCanvas found it a moment ago, so this is a concurrent delete rather
+      // than a caller mistake. Same end state either way.
+      return [{ type: "text", text: `Canvas \`${name}\` was already gone.` }];
+    }
+    const tally =
+      `${counts.done} done · ${counts.doing} doing · ${counts.todo} todo` +
+      (counts.blocked > 0 ? ` · ${counts.blocked} blocked` : "");
+    return [
+      {
+        type: "text",
+        text: [
+          `🗑️ Deleted canvas \`${name}\` from \`${cubeId}\` (${canvas.nodes.length} node${canvas.nodes.length === 1 ? "" : "s"}: ${tally})`,
+          "",
+          `**Goal was**: ${canvas.taskGoal || "(none recorded)"}`,
+          "",
+          "The file is gone — `mem:` refs it cited still exist in the graph.",
+        ].join("\n"),
+      },
+    ];
+  } catch (err) {
+    return pathErrorResponse(err);
+  }
 }
 
 function actionList(cubeId: string): TextContent[] {
   const entries = listCanvases(MEMOS_CUBES_DIR, cubeId);
 
   if (entries.length === 0) {
-    return [{
-      type: "text",
-      text: [
-        `## 🗺️ Canvases: ${cubeId}`,
-        "",
-        "No canvases yet.",
-        "",
-        'Open one: `memos_canvas(action="open", goal="<task>", project_path="<cwd>")`',
-      ].join("\n"),
-    }];
+    return [
+      {
+        type: "text",
+        text: [
+          `## 🗺️ Canvases: ${cubeId}`,
+          "",
+          "No canvases yet.",
+          "",
+          'Open one: `memos_canvas(action="open", goal="<task>", project_path="<cwd>")`',
+        ].join("\n"),
+      },
+    ];
   }
 
   // Unfinished first: after a compaction the open work is the only part that
@@ -352,7 +478,9 @@ function actionList(cubeId: string): TextContent[] {
     const aOpen = countByStatus(a.canvas).doing + countByStatus(a.canvas).todo;
     const bOpen = countByStatus(b.canvas).doing + countByStatus(b.canvas).todo;
     if (aOpen !== bOpen) return bOpen - aOpen;
-    return (b.canvas.updatedTime ?? "").localeCompare(a.canvas.updatedTime ?? "");
+    return (b.canvas.updatedTime ?? "").localeCompare(
+      a.canvas.updatedTime ?? "",
+    );
   });
 
   const lines = [`## 🗺️ Canvases: ${cubeId} (${entries.length})`, ""];
@@ -369,10 +497,12 @@ function actionList(cubeId: string): TextContent[] {
 // ============================================================================
 
 export async function handleMemosCanvas(
-  arguments_: Record<string, unknown>
+  arguments_: Record<string, unknown>,
 ): Promise<TextContent[]> {
   const cubeId = getCubeIdFromArgs(arguments_);
-  const action = String(arguments_.action ?? "").trim().toLowerCase();
+  const action = String(arguments_.action ?? "")
+    .trim()
+    .toLowerCase();
 
   switch (action) {
     case "open":
@@ -383,11 +513,13 @@ export async function handleMemosCanvas(
       return actionShow(cubeId, arguments_);
     case "list":
       return actionList(cubeId);
+    case "delete":
+      return actionDelete(cubeId, arguments_);
     default:
       return errorResponse(
         `Unknown canvas action: ${String(arguments_.action ?? "(none)")}`,
         ERR_PARAM_INVALID,
-        ["Valid actions: open, update, show, list"]
+        ["Valid actions: open, update, show, list, delete"],
       );
   }
 }
@@ -414,7 +546,9 @@ export function summarizeActiveCanvases(cubeId: string, limit = 3): string[] {
   });
   if (active.length === 0) return [];
 
-  active.sort((a, b) => (b.canvas.updatedTime ?? "").localeCompare(a.canvas.updatedTime ?? ""));
+  active.sort((a, b) =>
+    (b.canvas.updatedTime ?? "").localeCompare(a.canvas.updatedTime ?? ""),
+  );
 
   const lines = [`**Active canvases** (${active.length}):`, ""];
   for (const entry of active.slice(0, limit)) {
