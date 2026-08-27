@@ -30,7 +30,7 @@ export const ERR_USER_ERROR = "USER_ERROR";
 export function errorResponse(
   message: string,
   errorCode?: string,
-  suggestions?: string[]
+  suggestions?: string[],
 ): TextContent[] {
   const parts: string[] = [];
 
@@ -55,7 +55,10 @@ export function successResponse(message: string): TextContent[] {
   return [{ type: "text", text: message }];
 }
 
-export function cubeRegistrationError(cubeId: string, detail: string | null): TextContent[] {
+export function cubeRegistrationError(
+  cubeId: string,
+  detail: string | null,
+): TextContent[] {
   return errorResponse(
     `Cube '${cubeId}' registration failed: ${detail ?? "unknown error"}`,
     ERR_CUBE_REGISTRATION,
@@ -63,25 +66,42 @@ export function cubeRegistrationError(cubeId: string, detail: string | null): Te
       `Check if MemOS API is running: \`curl http://localhost:18000/health\``,
       `Verify cube exists: \`memos_admin(action="list_cubes", include_status=True)\``,
       `Try manual registration: \`memos_admin(action="register_cube", cube_id="...")\``,
-    ]
+    ],
   );
 }
 
-export function apiErrorResponse(operation: string, statusOrMsg: string | number): TextContent[] {
+export function apiErrorResponse(
+  operation: string,
+  statusOrMsg: string | number,
+): TextContent[] {
   const msg = String(statusOrMsg).toLowerCase();
   // Turn known API errors into actionable next steps on the hot paths
   // (save/search/list hit these far more often than register_cube does).
   const suggestions: string[] = [];
-  if (msg.includes("user") && (msg.includes("not exist") || msg.includes("not found"))) {
-    suggestions.push('User missing — run `memos_admin(action="create_user", user_id="dev_user")`, then retry');
-  } else if (msg.includes("not loaded") || (msg.includes("cube") && msg.includes("not found"))) {
-    suggestions.push('Cube not registered — run `memos_admin(action="register_cube", cube_id="...")` (find ids via `memos_admin(action="list_cubes")`), then retry');
+  if (
+    msg.includes("user") &&
+    (msg.includes("not exist") || msg.includes("not found"))
+  ) {
+    suggestions.push(
+      'User missing — run `memos_admin(action="create_user", user_id="dev_user")`, then retry',
+    );
+  } else if (
+    msg.includes("not loaded") ||
+    (msg.includes("cube") && msg.includes("not found"))
+  ) {
+    suggestions.push(
+      'Cube not registered — run `memos_admin(action="register_cube", cube_id="...")` (find ids via `memos_admin(action="list_cubes")`), then retry',
+    );
   }
   suggestions.push(
     "Check API health: `curl http://localhost:18000/health/detail`",
     "Check API logs for details",
   );
-  return errorResponse(`${operation} failed: ${statusOrMsg}`, ERR_API_ERROR, suggestions);
+  return errorResponse(
+    `${operation} failed: ${statusOrMsg}`,
+    ERR_API_ERROR,
+    suggestions,
+  );
 }
 
 // ============================================================================
