@@ -184,7 +184,10 @@ async function getStoredMemory(
     "GET",
     `${MEMOS_URL}/memories/${cubeId}/${memoryId}`,
     cubeId,
-    {},
+    // 同 handlers/memory.ts 的 handleMemosGet：缺 user_id 会让后端回退到 root，
+    // 对 MEMOS_USER 名下的 cube 报「does not have access」。这里更隐蔽 —— 该错误
+    // 既不含 "not found" 也不是 404，会被当成真实故障返回，把整页 import 判成失败。
+    { params: { user_id: MEMOS_USER } },
     ensureCubeRegistered,
   );
   if (result.success) {

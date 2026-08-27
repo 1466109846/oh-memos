@@ -386,7 +386,12 @@ export async function handleMemosGet(
     "GET",
     `${MEMOS_URL}/memories/${cubeId}/${memoryId}`,
     cubeId,
-    {},
+    // user_id 必须显式传：后端 `get_memory` 的 user_id 是可选参数，缺失时回退到
+    // MOS 实例自己的 user_id（root）。而 ensureCubeRegistered 注册的是 MEMOS_USER
+    // （dev_user），于是 root 对该 cube 无授权，校验抛 ValueError → 400
+    // "User 'root' does not have access to cube '...'"。重注册重试也救不回来：
+    // 它仍然按 MEMOS_USER 注册，重试请求仍然不带 user_id，第二次照样落到 root。
+    { params: { user_id: MEMOS_USER } },
     ensureCubeRegistered,
   );
 

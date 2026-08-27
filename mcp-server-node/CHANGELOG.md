@@ -6,6 +6,55 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.1.8] - 2026-08-27
+
+仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.5。
+
+### 🏷️ `memos_get` 报 root 无权限，而 root 从未被传入
+
+`memos_get` 打自己项目的 cube 时回：
+
+```
+❌ [API_ERROR] Get failed: User 'root' does not have access to cube
+   'jincaizhaopin_cube'. Please register the cube first or request access.
+```
+
+但 `MEMOS_USER=dev_user`，root 不在任何调用参数里。
+
+root 来自后端的默认回退：`start_api.py` 的 `get_memory(mem_cube_id, memory_id,
+user_id=None)` 把 `user_id` 声明为可选，缺失时 `core.py` 的 `get()` 回退到
+`self.user_id`（MOS 实例自己的用户，即 root）。而 `ensureCubeRegistered` 注册的是
+`MEMOS_USER`，于是 root 对该 cube 无授权，`_validate_cube_access` 抛 ValueError，
+被 ValueError handler 映射成 400。
+
+**`handleMemosGet` 是唯一漏传 `user_id` 的调用点** —— save / list / search /
+stats / calendar / siblings 全都传了，admin 的 delete 路径也拼了查询串。
+
+`apiCallWithRetry` 的 400 分支救不回来：它把 400 当「cube 未加载」，重注册后重试
+—— 但重注册仍按 `MEMOS_USER` 注册，重试请求仍然不带 `user_id`，第二次照样落到 root。
+
+实测对照（同一个不存在的 id，`jincaizhaopin_cube`）：
+
+```
+不带 user_id        -> User 'root' does not have access to cube 'jincaizhaopin_cube'
+带 user_id=dev_user -> Memory with ID ... not found        ← 正常语义
+```
+
+为什么以前没人踩到：cube 的**归属**决定是否触发。root 名下的 cube（`dev_cube`、
+`claude_cube`、`memos_cube` 等）不受影响；只有 owner 是 `MEMOS_USER` 的项目 cube
+才会报错 —— 也就是每一个用 `project_path` 自动派生出来的 cube。
+
+同源缺陷也修了 `wiki-import.ts` 的 `getStoredMemory`。那里更隐蔽：该消息既不含
+`not found` 也不是 404，会被当成真实故障，把整页 import 判成失败而不是「记忆不存在」。
+
+`apiErrorResponse` 另加了对 `does not have access` 的识别。该消息同时含 `user` 和
+cube 字样，却不匹配任何既有分支，此前只能给通用的「查 health / 看日志」。新提示先
+指向 `user_id`，因为最常见的成因是调用方漏传它，而不是用户或 cube 不存在。
+
+回归测试 `get-user-id-param.test.ts` 的 fetch stub **按 `user_id` 是否存在分流**
+应答，复刻上面的实测对照。无条件回 not-found 的 stub 守不住这个缺陷 —— 变异验证
+（把 params 改回 `{}`）时三条断言必须全红，写测试时实际拿它验过。
+
 ## [3.1.7] - 2026-08-27
 
 仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.5。

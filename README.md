@@ -396,12 +396,12 @@ The six most recent entries from the [changelog](docs/CHANGELOG.md), generated b
 from the `<!-- en: ... -->` comment under each changelog heading.
 
 <!-- changelog-recent:start -->
+- `3.1.8 · 2026-08-27` — 🏷️ Fix: memos_get reported root lacking access, though root was never passed in
 - `3.1.7 · 2026-08-27` — 🏷️ Fix: the canvas name open reported was not the one list would show
 - `3.1.6 · 2026-08-26` — 🔤 Fix: quotes in a memos_canvas ref did not survive the round trip
 - `3.1.6 · 2026-08-26` — 🗑️ memos_canvas gains a delete action
 - `3.1.6 · 2026-08-26` — 🔢 Fix: delete broke the never-reissue-a-canvas-prefix invariant
 - `3.1.5 · 2026-08-26` — 🔧 Reranker model switched to BAAI/bge-reranker-v2-m3 (fixes search returning only WorkingMemory)
-- `3.1.5 · 2026-08-26` — 🔊 Silent fail-open degradation is now observable (upstream root cause of the entry above)
 <!-- changelog-recent:end -->
 
 See the [changelog](docs/CHANGELOG.md) for the full history and the

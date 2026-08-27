@@ -635,6 +635,12 @@ Error occurred
     │
     ├─ "User does not exist" ───────> memos_admin(action="create_user", user_id="xxx")
     │
+    ├─ "User 'X' does not have access to cube 'Y'"
+    │      │   用户和 cube 都存在，只是该用户没被授权 —— 与上面两条都不同。
+    │      │   若 X 不是你配的 MEMOS_USER（常见是 root），那是**调用方漏传
+    │      │   user_id**，后端回退到自己的默认用户去校验，不是你的配置问题。
+    │      └──> 核对 MEMOS_USER 与 cube owner；仍不符再 register_cube
+    │
     ├─ "Save failed" ───────────────> memos_admin(action="list_cubes", include_status=true)
     │                                      │
     │                                      └─ Check cube/user, then retry

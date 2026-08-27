@@ -78,7 +78,15 @@ export function apiErrorResponse(
   // Turn known API errors into actionable next steps on the hot paths
   // (save/search/list hit these far more often than register_cube does).
   const suggestions: string[] = [];
-  if (
+  // 「does not have access to cube」要在 user-missing 分支之前判：它同时含 "user"
+  // 和 cube 字样，但成因完全不同 —— 用户和 cube 都存在，只是该用户没被授权。
+  // 实测最常见的触发方式是调用方漏传 user_id，后端回退到 root 去校验（root 往往
+  // 没有项目 cube 的授权），所以提示要先指向 user_id，而不是让人去建用户。
+  if (msg.includes("does not have access")) {
+    suggestions.push(
+      'Cube exists but this user is not authorized — most often the caller omitted `user_id` and the API fell back to its own default user. Verify `MEMOS_USER` matches the cube owner, then re-register: `memos_admin(action="register_cube", cube_id="...")`',
+    );
+  } else if (
     msg.includes("user") &&
     (msg.includes("not exist") || msg.includes("not found"))
   ) {

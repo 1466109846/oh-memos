@@ -394,12 +394,12 @@ Docker 发布工作流还会导入 API、检查依赖、确认 CPU-only Torch �
 更新日志每条标题下的 `<!-- en: ... -->` 注释。
 
 <!-- changelog-recent:start -->
+- `3.1.8 · 2026-08-27` — 🏷️ 修复：`memos_get` 报 root 无权限，而 root 从未被传入
 - `3.1.7 · 2026-08-27` — 🏷️ 修复：`open` 报出的画布名，`list` 找不到
 - `3.1.6 · 2026-08-26` — 🔤 修复：`memos_canvas` 的 ref 里引号读不回来
 - `3.1.6 · 2026-08-26` — 🗑️ `memos_canvas` 新增 `delete` 动作
 - `3.1.6 · 2026-08-26` — 🔢 修复：`delete` 破坏了「画布前缀永不复用」
 - `3.1.5 · 2026-08-26` — 🔧 重排模型换成 `BAAI/bge-reranker-v2-m3`（修复检索只返回 WorkingMemory）
-- `3.1.5 · 2026-08-26` — 🔊 静默 fail-open 退化改为可观测（上一条的上游根因）
 <!-- changelog-recent:end -->
 
 完整历史见[更新日志](docs/CHANGELOG.md)，计划中的能力见
