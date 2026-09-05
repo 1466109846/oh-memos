@@ -4,8 +4,8 @@
  * memos_admin(action="calendar") - project mode and student mode
  */
 
-import { MEMOS_URL, MEMOS_USER } from "../config.js";
-import { apiCallWithRetry } from "../api-client.js";
+import { MEMOS_USER } from "../config.js";
+import { apiCallWithRetry, apiUrl } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import type { TextContent, MemoryNode, SearchData } from "../types.js";
 import { apiErrorResponse, cubeRegistrationError, getCubeIdFromArgs } from "./utils.js";
@@ -232,7 +232,7 @@ export async function handleMemosCalendar(arguments_: Record<string, unknown>): 
   if (mode === "project") {
     const result = await apiCallWithRetry(
       "GET",
-      `${MEMOS_URL}/memories`,
+      apiUrl("/memories"),
       cubeId,
       { params: { user_id: MEMOS_USER, mem_cube_id: cubeId, limit: 200 } },
       ensureCubeRegistered
@@ -266,7 +266,7 @@ export async function handleMemosCalendar(arguments_: Record<string, unknown>): 
 
   const result = await apiCallWithRetry(
     "GET",
-    `${MEMOS_URL}/memories`,
+    apiUrl("/memories"),
     cubeId,
     { params: { user_id: MEMOS_USER, mem_cube_id: cubeId, limit: 100 } },
     ensureCubeRegistered

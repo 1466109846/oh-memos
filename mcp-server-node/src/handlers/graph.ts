@@ -5,7 +5,6 @@
  */
 
 import {
-  MEMOS_URL,
   MEMOS_USER,
   NEO4J_HTTP_URL,
   NEO4J_USER,
@@ -13,7 +12,7 @@ import {
   logger,
   registeredCubes,
 } from "../config.js";
-import { fetchWithTimeout } from "../api-client.js";
+import { apiUrl, fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { formatProvenance } from "../graph-provenance.js";
 import {
@@ -165,7 +164,7 @@ export async function handleMemosTracePath(
 
   try {
     const response = await fetchWithTimeout(
-      `${MEMOS_URL}/product/graph/trace_path`,
+      apiUrl("/product/graph/trace_path"),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -343,7 +342,7 @@ export async function handleMemosGetGraph(
   // Search for relevant memories first
   let memories: ReturnType<typeof extractMemoriesFromResponse> = [];
   try {
-    const searchResponse = await fetchWithTimeout(`${MEMOS_URL}/search`, {
+    const searchResponse = await fetchWithTimeout(apiUrl("/search"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -362,7 +361,7 @@ export async function handleMemosGetGraph(
         registeredCubes.delete(cubeId);
         const [retrySuccess] = await ensureCubeRegistered(cubeId, true);
         if (retrySuccess) {
-          const retrySearch = await fetchWithTimeout(`${MEMOS_URL}/search`, {
+          const retrySearch = await fetchWithTimeout(apiUrl("/search"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -627,7 +626,7 @@ export async function handleMemosExportSchema(
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
   try {
-    const response = await fetchWithTimeout(`${MEMOS_URL}/graph/schema`, {
+    const response = await fetchWithTimeout(apiUrl("/graph/schema"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

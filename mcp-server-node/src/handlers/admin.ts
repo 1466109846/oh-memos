@@ -9,7 +9,6 @@ import * as fs from "fs";
 import * as path from "path";
 
 import {
-  MEMOS_URL,
   MEMOS_USER,
   MEMOS_DEFAULT_CUBE,
   MEMOS_CUBES_DIR,
@@ -17,7 +16,7 @@ import {
   MEMOS_TIMEOUT_TOOL,
   registeredCubes,
 } from "../config.js";
-import { fetchWithTimeout } from "../api-client.js";
+import { apiUrl, apiUrlForDisplay, fetchWithTimeout } from "../api-client.js";
 import {
   ensureCubeDirectory,
   ensureCubeRegistered,
@@ -76,7 +75,7 @@ export async function handleMemosListCubes(arguments_: Record<string, unknown>):
       "",
       `Cubes directory: \`${cubesDir}\``,
       "",
-      `To create a new cube, use the MemOS web interface at ${MEMOS_URL}/docs`,
+      `To create a new cube, use the MemOS web interface at ${apiUrlForDisplay(apiUrl("/docs"))}`,
       "or create a cube directory with a config.json file.",
     ].join("\n") }];
   }
@@ -154,7 +153,7 @@ export async function handleMemosRegisterCube(arguments_: Record<string, unknown
   }
 
   try {
-    const response = await fetchWithTimeout(`${MEMOS_URL}/mem_cubes`, {
+    const response = await fetchWithTimeout(apiUrl("/mem_cubes"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -208,7 +207,7 @@ export async function handleMemosCreateUser(arguments_: Record<string, unknown>)
   const userName = String(arguments_.user_name ?? userId);
 
   try {
-    const response = await fetchWithTimeout(`${MEMOS_URL}/users`, {
+    const response = await fetchWithTimeout(apiUrl("/users"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -358,7 +357,7 @@ export async function handleMemosDelete(arguments_: Record<string, unknown>): Pr
 
   if (deleteAll) {
     const response = await fetchWithTimeout(
-      `${MEMOS_URL}/memories/${cubeId}?user_id=${encodeURIComponent(MEMOS_USER)}`,
+      apiUrl(`/memories/${cubeId}?user_id=${encodeURIComponent(MEMOS_USER)}`),
       { method: "DELETE" }
     );
 
@@ -395,7 +394,7 @@ export async function handleMemosDelete(arguments_: Record<string, unknown>): Pr
     let memContent = "*(Unknown content)*";
     try {
       const getResp = await fetchWithTimeout(
-        `${MEMOS_URL}/memories/${cubeId}/${mid}?user_id=${encodeURIComponent(MEMOS_USER)}`,
+        apiUrl(`/memories/${cubeId}/${mid}?user_id=${encodeURIComponent(MEMOS_USER)}`),
         { method: "GET" }
       );
       if (getResp.ok) {
@@ -412,7 +411,7 @@ export async function handleMemosDelete(arguments_: Record<string, unknown>): Pr
     }
 
     const deleteResp = await fetchWithTimeout(
-      `${MEMOS_URL}/memories/${cubeId}/${mid}?user_id=${encodeURIComponent(MEMOS_USER)}`,
+      apiUrl(`/memories/${cubeId}/${mid}?user_id=${encodeURIComponent(MEMOS_USER)}`),
       { method: "DELETE" }
     );
 

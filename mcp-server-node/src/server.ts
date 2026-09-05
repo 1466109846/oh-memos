@@ -9,7 +9,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { MEMOS_DEFAULT_CUBE, MEMOS_ENABLE_DELETE, MEMOS_PROVIDER, logger } from "./config.js";
-import { waitForApiReady } from "./api-client.js";
+import {
+  apiHealthUrl,
+  apiUrlForDisplay,
+  isApiUnreachableError,
+  waitForApiReady,
+} from "./api-client.js";
 import { ensureCubeRegistered } from "./cube-manager.js";
 import { toolSchemas, toolAnnotations } from "./tools-registry.js";
 import { dispatchTool, handleApiUnreachable } from "./handlers/index.js";
@@ -50,7 +55,7 @@ function registerTools(server: McpServer): void {
           };
         } catch (err: unknown) {
           const errStr = String(err);
-          if (errStr.includes("ECONNREFUSED") || errStr.includes("fetch failed")) {
+          if (isApiUnreachableError(err)) {
             const unreachable = await handleApiUnreachable();
             return {
               content: unreachable.map((r) => ({ type: "text" as const, text: r.text })),
@@ -66,7 +71,7 @@ function registerTools(server: McpServer): void {
                   "",
                   "💡 Suggestions:",
                   "- Check MCP server logs for details",
-                  "- Verify MemOS API is healthy: `curl http://localhost:18000/health/detail`",
+                  `- Verify MemOS API is healthy: \`curl ${apiUrlForDisplay(apiHealthUrl(undefined, true))}\``,
                 ].join("\n"),
               },
             ],

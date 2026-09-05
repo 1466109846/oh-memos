@@ -5,9 +5,9 @@
  */
 
 import * as crypto from "crypto";
-import { MEMOS_URL, MEMOS_USER, MEMOS_CUBES_DIR, logger } from "../config.js";
+import { MEMOS_USER, MEMOS_CUBES_DIR, logger } from "../config.js";
 import { getMemoryProvider } from "../providers/provider-factory.js";
-import { apiCallWithRetry } from "../api-client.js";
+import { apiCallWithRetry, apiUrl } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { parseMemoryWriteResponse } from "../memory-write-response.js";
 import { recordAccess } from "../access-tracker.js";
@@ -138,7 +138,7 @@ export async function handleMemosSave(
 
   const result = await apiCallWithRetry(
     "POST",
-    `${MEMOS_URL}/memories`,
+    apiUrl("/memories"),
     cubeId,
     {
       body: {
@@ -248,7 +248,7 @@ export async function handleMemosList(
 
   const result = await apiCallWithRetry(
     "GET",
-    `${MEMOS_URL}/memories`,
+    apiUrl("/memories"),
     cubeId,
     { params },
     ensureCubeRegistered,
@@ -323,7 +323,7 @@ async function fetchSiblings(
   try {
     const result = await apiCallWithRetry(
       "GET",
-      `${MEMOS_URL}/memories`,
+      apiUrl("/memories"),
       cubeId,
       { params: { user_id: MEMOS_USER, mem_cube_id: cubeId, limit: 200 } },
       ensureCubeRegistered,
@@ -384,7 +384,7 @@ export async function handleMemosGet(
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
   const result = await apiCallWithRetry(
     "GET",
-    `${MEMOS_URL}/memories/${cubeId}/${memoryId}`,
+    apiUrl(`/memories/${cubeId}/${memoryId}`),
     cubeId,
     // user_id 必须显式传：后端 `get_memory` 的 user_id 是可选参数，缺失时回退到
     // MOS 实例自己的 user_id（root）。而 ensureCubeRegistered 注册的是 MEMOS_USER
@@ -503,7 +503,7 @@ export async function handleMemosGetStats(
 
   const result = await apiCallWithRetry(
     "GET",
-    `${MEMOS_URL}/memories`,
+    apiUrl("/memories"),
     cubeId,
     { params: { user_id: MEMOS_USER, mem_cube_id: cubeId } },
     ensureCubeRegistered,

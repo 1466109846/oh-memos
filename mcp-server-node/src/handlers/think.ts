@@ -15,8 +15,8 @@
  * which is disabled by default, so in practice they rarely exist.
  */
 
-import { MEMOS_URL, MEMOS_USER } from "../config.js";
-import { apiCallWithRetry } from "../api-client.js";
+import { MEMOS_USER } from "../config.js";
+import { apiCallWithRetry, apiUrl } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { extractKeywords, extractMcpType } from "../query-processing.js";
 import { levenshteinDistance } from "../keyword-enhancer.js";
@@ -159,7 +159,7 @@ export async function handleMemosThink(arguments_: Record<string, unknown>): Pro
   const [apiResult, temporal] = await Promise.all([
     apiCallWithRetry(
       "POST",
-      `${MEMOS_URL}/search`,
+      apiUrl("/search"),
       cubeId,
       { body: { user_id: MEMOS_USER, query, install_cube_ids: [cubeId], top_k: topK } },
       ensureCubeRegistered

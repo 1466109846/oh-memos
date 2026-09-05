@@ -5,7 +5,6 @@
  */
 
 import {
-  MEMOS_URL,
   MEMOS_USER,
   NEO4J_HTTP_URL,
   NEO4J_USER,
@@ -15,7 +14,7 @@ import {
   logger,
 } from "../config.js";
 import { getMemoryProvider } from "../providers/provider-factory.js";
-import { apiCallWithRetry, fetchWithTimeout } from "../api-client.js";
+import { apiCallWithRetry, apiUrl, fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { formatMemoriesForDisplay } from "../formatters.js";
 import {
@@ -411,7 +410,7 @@ export async function handleMemosSearch(
 
   const apiResult = await apiCallWithRetry(
     "POST",
-    `${MEMOS_URL}/search`,
+    apiUrl("/search"),
     cubeId,
     {
       body: {
@@ -519,7 +518,7 @@ export async function handleMemosSearchContext(
   if (!regSuccess) return cubeRegistrationError(cubeId, regError);
 
   try {
-    const response = await fetchWithTimeout(`${MEMOS_URL}/search`, {
+    const response = await fetchWithTimeout(apiUrl("/search"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -572,7 +571,7 @@ export async function handleMemosSearchContext(
         // Fallback to standard search
         const fallbackResult = await apiCallWithRetry(
           "POST",
-          `${MEMOS_URL}/search`,
+          apiUrl("/search"),
           cubeId,
           { body: { user_id: MEMOS_USER, query, install_cube_ids: [cubeId] } },
           ensureCubeRegistered,
@@ -762,7 +761,7 @@ export async function handleMemosContextResume(
   if (recentMemories.length === 0) {
     const result = await apiCallWithRetry(
       "GET",
-      `${MEMOS_URL}/memories`,
+      apiUrl("/memories"),
       cubeId,
       {
         params: {

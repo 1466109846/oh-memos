@@ -16,8 +16,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { MEMOS_URL, logger } from "../config.js";
-import { fetchWithTimeout } from "../api-client.js";
+import { logger } from "../config.js";
+import { apiUrl, fetchWithTimeout } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { extractMcpType } from "../query-processing.js";
 import { EDGE_LABELS } from "../wiki-relations.js";
@@ -56,7 +56,7 @@ async function fetchAllGraphData(cubeId: string): Promise<GraphDump | string> {
   let totalEdges = 0;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const response = await fetchWithTimeout(`${MEMOS_URL}/product/graph/data`, {
+    const response = await fetchWithTimeout(apiUrl("/product/graph/data"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // user_id doubles as the Neo4j user_name filter server-side, and cube

@@ -18,8 +18,8 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { MEMOS_URL, MEMOS_USER, logger } from "../config.js";
-import { apiCallWithRetry } from "../api-client.js";
+import { MEMOS_USER, logger } from "../config.js";
+import { apiCallWithRetry, apiUrl } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { parseMemoryWriteResponse } from "../memory-write-response.js";
 import {
@@ -182,7 +182,7 @@ async function getStoredMemory(
 ): Promise<MemoryNode | null | string> {
   const result = await apiCallWithRetry(
     "GET",
-    `${MEMOS_URL}/memories/${cubeId}/${memoryId}`,
+    apiUrl(`/memories/${cubeId}/${memoryId}`),
     cubeId,
     // 同 handlers/memory.ts 的 handleMemosGet：缺 user_id 会让后端回退到 root，
     // 对 MEMOS_USER 名下的 cube 报「does not have access」。这里更隐蔽 —— 该错误
@@ -221,7 +221,7 @@ async function savePageAsMemory(
   if (page.updated) body.updated_at = page.updated;
   const result = await apiCallWithRetry(
     "POST",
-    `${MEMOS_URL}/memories`,
+    apiUrl("/memories"),
     cubeId,
     { body },
     ensureCubeRegistered,

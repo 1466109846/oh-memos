@@ -6,6 +6,7 @@
 
 import { detectCubeFromPath } from "../keyword-enhancer.js";
 import { getDefaultCubeId } from "../cube-manager.js";
+import { apiHealthUrl, apiUrlForDisplay } from "../api-client.js";
 import type { TextContent } from "../types.js";
 
 // ============================================================================
@@ -63,7 +64,7 @@ export function cubeRegistrationError(
     `Cube '${cubeId}' registration failed: ${detail ?? "unknown error"}`,
     ERR_CUBE_REGISTRATION,
     [
-      `Check if MemOS API is running: \`curl http://localhost:18000/health\``,
+      `Check if MemOS API is running: \`curl ${apiUrlForDisplay(apiHealthUrl())}\``,
       `Verify cube exists: \`memos_admin(action="list_cubes", include_status=True)\``,
       `Try manual registration: \`memos_admin(action="register_cube", cube_id="...")\``,
     ],
@@ -102,7 +103,7 @@ export function apiErrorResponse(
     );
   }
   suggestions.push(
-    "Check API health: `curl http://localhost:18000/health/detail`",
+    `Check API health: \`curl ${apiUrlForDisplay(apiHealthUrl(undefined, true))}\``,
     "Check API logs for details",
   );
   return errorResponse(

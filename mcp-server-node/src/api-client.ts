@@ -4,6 +4,10 @@
  * HTTP fetch wrapper with timeout, retry, and health check.
  */
 
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { release as osRelease } from "node:os";
+
 import {
   MEMOS_URL,
   MEMOS_API_WAIT_MAX,
@@ -17,25 +21,301 @@ import {
 // Fetch with Timeout
 // ============================================================================
 
+const API_NETWORK_ERROR_CODES = [
+  "ECONNREFUSED",
+  "ECONNABORTED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "EHOSTDOWN",
+  "EHOSTUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EADDRNOTAVAIL",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+] as const;
+
+// These failures happen before an HTTP request can be delivered. They are the
+// only network errors safe to replay for a non-idempotent method.
+const API_ALIAS_SAFE_ERROR_CODES = [
+  "ECONNREFUSED",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EADDRNOTAVAIL",
+  "UND_ERR_CONNECT_TIMEOUT",
+] as const;
+
+let discoveredWslHosts: string[] | undefined;
+
+function isWslRuntime(): boolean {
+  if (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP) return true;
+  if (process.platform !== "linux") return false;
+  const kernel = osRelease().toLowerCase();
+  return kernel.includes("microsoft") || kernel.includes("wsl");
+}
+
+function normalizeDiscoveredHost(value: string): string | undefined {
+  const host = value.trim().replace(/^\[|\]$/g, "").replace(/%[^/]+$/, "");
+  if (
+    !host ||
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    /^127(?:\.[0-9]+){3}$/.test(host)
+  ) {
+    return undefined;
+  }
+  return host.includes(":") ? `[${host}]` : host;
+}
+
+function discoverWslHosts(): string[] {
+  if (discoveredWslHosts) return discoveredWslHosts;
+
+  const hosts = new Set<string>(["host.docker.internal"]);
+  try {
+    const resolvConf = readFileSync("/etc/resolv.conf", "utf8");
+    for (const line of resolvConf.split(/\r?\n/)) {
+      const match = /^\s*nameserver\s+(\S+)/.exec(line);
+      const host = match ? normalizeDiscoveredHost(match[1]) : undefined;
+      if (host) hosts.add(host);
+    }
+  } catch {
+    // WSL integrations may not expose resolv.conf; keep the other candidates.
+  }
+
+  try {
+    const routeOutput = String(
+      execFileSync("ip", ["route", "show", "default"], {
+        encoding: "utf8",
+        timeout: 500,
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    );
+    const match = /(?:^|\s)default\s+via\s+(\S+)/.exec(routeOutput);
+    const host = match ? normalizeDiscoveredHost(match[1]) : undefined;
+    if (host) hosts.add(host);
+  } catch {
+    // The ip utility is optional; resolv.conf and host.docker.internal suffice.
+  }
+
+  discoveredWslHosts = [...hosts];
+  return discoveredWslHosts;
+}
+
+function replaceUrlHost(url: string, host: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    parsed.hostname = host;
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Return true when an exception means the HTTP peer could not be reached. */
+export function isApiUnreachableError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const details = error as { code?: unknown; name?: unknown; cause?: unknown };
+    if (details.name === "AbortError") return true;
+    if (
+      typeof details.code === "string" &&
+      API_NETWORK_ERROR_CODES.includes(details.code as (typeof API_NETWORK_ERROR_CODES)[number])
+    ) {
+      return true;
+    }
+    if (details.cause !== undefined && isApiUnreachableError(details.cause)) {
+      return true;
+    }
+  }
+
+  const message = String(error).toLowerCase();
+  return (
+    message.includes("fetch failed") ||
+    message.includes("network error") ||
+    message.includes("socket hang up") ||
+    message.includes("connect timeout") ||
+    API_NETWORK_ERROR_CODES.some((code) => message.includes(code.toLowerCase()))
+  );
+}
+
+/** Return true only when no request body could have reached the peer. */
+export function isSafeApiAliasFallbackError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const details = error as { code?: unknown; cause?: unknown };
+    if (
+      typeof details.code === "string" &&
+      API_ALIAS_SAFE_ERROR_CODES.includes(
+        details.code as (typeof API_ALIAS_SAFE_ERROR_CODES)[number],
+      )
+    ) {
+      return true;
+    }
+    if (details.cause !== undefined && isSafeApiAliasFallbackError(details.cause)) {
+      return true;
+    }
+  }
+
+  const message = String(error).toLowerCase();
+  return API_ALIAS_SAFE_ERROR_CODES.some((code) => message.includes(code.toLowerCase()));
+}
+
+/** Add the IPv4 loopback alias for clients whose resolver prefers IPv6. */
+export function apiUrlCandidates(url: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [url];
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return [url];
+
+  const host = parsed.hostname.toLowerCase();
+  if (host !== "localhost" && host !== "127.0.0.1") return [url];
+
+  const alias = new URL(url);
+  alias.hostname = host === "localhost" ? "127.0.0.1" : "localhost";
+  const candidates = [url, alias.toString()];
+
+  if (isWslRuntime()) {
+    for (const discoveredHost of discoverWslHosts()) {
+      const candidate = replaceUrlHost(url, discoveredHost);
+      if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
+const preferredLoopbackHosts = new Map<string, string>();
+
+function orderedApiUrlCandidates(url: string): string[] {
+  const candidates = apiUrlCandidates(url);
+  if (candidates.length < 2) return candidates;
+
+  try {
+    const parsed = new URL(url);
+    const preferredHost = preferredLoopbackHosts.get(parsed.origin);
+    if (!preferredHost) return candidates;
+
+    const preferred = new URL(url);
+    preferred.hostname = preferredHost;
+    const preferredUrl = preferred.toString();
+    return [preferredUrl, ...candidates.filter((candidate) => candidate !== preferredUrl)];
+  } catch {
+    return candidates;
+  }
+}
+
+/** Join an API path to the configured base without losing its prefix/query. */
+export function apiUrl(path = "", base = MEMOS_URL): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  try {
+    const parsedBase = new URL(base);
+    const parsedPath = new URL(normalizedPath, "http://memos.local");
+    const basePath = parsedBase.pathname.replace(/\/+$/, "").replace(/^\/+/, "");
+    const childPath = parsedPath.pathname.replace(/^\/+/, "");
+    const joinedPath = [basePath, childPath].filter(Boolean).join("/");
+    parsedBase.pathname = joinedPath ? `/${joinedPath}` : "/";
+
+    // Base query values (for example a gateway token) apply to every endpoint;
+    // a path-specific value wins when both use the same key.
+    const query = new URLSearchParams(parsedBase.search);
+    for (const [key, value] of parsedPath.searchParams) query.set(key, value);
+    parsedBase.search = query.toString();
+    parsedBase.hash = "";
+    return parsedBase.toString();
+  } catch {
+    // Keep the old string behavior for a malformed base; the first fetch then
+    // reports the useful URL error to the caller.
+    const cleanBase = base.replace(/[?#].*$/, "").replace(/\/+$/, "");
+    const cleanPath = normalizedPath.replace(/^\/+/, "");
+    return `${cleanBase}/${cleanPath}`;
+  }
+}
+
+export function apiHealthUrl(base = MEMOS_URL, detail = false): string {
+  const suffix = detail ? "/health/detail" : "/health";
+  return apiUrl(suffix, base);
+}
+
+/** Remove credentials and query values before an endpoint is shown to a client. */
+export function apiUrlForDisplay(url = MEMOS_URL): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    parsed.search = "";
+    parsed.hash = "";
+    const displayed = parsed.toString();
+    return parsed.pathname === "/" && displayed.endsWith("/")
+      ? displayed.slice(0, -1)
+      : displayed;
+  } catch {
+    return url
+      .replace(/[?#].*$/, "")
+      .replace(/:\/\/[^/@\s]+@/, "://");
+  }
+}
+
 export async function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<Response> {
   const timeoutMs = (options.timeoutMs ?? MEMOS_TIMEOUT_TOOL) * 1000;
   const { timeoutMs: _, ...fetchOptions } = options;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
+  const method = String(fetchOptions.method ?? "GET").toUpperCase();
+  const candidates = orderedApiUrlCandidates(url);
+  const isIdempotent = method === "GET" || method === "HEAD";
+  let originalOrigin: string | undefined;
   try {
-    const response = await fetch(url, {
-      ...fetchOptions,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    clearTimeout(timer);
+    originalOrigin = new URL(url).origin;
+  } catch {
+    // The first fetch will report the malformed URL.
   }
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(candidate, {
+        ...fetchOptions,
+        signal: controller.signal,
+      });
+      if (originalOrigin) {
+        const selectedOrigin = new URL(candidate).origin;
+        if (selectedOrigin === originalOrigin) {
+          preferredLoopbackHosts.delete(originalOrigin);
+        } else {
+          preferredLoopbackHosts.set(originalOrigin, new URL(candidate).hostname);
+        }
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      const canTryAlias = candidate !== candidates.at(-1) &&
+        (isIdempotent
+          ? isApiUnreachableError(error)
+          : isSafeApiAliasFallbackError(error));
+      if (!canTryAlias) {
+        if (originalOrigin) {
+          preferredLoopbackHosts.delete(originalOrigin);
+        }
+        throw error;
+      }
+      logger.debug("MemOS API endpoint failed, trying loopback alias");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw lastError;
 }
 
 // ============================================================================
@@ -52,7 +332,7 @@ export async function waitForApiReady(
 
   while (Date.now() - start < maxWaitMs) {
     try {
-      const response = await fetchWithTimeout(`${MEMOS_URL}/users`, {
+      const response = await fetchWithTimeout(apiUrl("/users"), {
         timeoutMs: MEMOS_TIMEOUT_HEALTH,
       });
       if (response.ok) {
@@ -97,7 +377,14 @@ function buildUrl(
     if (v !== undefined) urlParams.append(k, String(v));
   }
   const qs = urlParams.toString();
-  return qs ? `${base}?${qs}` : base;
+  if (!qs) return base;
+  const hashIndex = base.indexOf("#");
+  const beforeHash = hashIndex === -1 ? base : base.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : base.slice(hashIndex);
+  const separator = beforeHash.includes("?")
+    ? (beforeHash.endsWith("?") || beforeHash.endsWith("&") ? "" : "&")
+    : "?";
+  return `${beforeHash}${separator}${qs}${hash}`;
 }
 
 async function doFetch(

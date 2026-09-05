@@ -1,5 +1,5 @@
-import { MEMOS_URL, MEMOS_USER } from "../config.js";
-import { apiCallWithRetry } from "../api-client.js";
+import { MEMOS_USER } from "../config.js";
+import { apiCallWithRetry, apiUrl } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
 import { relationEdges } from "../wiki-relations.js";
 
@@ -16,7 +16,7 @@ async function writeRelationsForPage(
   for (const edge of result.resolved) {
     const relResult = await apiCallWithRetry(
       "POST",
-      `${MEMOS_URL}/product/graph/relation`,
+      apiUrl("/product/graph/relation"),
       cubeId,
       {
         body: {

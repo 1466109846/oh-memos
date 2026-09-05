@@ -20,7 +20,12 @@ import {
   isDefaultCubeFromEnv,
 } from "./config.js";
 import { detectCubeFromPath } from "./keyword-enhancer.js";
-import { fetchWithTimeout } from "./api-client.js";
+import {
+  apiUrl,
+  apiUrlForDisplay,
+  fetchWithTimeout,
+  isApiUnreachableError,
+} from "./api-client.js";
 import type { CubeInfo, CubeConfig } from "./types.js";
 
 // ============================================================================
@@ -410,7 +415,7 @@ export function ensureCubeDirectory(cubeId: string): [string | null, string | nu
 export async function verifyCubeLoaded(cubeId: string): Promise<boolean> {
   try {
     const response = await fetchWithTimeout(
-      `${MEMOS_URL}/memories?user_id=${encodeURIComponent(MEMOS_USER)}&mem_cube_id=${encodeURIComponent(cubeId)}&limit=1`,
+      apiUrl(`/memories?user_id=${encodeURIComponent(MEMOS_USER)}&mem_cube_id=${encodeURIComponent(cubeId)}&limit=1`),
       { method: "GET", timeoutMs: 5 }
     );
     if (response.ok) {
@@ -466,7 +471,7 @@ export async function ensureCubeRegistered(
     }
 
     // Register with API
-    const response = await fetchWithTimeout(`${MEMOS_URL}/mem_cubes`, {
+    const response = await fetchWithTimeout(apiUrl("/mem_cubes"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -495,8 +500,8 @@ export async function ensureCubeRegistered(
     }
   } catch (err) {
     const msg = String(err);
-    if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed") || msg.includes("ECONNRESET")) {
-      return [false, `Cannot connect to MemOS API at ${MEMOS_URL}. Is the server running?`];
+    if (isApiUnreachableError(err)) {
+      return [false, `Cannot connect to MemOS API at ${apiUrlForDisplay()}. Is the server running?`];
     }
     return [false, `Failed to register cube '${cubeId}': ${err}`];
   }

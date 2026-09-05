@@ -23,7 +23,8 @@ import {
   handleMemosCapabilities,
 } from "./admin.js";
 import type { TextContent } from "../types.js";
-import { MEMOS_URL, MEMOS_PROVIDER } from "../config.js";
+import { MEMOS_PROVIDER } from "../config.js";
+import { apiHealthUrl, apiUrlForDisplay } from "../api-client.js";
 import { errorResponse } from "./utils.js";
 
 export async function dispatchTool(
@@ -126,10 +127,10 @@ export async function handleApiUnreachable(): Promise<TextContent[]> {
   return [{
     type: "text",
     text: [
-      `❌ [API_UNREACHABLE] Cannot connect to MemOS API at ${MEMOS_URL}`,
+      `❌ [API_UNREACHABLE] Cannot connect to MemOS API at ${apiUrlForDisplay()}`,
       "",
       "💡 Suggestions:",
-      "- Check if MemOS API is running: `curl http://localhost:18000/health`",
+      `- Check if MemOS API is running: \`curl ${apiUrlForDisplay(apiHealthUrl())}\``,
       "- Start with: `scripts/local/start.bat`",
       "- Check port availability",
     ].join("\n"),
