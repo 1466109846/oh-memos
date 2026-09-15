@@ -293,7 +293,7 @@ class QdrantVecDB(BaseVecDB):
             point = models.PointStruct(id=item.id, vector=item.vector, payload=item.payload)
             points.append(point)
 
-        self.client.upsert(collection_name=self.config.collection_name, points=points)
+        self.client.upsert(collection_name=self.config.collection_name, points=points, wait=True)
 
     def update(self, id: str, data: VecDBItem | dict[str, Any]) -> None:
         """Update an item in the vector database."""
@@ -308,11 +308,13 @@ class QdrantVecDB(BaseVecDB):
             self.client.upsert(
                 collection_name=self.config.collection_name,
                 points=[models.PointStruct(id=id, vector=data.vector, payload=data.payload)],
+                wait=True,
             )
         else:
             # For payload-only updates
             self.client.set_payload(
-                collection_name=self.config.collection_name, payload=data.payload, points=[id]
+                collection_name=self.config.collection_name, payload=data.payload, points=[id],
+                wait=True,
             )
 
     def ensure_payload_indexes(self, fields: list[str]) -> None:
@@ -352,4 +354,5 @@ class QdrantVecDB(BaseVecDB):
         self.client.delete(
             collection_name=self.config.collection_name,
             points_selector=models.PointIdsList(points=point_ids),
+            wait=True,
         )

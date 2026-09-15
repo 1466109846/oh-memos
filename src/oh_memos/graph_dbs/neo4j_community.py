@@ -1,6 +1,7 @@
 import json
 import re
 
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -25,6 +26,8 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
         - No CREATE DATABASE
     """
 
+    _native_vectors = False
+
     def __init__(self, config: Neo4jGraphDBConfig):
         assert config.auto_create is False
         assert config.use_multi_db is False
@@ -45,6 +48,127 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
         """
         # Create indexes
         self._create_basic_property_indexes()
+
+    @staticmethod
+    def _confirmed_vector_payload(values: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: value.isoformat() if hasattr(value, "isoformat") else value
+            for key, value in values.items()
+            if key not in {"id", "embedding"}
+        }
+
+    def _restore_confirmed_payload(self, id, previous_payload, changed_fields):
+        # SET payload never recreates a deleted point or replaces its vector.
+        self.vec_db.update(
+            id,
+            VecDBItem(
+                id=id, payload={key: previous_payload.get(key) for key in changed_fields}
+            ),
+        )
+
+    @contextmanager
+    def _confirmed_vector_write(self, id, node, embedding, user_name, created=False):
+        """Confirm vector storage while the owning graph transaction is locked."""
+        previous = self.vec_db.get_by_id(id)
+        previous_payload = (previous.payload or {}) if previous is not None else {}
+        previous_metadata = _flatten_info_fields(dict(previous_payload))
+        if previous is not None:
+            if previous_metadata.get("user_name") not in (None, user_name):
+                raise ValueError("Vector ID belongs to another tenant")
+            if (
+                previous_metadata.get("user_id") is not None
+                and node.get("user_id") is not None
+                and previous_metadata["user_id"] != node["user_id"]
+            ):
+                raise ValueError("Vector user identity conflicts with the requested memory")
+            if (
+                previous_metadata.get("memory") not in (None, node["memory"])
+                or previous_metadata.get("status") == "deleted"
+            ):
+                raise ValueError("Vector ID was edited or deleted; refusing to overwrite it")
+
+        recovered_fields = {}
+        if (
+            created
+            and previous_metadata.get("user_name") == user_name
+            and previous_metadata.get("memory") == node["memory"]
+        ):
+            # A vector-only record can survive a failed graph commit/rollback.
+            # Its original lifecycle, provenance and timestamps remain the
+            # authority too; fresh defaults must not reactivate archived data.
+            protected_fields = {
+                "id", "memory", "embedding", "user_name", "cube_id", "mem_cube_id", "vector_sync",
+            }
+            recovered_fields = {
+                key: value
+                for key, value in previous_metadata.items()
+                if key not in protected_fields
+                and not key.startswith("_confirmed_")
+            }
+        payload = self._confirmed_vector_payload({**node, **recovered_fields})
+        payload["user_name"] = user_name
+        payload["vector_sync"] = "success"
+        # Neo4j cannot store maps in a property list. Keep the vector's source
+        # payload unchanged, and serialize only the graph representation.
+        if recovered_fields.get("sources"):
+            recovered_fields["sources"] = [
+                json.dumps(source) if not isinstance(source, str) else source
+                for source in recovered_fields["sources"]
+            ]
+        replace_vector = previous is None or not self._valid_confirmed_embedding(previous.vector)
+        update_payload = any(previous_payload.get(key) != value for key, value in payload.items())
+        changed = False
+        try:
+            if replace_vector:
+                changed = True
+                self.vec_db.add([VecDBItem(id=id, vector=embedding, payload=payload)])
+            elif update_payload:
+                changed = True
+                self.vec_db.update(id, VecDBItem(id=id, payload=payload))
+            if changed:
+                confirmed = self.vec_db.get_by_id(id)
+                if (
+                    confirmed is None
+                    or not self._valid_confirmed_embedding(confirmed.vector)
+                    or any((confirmed.payload or {}).get(key) != value for key, value in payload.items())
+                ):
+                    raise RuntimeError("Confirmed vector write is not readable with its metadata")
+            yield recovered_fields
+        except Exception:
+            if changed:
+                try:
+                    if previous is None:
+                        self.vec_db.delete([id])
+                    elif replace_vector:
+                        self.vec_db.add([previous])
+                    else:
+                        self._restore_confirmed_payload(id, previous_payload, payload)
+                except Exception as rollback_error:
+                    logger.error("Confirmed vector rollback failed for %s: %s", id, rollback_error)
+            raise
+
+    @contextmanager
+    def _confirmed_payload_update(self, id, node, fields, user_name):
+        previous = self.vec_db.get_by_id(id)
+        if previous is None or not self._valid_confirmed_embedding(previous.vector):
+            raise RuntimeError("Cannot enrich a memory whose vector is missing")
+        previous_payload = previous.payload or {}
+        if (
+            previous_payload.get("user_name") != user_name
+            or previous_payload.get("memory") != node["memory"]
+            or previous_payload.get("status") != "activated"
+        ):
+            raise ValueError("Vector identity, content or status changed before enrichment")
+        payload = self._confirmed_vector_payload(fields)
+        try:
+            self.vec_db.update(id, VecDBItem(id=id, payload=payload))
+            yield
+        except Exception:
+            try:
+                self._restore_confirmed_payload(id, previous_payload, payload)
+            except Exception as rollback_error:
+                logger.error("Enrichment payload rollback failed for %s: %s", id, rollback_error)
+            raise
 
     def add_node(
         self, id: str, memory: str, metadata: dict[str, Any], user_name: str | None = None

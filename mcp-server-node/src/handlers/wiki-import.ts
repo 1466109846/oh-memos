@@ -240,6 +240,12 @@ async function savePageAsMemory(
   const parsed = parseMemoryWriteResponse(
     result.data as { code: number; data?: unknown },
   );
+  if (parsed.vectorSaved === false || (parsed.vectorSaved === true && parsed.memoryIds.length === 0)) {
+    return {
+      error: "Vector storage was not confirmed", memoryIds: [],
+      warnings: parsed.warnings, uncertain: true,
+    };
+  }
   return {
     error: null,
     memoryIds: parsed.memoryIds,

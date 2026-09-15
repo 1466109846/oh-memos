@@ -5,6 +5,7 @@ Provides simplified configuration generation for users.
 
 from typing import Literal
 
+from oh_memos.configs import llm_defaults
 from oh_memos.configs.mem_cube import GeneralMemCubeConfig
 from oh_memos.configs.mem_os import MOSConfig
 from oh_memos.mem_cube.general import GeneralMemCube
@@ -12,7 +13,7 @@ from oh_memos.mem_cube.general import GeneralMemCube
 
 def get_default_config(
     openai_api_key: str,
-    openai_api_base: str = "https://api.openai.com/v1",
+    openai_api_base: str | None = None,
     text_mem_type: Literal["tree_text", "general_text"] = "general_text",
     user_id: str = "default_user",
     **kwargs,
@@ -22,7 +23,8 @@ def get_default_config(
 
     Args:
         openai_api_key (str): OpenAI API key
-        openai_api_base (str): OpenAI API base URL, defaults to "https://api.openai.com/v1"
+        openai_api_base (str | None): OpenAI-compatible base URL. ``None`` reads
+            ``OPENAI_API_BASE`` from the environment.
         text_mem_type (str): Type of text memory, either "tree_text" or "general_text"
         user_id (str): User ID for the configuration
         **kwargs: Additional configuration overrides
@@ -34,16 +36,17 @@ def get_default_config(
         ```python
         config = get_default_config(
             openai_api_key="sk-...",
-            openai_api_base="https://api.openai.com/v1",
             text_mem_type="general_text"
         )
         mos = MOS(config)
         ```
     """
+    if openai_api_base is None:
+        openai_api_base = llm_defaults.chat_api_base()
 
     # Base OpenAI configuration
     openai_config = {
-        "model_name_or_path": kwargs.get("model_name", "LongCat-Flash-Lite"),
+        "model_name_or_path": kwargs.get("model_name", llm_defaults.chat_model()),
         "temperature": kwargs.get("temperature", 0.8),
         "max_tokens": kwargs.get("max_tokens", 1024),
         "top_p": kwargs.get("top_p", 0.9),
@@ -136,7 +139,7 @@ def get_default_config(
 
 def get_default_cube_config(
     openai_api_key: str,
-    openai_api_base: str = "https://api.openai.com/v1",
+    openai_api_base: str | None = None,
     text_mem_type: Literal["tree_text", "general_text"] = "general_text",
     user_id: str = "default_user",
     **kwargs,
@@ -146,7 +149,8 @@ def get_default_cube_config(
 
     Args:
         openai_api_key (str): OpenAI API key
-        openai_api_base (str): OpenAI API base URL, defaults to "https://api.openai.com/v1"
+        openai_api_base (str | None): OpenAI-compatible base URL. ``None`` reads
+            ``OPENAI_API_BASE`` from the environment.
         text_mem_type (str): Type of text memory, either "tree_text" or "general_text"
         user_id (str): User ID for the configuration
         **kwargs: Additional configuration overrides
@@ -154,10 +158,12 @@ def get_default_cube_config(
     Returns:
         GeneralMemCubeConfig: Complete MemCube configuration object
     """
+    if openai_api_base is None:
+        openai_api_base = llm_defaults.chat_api_base()
 
     # Base OpenAI configuration
     openai_config = {
-        "model_name_or_path": kwargs.get("model_name", "LongCat-Flash-Lite"),
+        "model_name_or_path": kwargs.get("model_name", llm_defaults.chat_model()),
         "temperature": kwargs.get("temperature", 0.8),
         "max_tokens": kwargs.get("max_tokens", 1024),
         "top_p": kwargs.get("top_p", 0.9),
@@ -267,7 +273,7 @@ def get_default_cube_config(
 
 def get_default(
     openai_api_key: str,
-    openai_api_base: str = "https://api.openai.com/v1",
+    openai_api_base: str | None = None,
     text_mem_type: Literal["tree_text", "general_text"] = "general_text",
     user_id: str = "default_user",
     **kwargs,
@@ -279,7 +285,8 @@ def get_default(
 
     Args:
         openai_api_key (str): OpenAI API key
-        openai_api_base (str): OpenAI API base URL, defaults to "https://api.openai.com/v1"
+        openai_api_base (str | None): OpenAI-compatible base URL. ``None`` reads
+            ``OPENAI_API_BASE`` from the environment.
         text_mem_type (str): Type of text memory, either "tree_text" or "general_text"
         user_id (str): User ID for the configuration
         **kwargs: Additional configuration overrides
@@ -324,7 +331,7 @@ def get_default(
 
 def get_simple_config(
     openai_api_key: str,
-    openai_api_base: str = "https://api.openai.com/v1",
+    openai_api_base: str | None = None,
     text_mem_type: Literal["tree_text", "general_text"] = "general_text",
     user_id: str = "default_user",
 ) -> MOSConfig:
@@ -335,7 +342,8 @@ def get_simple_config(
 
     Args:
         openai_api_key (str): OpenAI API key
-        openai_api_base (str): OpenAI API base URL
+        openai_api_base (str | None): OpenAI-compatible base URL. ``None`` reads
+            ``OPENAI_API_BASE`` from the environment.
         text_mem_type (str): Type of text memory
         user_id (str): User ID
 

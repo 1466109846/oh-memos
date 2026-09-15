@@ -5,6 +5,297 @@ All notable changes to the MemOS project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🔧 修复：跨平台 CI 与当前仓库的架构页发布
+<!-- en: 🔧 Fix: cross-platform CI and architecture Pages for the current repository -->
+
+README 生成器测试显式覆盖 LF、CRLF 两种换行，避免 Linux checkout 被本机换行假设误判。
+Python CI 安装确认向量写入测试所需的 `qdrant-client`，CPU torch 与发布镜像对齐。
+当前仓库、徽章、问题反馈及架构页链接统一为 `1466109846/oh-memos`；README 修改也会
+触发架构页部署，页面位于 `https://1466109846.github.io/oh-memos/architecture/`。
+忽略意外生成的根目录 `NUL` 文件，避免 Windows runner 检出失败。
+
+## [3.1.9] - 2026-09-16
+
+### 🧠 修复：保存先确认向量，LLM 解析在后台完成
+<!-- en: 🧠 Fix: acknowledge vector storage before background LLM parsing -->
+
+`/memories` 的 `memory_content` 写入先保存原文和向量，确认存储后返回真实 ID、
+`vector_saved=true`、`enrichment_status=pending`；MCP 不再等待可能耗时数分钟的 LLM。
+后台解析补充同一记录的标题、标签和摘要，保留原文、向量、创建时间及来源。
+MCP 完整详情显示原始创建时间，避免把后台解析的更新时间误标为创建时间。
+
+解析状态持久化到现有图记录，两个工作线程自动处理并有限重试；服务重启可恢复
+非默认项目的本地 cube，最后一次调用中断也不会永久卡在 pending。
+图整理对这些原始记录只建立关系；向量失败不能误报保存成功，请求超时明确显示
+`API_TIMEOUT`，不再误报 API 离线，也不自动重放结果未知的写入。
+
+开发容器显式设置 `PYTHONPATH=/app/src`，修复源码已挂载但仍加载镜像旧代码的问题。
+仅挂载 `src/oh_memos`，避免宿主 `.env` 覆盖容器配置；首次应用需重新创建 API 容器，
+之后源码修改只需重启。
+
+覆盖确认写入/补偿、慢 LLM 下的 HTTP 返回、reader 兼容、失败重试、重启恢复及原文保护的回归测试。
+
+### ⚙️ 变更：全量统一到 `glm-5.3-flash`，降级模型 `deepseek-ai/DeepSeek-V4-Pro-0813`
+<!-- en: ⚙️ Changed: unified on glm-5.3-flash with DeepSeek-V4-Pro-0813 as fallback -->
+
+三份配置（根 `.env`、`src/.env`、`docker/.env.migration`）统一为：
+`MOS_CHAT_MODEL` = `MEMRADER_MODEL` = `glm-5.3-flash`，
+`MOS_CHAT_FALLBACK_MODEL` = `deepseek-ai/DeepSeek-V4-Pro-0813`。
+<!-- en: All three env files now set MOS_CHAT_MODEL = MEMRADER_MODEL = glm-5.3-flash with
+     MOS_CHAT_FALLBACK_MODEL = deepseek-ai/DeepSeek-V4-Pro-0813. -->
+
+本节记录到达该配置的选型过程 —— 中途试过的 nemotron / spark-x2.5 均已被替换，
+数据保留是因为失效模式会复现。
+<!-- en: This entry records how that configuration was reached; nemotron and spark-x2.5 were
+     tried and replaced along the way, and their data is kept because the failure modes recur. -->
+
+选型实测（生产参数 `max_tokens=6000`，真实提炼任务，同批次可比）：
+<!-- en: Selection benchmark at production max_tokens=6000 on the real extraction task: -->
+
+| 模型 | min | mean | max | JSON | 中文 key |
+|---|---|---|---|---|---|
+| `glm-5.3-flash`（采用） | 16.5s | 23.6s | 37.3s | 4/4 | 4/4 |
+| `deepseek-ai/DeepSeek-V4-Pro-0813`（降级） | 15.6s | 18.9s | 21.8s | 3/3 | 3/3 |
+| `deepseek-ai/deepseek-v4-pro-0813`（小写） | 21.9s | 60.2s | 98.4s | 2/2 | 2/2 |
+| `MiniMaxAI/MiniMax-M2.5`（对照） | 8.4s | 9.7s | 11.1s | 2/2 | 2/2 |
+| `spark-x2.5`（否决） | 93.0s | 121.5s | 177.5s | **1/4** | 1/1 |
+| `nvidia/nemotron-...-550b`（否决） | 8.2s | 24.2s | 53.3s | 3/3 | **0/3 英文** |
+
+**大小写决定路由。** `deepseek-ai/DeepSeek-V4-Pro-0813` 与
+`deepseek-ai/deepseek-v4-pro-0813` 在中转上都在列，但走不同渠道：大写 mean 18.9s，
+小写 mean 60.2s；而无日期后缀的 `deepseek-ai/deepseek-v4-pro` 直接超时。同一模型三种
+写法三种表现，模型名必须逐字照抄实测通过的那个。
+<!-- en: Casing selects the route. Both casings are listed but hit different channels
+     (18.9s vs 60.2s mean), and the suffix-less name times out outright. -->
+
+**`spark-x2.5` 被否决的原因值得记下：抬高 `max_tokens` 让它变差。** 4000 时 JSON 3/4，
+6000 时降到 1/4 —— 两次 `finish=length` 精确停在 6000，说明生成不收敛，预算越大跑得越远
+最后被截断；另有一次 500「分组 auto 下模型 spark-x2.5 的可用渠道不存在」。
+<!-- en: spark-x2.5 got worse when max_tokens was raised: 3/4 valid JSON at 4000 but 1/4 at
+     6000, with finish=length landing exactly on the ceiling twice — generation does not
+     converge, so a larger budget just runs further before truncating. -->
+
+**截断不会触发降级。** `finish=length` 返回的是 HTTP 200 + 残缺 JSON，而降级只在抛异常 /
+超时时触发。这类响应会被当作正常结果写入记忆库，成为脏数据 —— 所以「有 fallback 兜底」
+对这种失效形态不成立。
+<!-- en: Truncation does not trigger fallback: finish=length returns HTTP 200 with malformed
+     JSON, while degradation only fires on exceptions/timeouts, so such a response is written
+     to the store as if valid. A fallback does not cover this failure mode. -->
+
+`nvidia/nemotron-...-550b` 被否决则是因为 **key 输出为英文**（其余模型均为中文）。key 是
+记忆检索的主要匹配字段，本项目要求中文，这属于精度缺陷而非风格差异；其延迟波动也最大
+（8.2–53.3s，6.5 倍）。
+<!-- en: nemotron was rejected for emitting English keys where every other model emitted
+     Chinese. The key is the primary retrieval match field, so this is a precision defect. -->
+
+`MOS_CHAT_FALLBACK_PRIMARY_TIMEOUT` 三份配置统一为 `150.0`（此前 `docker/.env.migration`
+缺该键，走代码默认 `60.0`）。glm 尾延迟 37.3s 远在其下，显式写出是为了避免换模型后再次
+踩到误降级。
+<!-- en: MOS_CHAT_FALLBACK_PRIMARY_TIMEOUT is pinned to 150.0 in all three files (it was
+     missing from docker/.env.migration, which therefore used the 60.0 code default). -->
+
+验证走项目自身 `LLMFactory` 构建的 `FallbackLLM`：宿主 13.4s、容器 `POST /memories`
+19.2s，均合法 JSON、中文正常、未触发降级。
+<!-- en: Verified through the project's own LLMFactory-built FallbackLLM: 13.4s on the host
+     and 19.2s for the container's POST /memories, both valid JSON with no fallback. -->
+
+**解析链路跟的是 `MEMRADER_MODEL`,不是 `MOS_CHAT_MODEL`。** 二者当前同值时无法从
+配置输出上区分,需用哨兵消歧：先 import `APIConfig`,**再**设 `os.environ` —— 因为
+`api/config.py:27` 的 `load_dotenv(override=True)` 在 import 时会把 `.env` 灌回来,
+覆盖先设的值。实测 `mem_reader.llm` 与 `get_memreader_config()` 跟随 `MEMRADER_MODEL`,
+`chat_model` 与 `get_openai_config()` 跟随 `MOS_CHAT_MODEL`。
+<!-- en: Extraction follows MEMRADER_MODEL, not MOS_CHAT_MODEL. With both keys holding the
+     same value the two are indistinguishable from config output; disambiguate with
+     sentinels set AFTER importing APIConfig, since the module-level
+     load_dotenv(override=True) at api/config.py:27 re-reads .env on import and overwrites
+     values set beforehand. -->
+
+顺带查明：cube 的 `data/oh-memos_cubes/*/config.json` 里固化着 `gpt-4o-mini` +
+`https://api.openai.com/v1`，但 `/memories` 路径实际用 env 构建的配置，落盘那份是死数据
+（2026-09-05 那次 410 报的是 `.env` 里的模型名而非 `gpt-4o-mini`，是实证）。
+<!-- en: Incidentally established that the cube config.json files on disk freeze gpt-4o-mini
+     and the public OpenAI URL, but the /memories path builds its config from env — the
+     on-disk copy is dead data (the 2026-09-05 410 named the .env model, not gpt-4o-mini). -->
+
+### 🧱 修复：缺模型名的校验放在了 import 链上，镜像构建随即失败
+<!-- en: 🧱 Fix: the missing-model check sat on an import path and broke the image build -->
+
+上一节把 `require_chat_model()`（缺 `MOS_CHAT_MODEL` 即抛）放进了
+`APIConfig.get_openai_config()`。而 `api/start_api.py:74` 在**模块级**执行
+`DEFAULT_CONFIG = APIConfig.get_product_default_config()`，Dockerfile 第 36 行的构建校验又正是
+`python -c "... from oh_memos.api.start_api import app"` —— 镜像里没有任何 `.env`（`.dockerignore`
+按设计排除），于是构建必然死在这一步：
+<!-- en: The previous entry put require_chat_model() (raises when MOS_CHAT_MODEL is unset) inside
+     APIConfig.get_openai_config(). But start_api.py:74 evaluates DEFAULT_CONFIG at module level,
+     and the Dockerfile's build check imports that very module — with no .env in the image. -->
+
+```
+start_api.py:74      DEFAULT_CONFIG = APIConfig.get_product_default_config()
+config.py:714        openai_config = APIConfig.get_openai_config()
+config.py:268        "model_name_or_path": llm_defaults.require_chat_model()
+llm_defaults.py:69   raise ValueError
+```
+
+宿主测试全绿也照样漏掉：宿主 import `api/config.py` 时其模块级 `load_dotenv()` 已经把变量灌好了，
+只有「无 `.env` 的纯 import」这条路径会炸，而镜像构建正是唯一走这条路的地方。
+<!-- en: Host test suites could not catch it: on the host, config.py's module-level load_dotenv()
+     has already populated the variables. Only a bare import with no .env fails — which is
+     exactly and only what the image build does. -->
+
+修法是把检查下移一层，而不是删掉它：
+<!-- en: Fixed by moving the check down a layer rather than dropping it: -->
+
+- 配置构建器（`get_openai_config()`）改回惰性 `chat_model()`，缺失返回空串，import 永不抛
+- `BaseLLMConfig` 新增 `reject_blank_model` 校验器，空模型名在**构造 LLM 配置时**被拒
+
+这个分层才是对的：配置构建器可能在 import 期跑（此时 env 可能还没加载），而 LLM 配置的构造
+一定发生在 dotenv 之后 —— 那时空值真的意味着变量没设。原先的字面量默认值
+（`"LongCat-Flash-Lite"`）之所以是坏味道，是因为它把「没配」伪装成「配了个死模型」；空串加一层
+校验器保留了快速失败，又不误伤 import。
+<!-- en: This layering is the correct one: config builders may run at import time, when the env may
+     not be loaded yet, whereas an LLM config is only ever constructed after dotenv has run — so a
+     blank there genuinely means the variable is unset. -->
+
+Dockerfile 的构建校验同时扩展为 import `llm_defaults` 并断言 `chat_model() == ''`，把「新模块确实
+进了镜像」和「镜像里不该烧进模型名」都变成构建期断言。
+<!-- en: The build check now also imports llm_defaults and asserts chat_model() == '', turning both
+     "the new module is in the image" and "no model name is baked in" into build-time assertions. -->
+
+重建后验证：镜像内 `llm_defaults.py` 位于 site-packages，容器内解析出 `glm-5.3-flash`，
+`POST /memories` 返回 200 / 13.8s、两条 `memory_id`、无 410、无降级。回滚镜像保留为
+`oh-memos:migration-rollback-20260911`。
+<!-- en: Verified after rebuild: llm_defaults.py is in site-packages, the container resolves
+     glm-5.3-flash, and POST /memories returns 200 in 13.8s with no 410 and no fallback. -->
+
+### 🐳 修复：容器仍调用已下线模型 —— 环境变量在容器**创建**时固定
+<!-- en: 🐳 Fix: container kept calling a retired model — env vars freeze at container creation -->
+
+宿主三份 `.env` 都已指向新模型后，容器内 `POST /memories` 仍抛
+`410 The model 'openai/gpt-oss-120b' has reached its end of life`。诡异点：该值在**现存
+任何 env 文件里都不存在**（只有 `.env.pre-3.1.0.bak` 有）。
+<!-- en: After all three host .env files named the new model, the container still raised 410 for
+     openai/gpt-oss-120b — a value present in no current env file. -->
+
+根因：容器 `Created 2026-08-25T18:12:28Z`，而 `StartedAt 2026-09-11T07:52:06Z` —— 中间只被
+`docker restart` 过。**环境变量在容器创建时固定，`restart` 不重读 `env_file`**，所以容器一直
+持有 8-25 当时 `.env.migration` 的内容（`MOS_CHAT_MODEL=openai/gpt-oss-120b`、
+`MOS_CHAT_FALLBACK_MODEL=deepseek-ai/DeepSeek-V3`）。
+<!-- en: Root cause: the container was created 2026-08-25 and only restarted since. Env vars
+     freeze at creation and restart does not re-read env_file, so it still held the values that
+     .env.migration carried on 8-25. -->
+
+第二个独立缺陷：`MOS_CHAT_FALLBACK_API_BASE=http://localhost:3000/v1`，而同文件的
+`OPENAI_API_BASE` / `MEMRADER_API_BASE` 都正确用了 `host.docker.internal`。容器内 `localhost`
+指向容器自身，实测 `Errno 111 Connection refused`（对照 `host.docker.internal:3000` 返回 401，
+证明端点可达）。主模型一失败，降级也会因连不上而失败 —— 已改为 `host.docker.internal`。
+<!-- en: A second, independent defect: the fallback api_base used localhost, which inside a
+     container is the container itself (Errno 111), while the other two correctly used
+     host.docker.internal. Degradation would have failed to connect. -->
+
+定位手法（值得复用）：**启动方式不要猜，读 compose 标签**。
+`docker inspect <c> --format '{{range $k,$v := .Config.Labels}}...'` 给出
+`project.config_files` 与 `project.environment_file`，据此原样重建。本例记录显示用的是
+`docker-compose.yml` + `docker-compose.dev.yml` + `--env-file docker/.env.migration`，
+**没有** migration overlay —— 这点关键：该 overlay 把 neo4j pin 到 `5.15.0`，而运行中是基础栈的
+`5.26.4`，误加 `-f docker-compose.migration.yml` 会触发不可逆的 store 降级。
+<!-- en: Do not guess the launch command — read the compose labels, which name config_files and
+     environment_file. Here the migration overlay was NOT in use, which matters: it pins neo4j
+     to 5.15.0 while 5.26.4 is running, and a downgrade of the store format is irreversible. -->
+
+修复用 `up -d memos`（只重建 API，neo4j / qdrant 未动）。验证时注意 **HTTP 200 不证明成功**：
+故障期的日志里 410 traceback 之后紧跟的也是 `POST /memories HTTP/1.1 200 OK`，因为降级兜住了
+外层响应。必须查日志确认模型名与是否降级：
+<!-- en: Fixed with up -d memos. Note that HTTP 200 does not prove success: during the failure the
+     410 traceback was followed by 200 OK because the fallback absorbed it. Check the logs. -->
+
+```
+14:47:16/21/25  openai/gpt-oss-120b       ← 三次 410
+14:47:26        deepseek-ai/DeepSeek-V3   ← 降级
+16:11:26/44     glm-5.3-flash             ← 重建后
+```
+
+重建后 `POST /memories` 返回 200 / 19.2s，两条 `memory_id`，日志无 410、无降级、
+`typed fast-path` 命中 0（证明真走了 LLM 提炼而非跳过）。
+<!-- en: After recreation POST /memories returned 200 in 19.2s with two memory_ids, no 410, no
+     fallback, and zero typed fast-path hits — confirming real LLM extraction ran. -->
+
+附带发现：`dev.yml` 把 `../src` 挂到 `/app/src`（挂载确实存在），但 `/app/src` 不在 `sys.path`
+上，`import oh_memos` 解析到 `/usr/local/lib/python3.11/site-packages/oh_memos/`，
+`from oh_memos.configs import llm_defaults` 抛 `ImportError`。**宿主代码改动在容器里不生效**，
+容器跑的是镜像内旧代码；要同步需 `docker compose build memos`。本次修复不受影响，因为模型名由
+环境变量携带，旧代码读 env 一样正确。
+<!-- en: Incidentally: dev.yml mounts ../src at /app/src, but /app/src is not on sys.path — imports
+     resolve to site-packages, so host code changes do not take effect in the container. This fix
+     was unaffected because the model name travels via env vars. -->
+
+### 🏷️ 修复：模型名/端点/密钥的硬编码默认值，统一收敛到 `.env`
+<!-- en: 🏷️ Fix: hardcoded model / endpoint / key defaults consolidated into .env -->
+
+模型名、`api_base`、`api_key` 过去以字面量散落在十余处配置构造器里
+（`api/config.py`、`mem_os/utils/default_config.py`、`configs/llm.py`、
+`configs/env_loader.py`、`mem_scheduler/analyzer/eval_analyzer.py`、CLI wizard、
+skill 脚本、examples）。这类字面量会腐坏：上游模型 EOL 后，即使 `.env` 已指向可用
+模型，真正送到 client 的仍是字面量，表现为一个难以定位的 HTTP 410（见 2026-09-05
+条目）。
+<!-- en: Model names, api_base and api_key used to sit as literals in a dozen config
+     builders. Such literals rot: once a model reaches end-of-life upstream, the literal
+     is what still reaches the client even though .env already names a valid model,
+     surfacing as an opaque HTTP 410 (see the 2026-09-05 entry). -->
+
+新增 `src/oh_memos/configs/llm_defaults.py` 作为唯一解析入口。所有取值在**函数内**
+完成，不在 import 时求值 —— `load_dotenv()` 在应用启动时才跑，模块级常量会冻结
+dotenv 之前的值。pydantic 字段改用 `default_factory` 出于同一原因。
+<!-- en: Added configs/llm_defaults.py as the single resolution point. Values resolve
+     inside functions, never at import time: load_dotenv() runs at application startup,
+     so module-level constants would freeze pre-dotenv values. pydantic fields switched
+     to default_factory for the same reason. -->
+
+顺带修掉的真 bug：
+<!-- en: Real bugs fixed along the way: -->
+
+- `eval_analyzer.py` 的 `openai_model: str = "LongCat-Flash-Lite"` 签名默认值恒为真，
+  使后面的 `or os.getenv("MEMSCHEDULER_OPENAI_DEFAULT_MODEL", ...)` **永远不会执行**，
+  该环境变量实际从未生效。改为 `None` 哨兵。
+- `api/config.py` 检索侧 reader 的 `os.getenv("MEMRADER_MODEL")` 未设时传 `None`，
+  直接触发 pydantic 校验失败；现接入 `MEMRADER_MODEL → MOS_CHAT_MODEL` 回退链。
+- `LLMFallbackConfig` 新增校验器：`enabled=true` 但 `fallback_model` 为空时直接报配置
+  错误。此前会构造成功，只在主模型已经失败、备用调用返回上游错误时才暴露 —— 发现配置
+  缺口的最坏时机。
+<!-- en: - eval_analyzer's truthy signature default shadowed the env var entirely, so
+       MEMSCHEDULER_OPENAI_DEFAULT_MODEL never took effect.
+     - api/config.py passed None into a required pydantic field when MEMRADER_MODEL was unset.
+     - LLMFallbackConfig now rejects enabled-but-unconfigured fallback at construction. -->
+
+清空环境时默认值一律回落到公共 OpenAI URL，不再是任何私有中转地址：源码里的私有端点
+既是泄露，也是一个在别人机器上静默失效的值。`MOS_CHAT_FALLBACK_MODEL` 不再有字面量
+默认（原为 `LongCat-2.0`）—— 把某一家指定成所有人的备用，正是会腐坏的东西。
+<!-- en: With a clean environment, defaults fall back to the public OpenAI URL rather than any
+     private relay: a private endpoint in source is both a leak and a value that silently
+     breaks on other machines. MOS_CHAT_FALLBACK_MODEL no longer carries a literal default. -->
+
+### ⚠️ 变更：活动配置的模型名
+<!-- en: ⚠️ Changed: model name in active configuration -->
+
+`minimaxai/minimax-m3` 已于 2026-09-09 EOL，调用即 410。两份 `.env` 改为实测可用的
+`MiniMaxAI/MiniMax-M2.5`（primary / memreader）与 `MiniMaxAI/MiniMax-M2.1`（fallback）。
+<!-- en: minimaxai/minimax-m3 reached end-of-life on 2026-09-09; calls return 410. Both .env
+     files now use MiniMaxAI/MiniMax-M2.5 (primary/memreader) and MiniMaxAI/MiniMax-M2.1
+     (fallback), both verified with live requests. -->
+
+再次印证 2026-09-05 的教训：**在 `/v1/models` 列表里不等于能用**。中转站仍列出
+`minimaxai/minimax-m3` 和 `openai/gpt-oss-120b`（247 条中均在列），两者调用都是 410。
+换模型后必须实际发一次请求验证，只看列表不算验证。
+<!-- en: Reconfirms the 2026-09-05 lesson: presence in /v1/models does not mean usable. The
+     relay still lists both dead models; both return 410. Always verify with a real request. -->
+
+fallback 与 primary 仍共用同一端点，只换模型：这挡得住单个模型 EOL/限流，挡不住端点
+整体挂掉（两边一起挂）。两份 `.env` 已就此加注释；真正的异源后备需另配服务商，属待决事项。
+<!-- en: Fallback still shares the primary's endpoint, differing only in model: that covers a
+     single model's EOL or rate limit, not an endpoint-wide outage. Both .env files are
+     annotated accordingly; a genuinely independent backup provider remains an open decision. -->
+
 ## [3.1.8] - 2026-08-27
 
 仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.5。

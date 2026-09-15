@@ -3,6 +3,7 @@ import os
 
 from typing import Any
 
+from oh_memos.configs import llm_defaults
 from oh_memos.configs.mem_os import MOSConfig
 from oh_memos.context.context import ContextThreadPoolExecutor
 from oh_memos.llms.factory import LLMFactory
@@ -62,8 +63,8 @@ class MOS(MOSCore):
             tuple[MOSConfig, Any]: MOS configuration and default MemCube
         """
         # Get configuration from environment variables
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        openai_api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        openai_api_key = llm_defaults.chat_api_key()
+        openai_api_base = llm_defaults.chat_api_base()
         text_mem_type = os.getenv("MOS_TEXT_MEM_TYPE", "general_text")
 
         if not openai_api_key:
@@ -85,7 +86,7 @@ class MOS(MOSCore):
 
         Environment variables needed:
         - OPENAI_API_KEY: Your OpenAI API key
-        - OPENAI_API_BASE: OpenAI API base URL (optional, defaults to "https://api.openai.com/v1")
+        - OPENAI_API_BASE: OpenAI-compatible base URL (optional; defaults to the public OpenAI URL)
         - MOS_TEXT_MEM_TYPE: Text memory type (optional, defaults to "general_text")
 
         Returns:

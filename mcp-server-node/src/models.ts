@@ -109,6 +109,10 @@ export function toFull(
 
   return {
     ...brief,
+    createdAt:
+      (memory as MemoryNode).created_at ??
+      (meta.created_at as string) ??
+      brief.createdAt,
     content: cleanContent,
     background:
       (memory as MemoryNode).background ?? (meta.background as string),

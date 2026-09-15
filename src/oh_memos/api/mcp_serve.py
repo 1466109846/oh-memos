@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 
 # Assuming these are your imports
+from oh_memos.configs import llm_defaults
 from oh_memos.mem_os.main import MOS
 from oh_memos.mem_os.utils.default_config import get_default
 from oh_memos.mem_user.user_manager import UserRole
@@ -105,8 +106,8 @@ def load_default_config(user_id="default_user"):
         kwargs["use_multi_db"] = not kwargs.pop("mos_shared_db")
 
     # Extract mandatory or special params
-    openai_api_key = kwargs.pop("openai_api_key", os.getenv("OPENAI_API_KEY"))
-    openai_api_base = kwargs.pop("openai_api_base", "https://api.openai.com/v1")
+    openai_api_key = kwargs.pop("openai_api_key", llm_defaults.chat_api_key())
+    openai_api_base = kwargs.pop("openai_api_base", llm_defaults.chat_api_base())
     text_mem_type = kwargs.pop("text_mem_type", "tree_text")
 
     # Ensure embedder_model has a default value if not set

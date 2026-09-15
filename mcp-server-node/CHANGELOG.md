@@ -6,6 +6,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.1.9] - 2026-09-16
+
+配套 API / Docker 镜像版本为 3.1.9。保存先确认原文与向量已持久化，再返回记忆 ID；
+LLM 解析由 API 在后台自动完成，即使模型调用耗时数分钟，也不阻塞 MCP 保存回执。
+
+- 识别 `vector_saved` 与 `enrichment_status`，明确显示向量已保存和后台解析状态，兼容旧 API。
+- 未确认向量保存或缺少实际 ID 时返回 MCP `isError: true`，且不写入去重缓存。
+- 请求和响应正文超时归类为 `API_TIMEOUT`，不再误报 API 离线；结果未知的 POST 不自动重放。
+- 显式传递 `memory_type`；Wiki 导入同样拒绝未确认的向量写入。
+- 完整详情使用原始创建时间，避免将后台解析的更新时间误标为创建时间。
+
+验证：582 项 Node 测试、旧版及 v2 MCP 协议检查通过。配套 API 的 118 项 Python 回归通过。
+真实 MCP 首次保存 596ms 返回，LLM 约 225 秒后补齐同一 ID 的元数据；重复保存 362ms，
+原文、ID 和已有解析结果均保留。
+
 ## [3.1.8] - 2026-08-27
 
 仅 MCP server（npm `oh-memos-mcp`）。Python 包与容器镜像无改动，仍为 3.1.5。

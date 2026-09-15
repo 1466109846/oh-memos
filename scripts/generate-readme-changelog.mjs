@@ -118,8 +118,8 @@ export function renderBlock(entries, lang = "zh") {
 
 /**
  * Swap the marked region's contents, preserving the file's existing line
- * endings. Both READMEs are CRLF in this repo; writing LF would rewrite every
- * line and break the byte-exact diagram comparison in architecture-docs.test.ts.
+ * endings. Git checkouts can use LF or CRLF; preserve the caller's style so
+ * unrelated content and embedded architecture diagrams remain unchanged.
  */
 export function replaceMarkedBlock(source, block) {
   const start = source.indexOf(START);

@@ -6,6 +6,8 @@ on:
     paths:
       - "docs/architecture/**"
       - ".github/workflows/deploy-architecture.yml"
+      - "README.md"
+      - "README_CN.md"
   workflow_dispatch:
 
 permissions:

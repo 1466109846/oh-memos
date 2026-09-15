@@ -23,4 +23,20 @@ describe("parseMemoryWriteResponse", () => {
       data: { memory_ids: ["ok", 42, ""], warnings: ["slow", 9] },
     })).toEqual({ memoryIds: ["ok"], warnings: ["slow"] });
   });
+
+  it("distinguishes confirmed vector storage from pending LLM parsing", () => {
+    expect(parseMemoryWriteResponse({
+      code: 200,
+      data: { memory_ids: ["raw-1"], vector_saved: true, enrichment_status: "pending" },
+    })).toEqual({
+      memoryIds: ["raw-1"], warnings: [], vectorSaved: true, enrichmentStatus: "pending",
+    });
+  });
+
+  it("retains explicit vector failures even when the API allocated an ID", () => {
+    expect(parseMemoryWriteResponse({
+      code: 200,
+      data: { memory_ids: ["unconfirmed-1"], vector_saved: false },
+    })).toMatchObject({ vectorSaved: false });
+  });
 });

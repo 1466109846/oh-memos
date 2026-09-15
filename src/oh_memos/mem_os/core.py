@@ -18,6 +18,7 @@ from oh_memos.mem_cube.utils import (
     looks_like_local_path,
     normalize_path,
 )
+from oh_memos.mem_os.vector_ingestion import VectorFirstIngestion
 from oh_memos.mem_reader.factory import MemReaderFactory
 from oh_memos.utils import mask_sensitive_config
 from oh_memos.mem_reader.read_multi_modal.utils import parse_json_result
@@ -41,6 +42,7 @@ from oh_memos.types import ChatHistory, MessageList, MOSSearchResult
 
 
 logger = get_logger(__name__)
+_enrichment_init_lock = Lock()
 
 
 # Relationship types writable through the public API. The Neo4j driver
@@ -103,6 +105,23 @@ class MOSCore:
             self._mem_scheduler: GeneralScheduler = None
 
         logger.info(f"MOS initialized for user: {self.user_id}")
+
+    def _get_vector_ingestion(self) -> VectorFirstIngestion:
+        with _enrichment_init_lock:
+            if getattr(self, "_vector_ingestion", None) is None:
+                self._vector_ingestion = VectorFirstIngestion(self)
+            return self._vector_ingestion
+
+    def start_background_enrichment(self) -> None:
+        """Resume persisted parsing work without waiting for database or LLM I/O."""
+        if os.getenv("MEMOS_DISABLE_BACKGROUND_WRITERS", "").lower() == "true":
+            return
+        self._get_vector_ingestion().start()
+
+    def stop_background_enrichment(self) -> None:
+        ingestion = getattr(self, "_vector_ingestion", None)
+        if ingestion is not None:
+            ingestion.close()
 
     @property
     def mem_scheduler(self) -> GeneralScheduler:
@@ -507,7 +526,33 @@ class MOSCore:
         """
         return self.user_manager.create_cube(cube_name, owner_id, cube_path, cube_id)
 
+    def _cube_registration_lock(self, cube_id: str):
+        with _enrichment_init_lock:
+            if not hasattr(self, "_cube_registration_locks"):
+                self._cube_registration_locks = {}
+            return self._cube_registration_locks.setdefault(cube_id, Lock())
+
     def register_mem_cube(
+        self,
+        mem_cube_name_or_path: str | GeneralMemCube,
+        mem_cube_id: str | None = None,
+        user_id: str | None = None,
+        *,
+        _from_recovery: bool = False,
+    ) -> None:
+        """Serialize restoration and foreground registration of the same cube."""
+        target_user_id = user_id if user_id is not None else self.user_id
+        if mem_cube_id is None:
+            mem_cube_id = (
+                f"cube_{target_user_id}" if isinstance(mem_cube_name_or_path, GeneralMemCube)
+                else os.path.basename(mem_cube_name_or_path.rstrip('/\\'))
+            )
+        with self._cube_registration_lock(mem_cube_id):
+            if _from_recovery and not self._get_vector_ingestion().can_restore_cube(mem_cube_id):
+                return
+            self._register_mem_cube(mem_cube_name_or_path, mem_cube_id, user_id)
+
+    def _register_mem_cube(
         self,
         mem_cube_name_or_path: str | GeneralMemCube,
         mem_cube_id: str | None = None,
@@ -624,6 +669,9 @@ class MOSCore:
             )
             logger.info(f"register new cube {mem_cube_id} for user {target_user_id}")
 
+        self._get_vector_ingestion().include_cube(mem_cube_id)
+        self.start_background_enrichment()
+
     def unregister_mem_cube(self, mem_cube_id: str, user_id: str | None = None) -> None:
         """
         Unregister a MemCube by its identifier.
@@ -631,10 +679,13 @@ class MOSCore:
         Args:
             mem_cube_id (str): The identifier of the MemCube to unregister.
         """
-        if mem_cube_id in self.mem_cubes:
-            del self.mem_cubes[mem_cube_id]
-        else:
-            raise ValueError(f"MemCube with ID {mem_cube_id} does not exist.")
+        with self._cube_registration_lock(mem_cube_id):
+            if mem_cube_id in self.mem_cubes:
+                if getattr(self, "_vector_ingestion", None) is not None:
+                    self._vector_ingestion.exclude_cube(mem_cube_id)
+                del self.mem_cubes[mem_cube_id]
+            else:
+                raise ValueError(f"MemCube with ID {mem_cube_id} does not exist.")
 
     def search(
         self,
@@ -833,6 +884,27 @@ class MOSCore:
 
         if mem_cube_id not in self.mem_cubes:
             raise ValueError(f"MemCube '{mem_cube_id}' is not loaded. Please register.")
+
+        cube = self.mem_cubes[mem_cube_id]
+        if (
+            kwargs.get("defer_enrichment")
+            and memory_content is not None
+            and messages is None and doc_path is None
+            and self.config.enable_textual_memory and cube.text_mem
+            and cube.config.text_mem.backend == "tree_text"
+        ):
+            result = self._get_vector_ingestion().save(
+                mem_cube_id, memory_content, target_user_id, target_session_id,
+                explicit_session_id=session_id, **kwargs,
+            )
+            try:
+                self.start_background_enrichment()
+            except Exception as exc:
+                # The raw write is already confirmed; persisted pending work
+                # will be picked up when a consumer becomes available again.
+                logger.warning("Could not start memory enrichment: %s", type(exc).__name__)
+                result["warnings"].append("enrichment_start_delayed")
+            return MemoryAddResult(result) if kwargs.get("return_details") else result["created_ids"]
 
         sync_mode = self.mem_cubes[mem_cube_id].text_mem.mode
         if sync_mode == "async":

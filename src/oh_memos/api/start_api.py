@@ -103,6 +103,7 @@ def get_mos_instance():
 
                 # Now create the actual MOS instance
                 MOS_INSTANCE = MOS(config=temp_config)
+                MOS_INSTANCE.start_background_enrichment()
 
     return MOS_INSTANCE
 
@@ -361,6 +362,13 @@ async def shutdown_archiver():
         except asyncio.CancelledError:
             pass
         logger.info("Shutdown: Archive task cancelled")
+
+
+@app.on_event("shutdown")
+async def shutdown_enrichment():
+    """Leave unfinished parsing persisted without waiting for slow LLM calls."""
+    if MOS_INSTANCE is not None:
+        MOS_INSTANCE.stop_background_enrichment()
 
 
 # =============================================================================
@@ -927,7 +935,13 @@ async def set_config(config: MOSConfig):
         logger.info(f"Created default user: {config.user_id}")
 
     # Now create the MOS instance
-    MOS_INSTANCE = MOS(config=config)
+    replacement = MOS(config=config)
+    with _mos_init_lock:
+        previous = MOS_INSTANCE
+        MOS_INSTANCE = replacement
+        if previous is not None:
+            previous.stop_background_enrichment()
+        replacement.start_background_enrichment()
     return ConfigResponse(message="Configuration set successfully")
 
 
@@ -1104,7 +1118,9 @@ def add_memory(memory_create: MemoryCreate):
         messages = [m.model_dump() for m in memory_create.messages]
         write_details = mos_instance.add(messages=messages, **add_kwargs) or write_details
     elif memory_create.memory_content:
-        write_details = mos_instance.add(memory_content=memory_create.memory_content, **add_kwargs) or write_details
+        write_details = mos_instance.add(
+            memory_content=memory_create.memory_content, defer_enrichment=True, **add_kwargs
+        ) or write_details
     elif memory_create.doc_path:
         write_details = mos_instance.add(doc_path=memory_create.doc_path, **add_kwargs) or write_details
 
@@ -1121,6 +1137,11 @@ def add_memory(memory_create: MemoryCreate):
     if not created_ids and not write_details.get("queued"):
         warnings_out.append("ids_unavailable: write acknowledged but no memory ids were returned")
 
+    enrichment_details = {
+        key: write_details[key]
+        for key in ("vector_saved", "enrichment_status")
+        if key in write_details
+    }
     return MemoryWriteResponse(
         message="Memories added successfully",
         data={
@@ -1128,6 +1149,7 @@ def add_memory(memory_create: MemoryCreate):
             "queued": bool(write_details.get("queued", False)),
             "backend": str(write_details.get("backend", "unknown")),
             "warnings": warnings_out,
+            **enrichment_details,
         },
     )
 

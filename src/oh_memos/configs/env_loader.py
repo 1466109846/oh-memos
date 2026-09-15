@@ -23,6 +23,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from oh_memos.configs import llm_defaults
+
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +194,7 @@ class EnvConfig:
     llm_provider: str = "openai"
     llm_model: str = ""
     llm_api_key: str = ""
-    llm_api_base: str = "https://api.openai.com/v1"
+    llm_api_base: str = llm_defaults.DEFAULT_OPENAI_API_BASE
     llm_temperature: float = 0.8
     llm_max_tokens: int = 6000
     llm_top_p: float = 0.9
@@ -206,9 +208,9 @@ class EnvConfig:
     # LLM Fallback Configuration (degrade to backup LLM on timeout / quota exhaustion)
     llm_fallback_enabled: bool = False
     llm_fallback_backend: str = "openai"
-    llm_fallback_model: str = "LongCat-2.0"
+    llm_fallback_model: str = ""
     llm_fallback_api_key: str = ""
-    llm_fallback_api_base: str = "https://api.longcat.chat/openai/v1"
+    llm_fallback_api_base: str = llm_defaults.DEFAULT_OPENAI_API_BASE
     llm_fallback_temperature: float = 0.6
     llm_fallback_max_tokens: int = 6000
     llm_fallback_primary_timeout: float = 60.0
@@ -347,7 +349,7 @@ def _load_config_from_env() -> EnvConfig:
         llm_provider=_get_env("MOS_CHAT_MODEL_PROVIDER", "openai"),
         llm_model=_get_env("MOS_CHAT_MODEL", ""),
         llm_api_key=_get_env("OPENAI_API_KEY", ""),
-        llm_api_base=_get_env("OPENAI_API_BASE", "https://api.openai.com/v1"),
+        llm_api_base=_get_env("OPENAI_API_BASE", llm_defaults.DEFAULT_OPENAI_API_BASE),
         llm_temperature=_get_env_float("MOS_CHAT_TEMPERATURE", 0.8),
         llm_max_tokens=_get_env_int("MOS_MAX_TOKENS", 6000),
         llm_top_p=_get_env_float("MOS_TOP_P", 0.9),
@@ -361,10 +363,10 @@ def _load_config_from_env() -> EnvConfig:
         # LLM Fallback
         llm_fallback_enabled=_get_env_bool("MOS_CHAT_FALLBACK_ENABLED", False),
         llm_fallback_backend=_get_env("MOS_CHAT_FALLBACK_BACKEND", "openai"),
-        llm_fallback_model=_get_env("MOS_CHAT_FALLBACK_MODEL", "LongCat-2.0"),
+        llm_fallback_model=_get_env("MOS_CHAT_FALLBACK_MODEL", ""),
         llm_fallback_api_key=_get_env("MOS_CHAT_FALLBACK_API_KEY", ""),
         llm_fallback_api_base=_get_env(
-            "MOS_CHAT_FALLBACK_API_BASE", "https://api.longcat.chat/openai/v1"
+            "MOS_CHAT_FALLBACK_API_BASE", llm_defaults.DEFAULT_OPENAI_API_BASE
         ),
         llm_fallback_temperature=_get_env_float("MOS_CHAT_FALLBACK_TEMPERATURE", 0.6),
         llm_fallback_max_tokens=_get_env_int("MOS_CHAT_FALLBACK_MAX_TOKENS", 6000),

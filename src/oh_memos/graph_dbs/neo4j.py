@@ -1,7 +1,11 @@
 import json
 import time
 
+from contextlib import nullcontext
+from copy import deepcopy
 from datetime import datetime
+from math import isfinite
+from threading import RLock
 from typing import Any, Literal
 
 from oh_memos.configs.graph_db import Neo4jGraphDBConfig
@@ -11,6 +15,11 @@ from oh_memos.log import get_logger
 
 
 logger = get_logger(__name__)
+
+# Stable IDs can be submitted simultaneously by separate API requests. The
+# transaction below locks existing nodes; these bounded locks also serialize a
+# first insert within the API process without allocating one lock per memory.
+_CONFIRMED_WRITE_LOCKS = tuple(RLock() for _ in range(64))
 
 
 def _compose_node(item: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
@@ -74,6 +83,8 @@ def _flatten_info_fields(metadata: dict[str, Any]) -> dict[str, Any]:
 
 class Neo4jGraphDB(BaseGraphDB):
     """Neo4j-based implementation of a graph memory store."""
+
+    _native_vectors = True
 
     @require_python_package(
         import_name="neo4j",
@@ -292,6 +303,198 @@ class Neo4jGraphDB(BaseGraphDB):
                 updated_at=updated_at,
                 metadata=metadata,
             )
+
+    def _confirmed_scope(self, user_name: str | None) -> str | None:
+        user_name = user_name or self.config.user_name
+        if not self.config.use_multi_db and not user_name:
+            raise ValueError("Confirmed writes require user_name in a shared database")
+        return user_name
+
+    def _valid_confirmed_embedding(self, embedding: Any) -> bool:
+        if not isinstance(embedding, list | tuple) or not embedding:
+            return False
+        dimension = self.config.embedding_dimension
+        if dimension and len(embedding) != dimension:
+            return False
+        try:
+            return all(isfinite(float(value)) for value in embedding)
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    def _confirmed_vector_write(self, id, node, embedding, user_name, created=False):
+        """Community overrides this with a compensatable external vector write."""
+        return nullcontext({})
+
+    def _confirmed_payload_update(self, id, node, fields, user_name):
+        """Native vectors share the graph transaction and need no payload update."""
+        return nullcontext()
+
+    def add_node_confirmed(
+        self, id: str, memory: str, metadata: dict[str, Any], user_name: str | None = None
+    ) -> str:
+        """Persist the supplied ID, raw text and vector before acknowledging it.
+
+        Existing records are never reset to pending extraction. A retry can
+        repair missing storage, but cannot overwrite another tenant, an edited
+        memory, or a deleted record. The legacy add_node contract is unchanged.
+        """
+        user_name = self._confirmed_scope(user_name)
+        prepared = _flatten_info_fields(deepcopy(metadata))
+        if {"id", "memory"}.intersection(prepared):
+            raise ValueError("Identity and memory must not be supplied as metadata")
+        embedding = prepared.pop("embedding", None)
+        if not self._valid_confirmed_embedding(embedding):
+            raise ValueError("A finite embedding with the configured dimension is required")
+        embedding = [float(value) for value in embedding]
+        if not self.config.use_multi_db:
+            prepared["user_name"] = user_name
+        prepared.setdefault("status", "activated")
+        prepared.setdefault("sources", [])
+        prepared.setdefault("delete_time", "")
+        prepared.setdefault("delete_record_id", "")
+        prepared["vector_sync"] = "success"
+        if prepared.get("sources"):
+            prepared["sources"] = [
+                json.dumps(source) if not isinstance(source, str) else source
+                for source in prepared["sources"]
+            ]
+        now = datetime.utcnow().isoformat()
+        created_at = prepared.pop("created_at", None) or now
+        updated_at = prepared.pop("updated_at", None) or now
+        if self._native_vectors:
+            prepared["embedding"] = embedding
+
+        query = """
+            MERGE (n:Memory {id: $id})
+            ON CREATE SET n += $metadata,
+                n.memory = $memory,
+                n.created_at = datetime($created_at),
+                n.updated_at = datetime($updated_at),
+                n._confirmed_new_node = true
+            WITH n, coalesce(n._confirmed_new_node, false) AS created
+            SET n._confirmed_write_lock = true
+            REMOVE n._confirmed_write_lock, n._confirmed_new_node
+            RETURN n, created
+        """
+        lock = _CONFIRMED_WRITE_LOCKS[hash((self.db_name, id)) % len(_CONFIRMED_WRITE_LOCKS)]
+        with lock, self.driver.session(database=self.db_name) as session:
+            with session.begin_transaction() as transaction:
+                record = transaction.run(
+                    query, id=id, memory=memory, metadata=prepared,
+                    created_at=created_at, updated_at=updated_at,
+                ).single()
+                if record is None:
+                    raise RuntimeError("Confirmed graph write returned no stored node")
+                node = dict(record["n"])
+                if not self.config.use_multi_db and node.get("user_name") != user_name:
+                    raise ValueError("Memory ID belongs to another tenant")
+                if node.get("memory") != memory or node.get("status") == "deleted":
+                    raise ValueError("Memory ID was edited or deleted; refusing to overwrite it")
+
+                fields = {"vector_sync": "success"}
+                if self._native_vectors and not self._valid_confirmed_embedding(node.get("embedding")):
+                    fields["embedding"] = embedding
+                where_user = "" if self.config.use_multi_db else "AND n.user_name = $user_name"
+                with self._confirmed_vector_write(
+                    id, node, embedding, user_name, created=record.get("created", False)
+                ) as recovered_fields:
+                    fields.update(recovered_fields)
+                    params = {"id": id, "memory": memory, "user_name": user_name}
+                    set_clauses = ["n += $fields"]
+                    for index, name in enumerate(list(fields)):
+                        if name.endswith("_at") and fields[name] is not None:
+                            value = fields.pop(name)
+                            parameter = f"timestamp_{index}"
+                            params[parameter] = (
+                                value.isoformat() if hasattr(value, "isoformat") else value
+                            )
+                            property_name = name.replace("`", "``")
+                            set_clauses.append(f"n.`{property_name}` = datetime(${parameter})")
+                    params["fields"] = fields
+                    result = transaction.run(
+                        f"""
+                        MATCH (n:Memory {{id: $id}})
+                        WHERE n.memory = $memory {where_user}
+                        SET {', '.join(set_clauses)}
+                        RETURN n.id AS id
+                        """, **params,
+                    ).single()
+                    if result is None:
+                        raise RuntimeError("Confirmed graph write lost its target node")
+                    transaction.commit()
+        return id
+
+    def update_node_if_current(
+        self, id: str, expected_memory: str, fields: dict[str, Any], user_name: str | None = None
+    ) -> bool:
+        """Update metadata only while the original activated memory still exists.
+
+        The row lock precedes the content/status check, so an edit or deletion
+        that wins the lock prevents stale enrichment. No MERGE is used here.
+        """
+        user_name = self._confirmed_scope(user_name)
+        fields = _flatten_info_fields(deepcopy(fields))
+        protected = {
+            "id", "memory", "embedding", "user_name", "user_id", "status",
+            "created_at", "delete_time", "delete_record_id", "vector_sync",
+        }
+        if protected.intersection(fields):
+            raise ValueError("Conditional enrichment may only change mutable metadata")
+        if fields.get("sources"):
+            fields["sources"] = [
+                json.dumps(source) if not isinstance(source, str) else source
+                for source in fields["sources"]
+            ]
+        fields.setdefault("updated_at", datetime.utcnow().isoformat())
+        payload_fields = deepcopy(fields)
+        params = {"id": id, "user_name": user_name, "expected_memory": expected_memory}
+        set_clauses = []
+        for index, name in enumerate(list(fields)):
+            if name.endswith("_at") and fields[name] is not None:
+                value = fields.pop(name)
+                parameter = f"timestamp_{index}"
+                params[parameter] = value.isoformat() if hasattr(value, "isoformat") else value
+                property_name = name.replace("`", "``")
+                set_clauses.append(f"n.`{property_name}` = datetime(${parameter})")
+        params["fields"] = fields
+        set_clauses.append("n += $fields")
+        where_user = "" if self.config.use_multi_db else "AND n.user_name = $user_name"
+        lock = _CONFIRMED_WRITE_LOCKS[hash((self.db_name, id)) % len(_CONFIRMED_WRITE_LOCKS)]
+        with lock, self.driver.session(database=self.db_name) as session:
+            with session.begin_transaction() as transaction:
+                record = transaction.run(
+                    f"""
+                    MATCH (n:Memory {{id: $id}})
+                    WHERE true {where_user}
+                    SET n._confirmed_write_lock = true
+                    REMOVE n._confirmed_write_lock
+                    WITH n
+                    WHERE n.memory = $expected_memory AND n.status = 'activated'
+                    RETURN n
+                    """, id=id, user_name=user_name, expected_memory=expected_memory,
+                ).single()
+                if record is None:
+                    return False
+                node = dict(record["n"])
+                if (
+                    node.get("memory") != expected_memory
+                    or node.get("status") != "activated"
+                    or (not self.config.use_multi_db and node.get("user_name") != user_name)
+                ):
+                    return False
+                result = transaction.run(
+                    f"""
+                    MATCH (n:Memory {{id: $id}})
+                    WHERE n.memory = $expected_memory AND n.status = 'activated' {where_user}
+                    SET {', '.join(set_clauses)}
+                    RETURN n.id AS id
+                    """, **params,
+                ).single()
+                if result is None:
+                    return False
+                with self._confirmed_payload_update(id, node, payload_fields, user_name):
+                    transaction.commit()
+        return True
 
     def add_nodes_batch(
         self,

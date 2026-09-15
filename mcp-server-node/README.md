@@ -29,7 +29,7 @@ oh-memos backend API must be running before connecting this MCP server:
 - **Neo4j** on `localhost:7687` (Knowledge Graph)
 - **Qdrant** on `localhost:6333` (Vector Search)
 
-> Start all services: run `scripts\local\start.bat` from the [oh-memos repo](https://github.com/lsg1103275794/oh-memos).
+> Start all services: run `scripts\local\start.bat` from the [oh-memos repo](https://github.com/1466109846/oh-memos).
 
 ---
 
@@ -242,6 +242,33 @@ be deleted without a prompt; add it only if you have decided you want that.
 
 `MEMOS_URL` is required for Full mode and unused in Lite.
 
+### Save acknowledgement and background parsing
+
+In Full mode with the `tree_text` backend, `memos_save` returns after the
+original text and its vector have been confirmed in storage. LLM extraction
+continues in the background, even when a model call takes several minutes.
+The response contains the stored ID; the API adds `vector_saved: true`,
+`enrichment_status: "pending"`, and `queued: false`. Here `queued` describes
+the memory write, which has already completed.
+
+Parsing adds the key, tags, background, and extracted facts to that same record.
+It preserves the original text, vector, ID, creation time, and explicit source
+metadata. Graph conflict handling links these originals instead of merging or
+deleting them. Identical retries target the same ID.
+
+Two background consumers process persisted tasks. A failed parse leaves the
+saved memory available and retries after 30 and 60 seconds; three completed
+failed attempts stop automatic retries. Interrupted attempts can resume after
+restart, including local projects restored from the cube registry. Parse status
+and the exception type are stored as `enrichment_*` metadata.
+
+This API path does not depend on `MOS_TYPED_SAVE_FAST` or the memory scheduler.
+Existing library, chat/document ingestion, and Lite behavior remain available.
+Upgrade/restart the API and reconnect MCP clients after rebuilding the Node
+server. Older APIs without the additive fields remain compatible. An explicit
+unconfirmed vector result is rejected; response timeouts report `API_TIMEOUT`
+and do not automatically replay writes.
+
 ### Retrieval behaviour (3.1.x)
 
 These change what search returns. All are off or conservative by default, so
@@ -250,7 +277,7 @@ upgrading never silently changes ranking.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `MEMOS_SPREAD_ACTIVATION` | No | `false` | One-hop graph spreading activation. When on, a search also returns memories reachable from its direct hits over `CAUSE` / `CONDITION` / `RELATE` edges, annotated ` · via CAUSE from <first 8 chars of the source id>`. Full mode only — it queries Neo4j directly, so `NEO4J_HTTP_URL`, `NEO4J_USER`, and `NEO4J_PASSWORD` must all resolve |
-| `MEMOS_SHOW_WORKING_MEMORY` | No | `false` | Show the scheduler's `WorkingMemory` tier. The backend writes each memory twice — one short-term copy plus one long-term graph node with identical content — so leaving this off is what stops every memory appearing in pairs. Debugging only |
+| `MEMOS_SHOW_WORKING_MEMORY` | No | `false` | Show the scheduler's `WorkingMemory` tier. Chat/document and legacy ingestion can create short-term copies alongside long-term memories; hiding this tier avoids displaying those pairs. Vector-first content saves create one original record. Debugging only |
 | `MEMOS_AUTO_CAPTURE` | No | `false` | Accept auto-captured memories. Auto-captured records are also ranked below explicit saves |
 
 > **Spreading activation degrades silently without Neo4j credentials.** Retrieval
@@ -369,7 +396,7 @@ The automatic file search never overrides explicit MCP/launcher environment valu
 ## Development
 
 ```bash
-git clone https://github.com/lsg1103275794/oh-memos.git
+git clone https://github.com/1466109846/oh-memos.git
 cd oh-memos/mcp-server-node
 npm install
 npm run dev    # Run with tsx (no build needed)

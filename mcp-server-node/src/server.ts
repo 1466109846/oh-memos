@@ -12,12 +12,14 @@ import { MEMOS_DEFAULT_CUBE, MEMOS_ENABLE_DELETE, MEMOS_PROVIDER, logger } from 
 import {
   apiHealthUrl,
   apiUrlForDisplay,
+  isApiTimeoutError,
   isApiUnreachableError,
   waitForApiReady,
 } from "./api-client.js";
 import { ensureCubeRegistered } from "./cube-manager.js";
 import { toolSchemas, toolAnnotations } from "./tools-registry.js";
-import { dispatchTool, handleApiUnreachable } from "./handlers/index.js";
+import { dispatchTool, handleApiTimeout, handleApiUnreachable } from "./handlers/index.js";
+import { UnconfirmedMemoryWriteError } from "./memory-write-response.js";
 import type { TextContent } from "./types.js";
 import { createOnceFireAndForget } from "./server-lifecycle.js";
 import { NormalizingStdioTransport } from "./stdio-compat-transport.js";
@@ -54,7 +56,13 @@ function registerTools(server: McpServer): void {
             content: result.map((r: TextContent) => ({ type: "text" as const, text: r.text })),
           };
         } catch (err: unknown) {
+          if (err instanceof UnconfirmedMemoryWriteError) {
+            return { content: err.content, isError: true };
+          }
           const errStr = String(err);
+          if (isApiTimeoutError(err)) {
+            return { content: await handleApiTimeout(), isError: true };
+          }
           if (isApiUnreachableError(err)) {
             const unreachable = await handleApiUnreachable();
             return {

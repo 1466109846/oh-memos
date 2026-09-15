@@ -13,6 +13,7 @@ import requests
 
 from dotenv import load_dotenv
 
+from oh_memos.configs import llm_defaults
 from oh_memos.context.context import ContextThread
 
 
@@ -264,14 +265,17 @@ class APIConfig:
     def get_openai_config() -> dict[str, Any]:
         """Get OpenAI configuration."""
         return {
-            "model_name_or_path": os.getenv("MOS_CHAT_MODEL", "LongCat-Flash-Lite"),
+            # Lenient on purpose: start_api.py builds DEFAULT_CONFIG at module
+            # level, so raising here would break `import start_api` (and the
+            # Docker build's smoke test). BaseLLMConfig rejects an empty model.
+            "model_name_or_path": llm_defaults.chat_model(),
             "temperature": float(os.getenv("MOS_CHAT_TEMPERATURE", "0.8")),
             "max_tokens": int(os.getenv("MOS_MAX_TOKENS", "8000")),
             "top_p": float(os.getenv("MOS_TOP_P", "0.9")),
             "top_k": int(os.getenv("MOS_TOP_K", "50")),
             "remove_think_prefix": True,
-            "api_key": os.getenv("OPENAI_API_KEY", "your-api-key-here"),
-            "api_base": os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1"),
+            "api_key": llm_defaults.chat_api_key(),
+            "api_base": llm_defaults.chat_api_base(),
         }
 
     @staticmethod
@@ -325,15 +329,15 @@ class APIConfig:
         return {
             "backend": "openai",
             "config": {
-                "model_name_or_path": os.getenv("MEMRADER_MODEL", "LongCat-Flash-Lite"),
+                "model_name_or_path": llm_defaults.memreader_model(),
                 "temperature": 0.6,
                 "max_tokens": int(os.getenv("MEMRADER_MAX_TOKENS", "8000")),
                 "top_p": 0.95,
                 "top_k": 20,
-                "api_key": os.getenv("MEMRADER_API_KEY", "EMPTY"),
-                # Default to OpenAI base URL when env var is not provided to satisfy pydantic
-                # validation requirements during tests/import.
-                "api_base": os.getenv("MEMRADER_API_BASE", "https://api.openai.com/v1"),
+                "api_key": llm_defaults.memreader_api_key("EMPTY"),
+                # Falls back to OPENAI_API_BASE, then to the public OpenAI URL, so
+                # pydantic validation still passes during tests/import with no .env.
+                "api_base": llm_defaults.memreader_api_base(),
                 "remove_think_prefix": True,
                 "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
             },
@@ -482,13 +486,13 @@ class APIConfig:
                         "llm": {
                             "backend": "openai",
                             "config": {
-                                "model_name_or_path": os.getenv("MEMRADER_MODEL"),
+                                "model_name_or_path": llm_defaults.memreader_model(),
                                 "temperature": 0.6,
                                 "max_tokens": 5000,
                                 "top_p": 0.95,
                                 "top_k": 20,
-                                "api_key": os.getenv("MEMRADER_API_KEY", "EMPTY"),
-                                "api_base": os.getenv("MEMRADER_API_BASE"),
+                                "api_key": llm_defaults.memreader_api_key("EMPTY"),
+                                "api_base": llm_defaults.memreader_api_base(),
                                 "remove_think_prefix": True,
                                 "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
                             },
@@ -789,10 +793,10 @@ class APIConfig:
             "chat_model": {
                 "backend": os.getenv("MOS_CHAT_MODEL_PROVIDER", "openai"),
                 "config": {
-                    "model_name_or_path": os.getenv("MOS_CHAT_MODEL", "LongCat-Flash-Lite"),
-                    "api_key": os.getenv("OPENAI_API_KEY", "sk-xxxxxx"),
+                    "model_name_or_path": llm_defaults.chat_model(),
+                    "api_key": llm_defaults.chat_api_key(),
                     "temperature": float(os.getenv("MOS_CHAT_TEMPERATURE", 0.7)),
-                    "api_base": os.getenv("OPENAI_API_BASE", "http://xxxxxx:3000/v1"),
+                    "api_base": llm_defaults.chat_api_base(),
                     "max_tokens": int(os.getenv("MOS_MAX_TOKENS", 1024)),
                     "top_p": float(os.getenv("MOS_TOP_P", 0.9)),
                     "top_k": int(os.getenv("MOS_TOP_K", 50)),

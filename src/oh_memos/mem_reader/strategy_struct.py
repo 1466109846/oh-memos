@@ -42,7 +42,9 @@ class StrategyStructMemReader(SimpleStructMemReader, ABC):
         super().__init__(config)
         self.chat_chunker = config.chat_chunker["config"]
 
-    def _get_llm_response(self, mem_str: str, custom_tags: list[str] | None) -> dict:
+    def _get_llm_response(
+        self, mem_str: str, custom_tags: list[str] | None, *, strict: bool = False
+    ) -> dict:
         lang = detect_lang(mem_str)
         template = STRATEGY_PROMPT_DICT["chat"][lang]
         examples = STRATEGY_PROMPT_DICT["chat"][f"{lang}_example"]
@@ -60,8 +62,12 @@ class StrategyStructMemReader(SimpleStructMemReader, ABC):
         messages = [{"role": "user", "content": prompt}]
         try:
             response_text = self.llm.generate(messages)
-            response_json = self.parse_json_result(response_text)
+            response_json = self._safe_parse(response_text)
+            if not response_json:
+                raise ValueError("Memory metadata extraction returned invalid JSON")
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"[LLM] Exception during chat generation: {e}")
             response_json = {
                 "memory list": [

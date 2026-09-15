@@ -2,6 +2,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field, SerializeAsAny, field_validator, model_validator
 
+from oh_memos.configs import llm_defaults
 from oh_memos.configs.base import BaseConfig
 
 
@@ -21,11 +22,34 @@ class BaseLLMConfig(BaseConfig):
         default=None, description="Default headers for LLM requests"
     )
 
+    @field_validator("model_name_or_path")
+    @classmethod
+    def reject_blank_model(cls, value: str) -> str:
+        """
+        Reject a blank model name.
+
+        This is where the missing-model check belongs. The config *builders* stay
+        lenient because ``api/start_api.py`` evaluates ``DEFAULT_CONFIG`` at module
+        level and the Docker build imports it with no ``.env`` present — raising
+        there fails the image build instead of the misconfiguration. By the time an
+        LLM config is actually constructed, dotenv has run, so a blank name here
+        really does mean the variable is unset.
+
+        Without this, ``model_name_or_path=""`` validates fine and only surfaces as
+        an opaque upstream error on the first call.
+        """
+        if not value or not value.strip():
+            raise ValueError(llm_defaults.MISSING_CHAT_MODEL_HINT)
+        return value
+
 
 class OpenAILLMConfig(BaseLLMConfig):
     api_key: str = Field(..., description="API key for OpenAI")
+    # default_factory, not a literal: OPENAI_API_BASE must be read when the config
+    # is instantiated (post-dotenv), not when this module is imported.
     api_base: str = Field(
-        default="https://api.openai.com/v1", description="Base URL for OpenAI API"
+        default_factory=llm_defaults.chat_api_base,
+        description="Base URL for OpenAI-compatible API (env: OPENAI_API_BASE)",
     )
     extra_body: Any = Field(default=None, description="extra body")
 
@@ -33,7 +57,8 @@ class OpenAILLMConfig(BaseLLMConfig):
 class OpenAIResponsesLLMConfig(BaseLLMConfig):
     api_key: str = Field(..., description="API key for OpenAI")
     api_base: str = Field(
-        default="https://api.openai.com/v1", description="Base URL for OpenAI responses API"
+        default_factory=llm_defaults.chat_api_base,
+        description="Base URL for OpenAI responses API (env: OPENAI_API_BASE)",
     )
     extra_body: Any = Field(default=None, description="extra body")
     enable_thinking: bool = Field(
@@ -130,11 +155,16 @@ class LLMFallbackConfig(BaseConfig):
     fallback_backend: str = Field(
         default="openai", description="Backend to use for fallback (e.g., 'openai')"
     )
-    fallback_model: str = Field(default="LongCat-2.0", description="Model name for fallback LLM")
+    # No literal model / endpoint default: naming one vendor as everyone's backup is
+    # what rots. Both come from .env (MOS_CHAT_FALLBACK_MODEL / _API_BASE).
+    fallback_model: str = Field(
+        default_factory=llm_defaults.fallback_model,
+        description="Model name for fallback LLM (env: MOS_CHAT_FALLBACK_MODEL)",
+    )
     fallback_api_key: str = Field(default="", description="API key for fallback LLM")
     fallback_api_base: str = Field(
-        default="https://api.longcat.chat/openai/v1",
-        description="API base URL for fallback LLM (OpenAI-compatible)",
+        default_factory=llm_defaults.fallback_api_base,
+        description="API base URL for fallback LLM (env: MOS_CHAT_FALLBACK_API_BASE)",
     )
     fallback_temperature: float = Field(
         default=0.6, description="Sampling temperature for fallback LLM"
@@ -161,6 +191,21 @@ class LLMFallbackConfig(BaseConfig):
         default=2.0, ge=1.0, le=5.0, description="Exponential backoff multiplier"
     )
     jitter: bool = Field(default=True, description="Add random jitter to retry delays")
+
+    @model_validator(mode="after")
+    def validate_fallback_target(self) -> "LLMFallbackConfig":
+        """
+        Reject an enabled-but-unconfigured fallback.
+
+        Without this, an empty ``fallback_model`` builds a valid-looking config and
+        only surfaces when the primary already failed and the backup call returns a
+        confusing upstream error — the worst moment to discover a config gap.
+        """
+        if self.enabled and not self.fallback_model:
+            raise ValueError(
+                "MOS_CHAT_FALLBACK_ENABLED is true but MOS_CHAT_FALLBACK_MODEL is not set."
+            )
+        return self
 
 
 class LLMConfigFactory(BaseConfig):

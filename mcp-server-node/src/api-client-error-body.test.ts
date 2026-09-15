@@ -161,3 +161,63 @@ describe("apiCallWithRetry 的 400 分支", () => {
     expect(result.data).toBeNull();
   });
 });
+
+describe("response body timeouts", () => {
+  const bodyTimeout = Object.assign(new Error("response body deadline exceeded"), {
+    code: "UND_ERR_BODY_TIMEOUT",
+  });
+  const bodyAbort = new DOMException("Response body reading was aborted", "AbortError");
+
+  it.each([
+    ["body deadline", bodyTimeout],
+    ["body abort", bodyAbort],
+    ["nested body deadline", new TypeError("terminated", {
+      cause: new Error("response stream failed", { cause: bodyTimeout }),
+    })],
+    ["nested body abort", new Error("response stream failed", { cause: bodyAbort })],
+  ])("propagates a %s without replaying a POST", async (_label, error) => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockRejectedValue(error),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const ensure = vi.fn(async (): Promise<[boolean, string | null]> => [true, null]);
+
+    await expect(apiCallWithRetry(
+      "POST", "http://localhost:18019/memories", "body_timeout_cube", { body: {} }, ensure,
+    )).rejects.toBe(error);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("does not re-register or replay when a 400 response body times out", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: vi.fn().mockRejectedValue(bodyTimeout),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const ensure = vi.fn(async (): Promise<[boolean, string | null]> => [true, null]);
+
+    await expect(apiCallWithRetry(
+      "POST", "http://localhost:18019/memories", "body_timeout_cube", { body: {} }, ensure,
+    )).rejects.toBe(bodyTimeout);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("retains the legacy null body result for an ordinary JSON syntax error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockRejectedValue(new SyntaxError("Unexpected end of JSON input")),
+    } as unknown as Response));
+
+    await expect(apiCallWithRetry(
+      "POST", "http://example.test/memories", "body_timeout_cube", { body: {} },
+    )).resolves.toEqual({ success: false, status: 200, data: null });
+  });
+});

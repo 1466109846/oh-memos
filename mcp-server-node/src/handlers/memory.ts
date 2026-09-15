@@ -9,7 +9,7 @@ import { MEMOS_USER, MEMOS_CUBES_DIR, logger } from "../config.js";
 import { getMemoryProvider } from "../providers/provider-factory.js";
 import { apiCallWithRetry, apiUrl } from "../api-client.js";
 import { ensureCubeRegistered } from "../cube-manager.js";
-import { parseMemoryWriteResponse } from "../memory-write-response.js";
+import { parseMemoryWriteResponse, UnconfirmedMemoryWriteError } from "../memory-write-response.js";
 import { recordAccess } from "../access-tracker.js";
 import { filterEphemeralTier } from "../memory-tier.js";
 import {
@@ -145,26 +145,38 @@ export async function handleMemosSave(
         user_id: MEMOS_USER,
         mem_cube_id: cubeId,
         memory_content: content,
+        memory_type: memoryType,
       },
     },
     ensureCubeRegistered,
   );
 
   if (result.success) {
-    markSaved(content, cubeId);
     const write = parseMemoryWriteResponse(
       result.data as { code: number; data?: unknown },
     );
+    if (write.vectorSaved === false || (write.vectorSaved === true && write.memoryIds.length === 0)) {
+      throw new UnconfirmedMemoryWriteError(errorResponse(
+        "Vector storage was not confirmed; the save cannot be acknowledged.",
+        "VECTOR_SAVE_UNCONFIRMED",
+        ["Check API storage logs and search for the memory before retrying."],
+      ));
+    }
+    markSaved(content, cubeId);
     const idText =
       write.memoryIds.length > 0 ? ` · IDs: ${write.memoryIds.join(", ")}` : "";
     const warningText =
       write.warnings.length > 0
         ? ` · warnings: ${write.warnings.join("; ")}`
         : "";
+    const vectorText = write.vectorSaved === true ? " · vector saved" : "";
+    const enrichmentText = write.enrichmentStatus === "pending"
+      ? " · LLM parsing continues in background"
+      : write.enrichmentStatus === "failed" ? " · background parsing failed; saved memory is retained" : "";
     return [
       {
         type: "text",
-        text: `Memory saved as [${memoryType}] in cube '${cubeId}'${idText}${warningText}`,
+        text: `Memory saved as [${memoryType}] in cube '${cubeId}'${idText}${vectorText}${enrichmentText}${warningText}`,
       },
     ];
   } else if (result.data) {

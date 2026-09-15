@@ -279,7 +279,9 @@ class SimpleStructMemReader(BaseMemReader, ABC):
             logger.warning("[LLM] JSON parse failed")
             return None
 
-    def _get_llm_response(self, mem_str: str, custom_tags: list[str] | None) -> dict:
+    def _get_llm_response(
+        self, mem_str: str, custom_tags: list[str] | None, *, strict: bool = False
+    ) -> dict:
         lang = detect_lang(mem_str)
         template = PROMPT_DICT["chat"][lang]
         examples = PROMPT_DICT["chat"][f"{lang}_example"]
@@ -296,10 +298,14 @@ class SimpleStructMemReader(BaseMemReader, ABC):
             prompt = prompt.replace(examples, "")
         messages = [{"role": "user", "content": prompt}]
 
-        response_text = self._safe_generate(messages)
+        # Background ingestion owns persisted retries. Let it observe failures
+        # instead of treating the legacy raw-text fallback as parsed metadata.
+        response_text = self.llm.generate(messages) if strict else self._safe_generate(messages)
         response_json = self._safe_parse(response_text)
 
         if not response_json:
+            if strict:
+                raise ValueError("Memory metadata extraction returned invalid JSON")
             return {
                 "memory list": [
                     {
@@ -313,6 +319,42 @@ class SimpleStructMemReader(BaseMemReader, ABC):
             }
 
         return response_json
+
+    def extract_metadata(self, content: str, custom_tags: list[str] | None = None) -> dict:
+        """Parse an already stored memory without rewriting or embedding it."""
+        response = self._get_llm_response(content, custom_tags, strict=True)
+        items = response.get("memory list") if isinstance(response, dict) else None
+        if not isinstance(items, list):
+            raise ValueError("Memory metadata extraction returned no memory list")
+        items = [
+            item for item in items
+            if isinstance(item, dict)
+            and isinstance(item.get("value"), str)
+            and item["value"].strip()
+        ]
+        if not items:
+            raise ValueError("Memory metadata extraction returned no valid memories")
+
+        tags: list[str] = []
+        key = None
+        for item in items:
+            candidate = item.get("key")
+            if key is None and isinstance(candidate, str) and candidate.strip():
+                key = candidate.strip()
+            item_tags = item.get("tags")
+            if isinstance(item_tags, list):
+                for tag in item_tags:
+                    if isinstance(tag, str) and tag.strip() and tag.strip() not in tags:
+                        tags.append(tag.strip())
+        fields = {
+            "tags": tags,
+            "background": response.get("summary") if isinstance(response.get("summary"), str) else "",
+            # Neo4j properties cannot contain a list of maps.
+            "enrichment_items": json.dumps(items, ensure_ascii=False),
+        }
+        if key:
+            fields["key"] = key
+        return fields
 
     def _iter_chat_windows(self, scene_data_info, max_tokens=None, overlap=200):
         """

@@ -68,14 +68,25 @@ class NodeHandler:
 
     def resolve(self, memory_a: TextualMemoryItem, memory_b: TextualMemoryItem, relation) -> None:
         """
-        Resolve detected conflicts between two memory items using LLM fusion.
+        Resolve relationships while preserving vector-first source records.
         Args:
             memory_a: The first conflicting memory item.
             memory_b: The second conflicting memory item.
             relation: relation
         Returns:
-            A fused TextualMemoryItem representing the resolved memory.
+            None. Relationship or legacy resolution changes are written to the graph.
         """
+
+        if any(
+            getattr(memory.metadata, "ingestion_mode", None) == "vector_first"
+            for memory in (memory_a, memory_b)
+        ):
+            # These IDs acknowledge durable originals. Reorganization may link
+            # them, but must not replace their content, vectors or lifecycle.
+            edge_type = {"contradictory": "CONFLICT", "redundant": "RELATE"}.get(relation)
+            if edge_type:
+                self.graph_store.add_edge(memory_a.id, memory_b.id, type=edge_type)
+            return
 
         # ———————————— 1. LLM generate fused memory ————————————
         metadata_for_resolve = ["key", "background", "confidence", "updated_at"]

@@ -2,6 +2,7 @@
 """MemOS CLI Init Wizard - Interactive initialization for new projects."""
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,18 @@ def generate_cube_config(
 ) -> dict[str, Any]:
     """Generate cube config.json content."""
     mode_obj = get_mode(mode)
-    
+
+    # Model / key for the non-ollama path come from the environment so the generated
+    # config never carries a stale literal model name. Ollama keeps its local
+    # defaults: those are a genuine local-runtime choice, not a vendor preference.
+    if llm_backend == "ollama":
+        llm_model = "qwen2.5:7b"
+        llm_api_key = "ollama"
+    else:
+        llm_model = os.environ.get("MOS_CHAT_MODEL", "")
+        llm_api_key = os.environ.get("OPENAI_API_KEY", "")
+
+
     config = {
         "model_schema": "memos.configs.mem_cube.GeneralMemCubeConfig",
         "user_id": cube_id,
@@ -80,20 +92,20 @@ def generate_cube_config(
                 "extractor_llm": {
                     "backend": "openai",
                     "config": {
-                        "model_name_or_path": "qwen2.5:7b" if llm_backend == "ollama" else "LongCat-Flash-Lite",
+                        "model_name_or_path": llm_model,
                         "temperature": 0.6,
                         "max_tokens": 6000,
-                        "api_key": "ollama" if llm_backend == "ollama" else "placeholder",
+                        "api_key": llm_api_key,
                         "api_base": llm_api_base,
                     },
                 },
                 "dispatcher_llm": {
                     "backend": "openai",
                     "config": {
-                        "model_name_or_path": "qwen2.5:7b" if llm_backend == "ollama" else "LongCat-Flash-Lite",
+                        "model_name_or_path": llm_model,
                         "temperature": 0.6,
                         "max_tokens": 6000,
-                        "api_key": "ollama" if llm_backend == "ollama" else "placeholder",
+                        "api_key": llm_api_key,
                         "api_base": llm_api_base,
                     },
                 },

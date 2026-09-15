@@ -136,3 +136,14 @@ export async function handleApiUnreachable(): Promise<TextContent[]> {
     ].join("\n"),
   }];
 }
+
+export async function handleApiTimeout(): Promise<TextContent[]> {
+  return errorResponse(
+    `MemOS API at ${apiUrlForDisplay()} did not respond before the request deadline.`,
+    "API_TIMEOUT",
+    [
+      "A write may still have completed. Check memos_search or memos_list_v2 before retrying.",
+      "Check API logs for storage delays; LLM parsing runs in background after vector confirmation.",
+    ],
+  );
+}

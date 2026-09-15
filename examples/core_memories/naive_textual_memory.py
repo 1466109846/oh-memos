@@ -22,7 +22,7 @@ config = MemoryConfigFactory(
         "extractor_llm": {
             "backend": "openai",
             "config": {
-                "model_name_or_path": os.environ.get("MOS_CHAT_MODEL", "LongCat-Flash-Lite"),
+                "model_name_or_path": os.environ.get("MOS_CHAT_MODEL", ""),
                 "api_key": os.environ.get("OPENAI_API_KEY"),
                 "api_base": os.environ.get(
                     "OPENAI_BASE_URL",

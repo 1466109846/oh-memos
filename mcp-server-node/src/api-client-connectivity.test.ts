@@ -7,6 +7,7 @@ import {
   apiUrlForDisplay,
   apiCallWithRetry,
   fetchWithTimeout,
+  isApiTimeoutError,
   isApiUnreachableError,
 } from "./api-client.js";
 
@@ -25,13 +26,31 @@ describe("API connectivity helpers", () => {
     ["EHOSTDOWN", Object.assign(new Error("host is down"), { code: "EHOSTDOWN" })],
     ["EHOSTUNREACH", new Error("connect EHOSTUNREACH")],
     ["fetch failed", new TypeError("fetch failed")],
-    ["AbortError", new DOMException("The operation was aborted", "AbortError")],
   ])("recognizes %s as an unreachable API error", (_name, error) => {
     expect(isApiUnreachableError(error)).toBe(true);
   });
 
   it("does not classify an HTTP response error as a network failure", () => {
     expect(isApiUnreachableError(new Error("HTTP 503 Service Unavailable"))).toBe(false);
+  });
+
+  it.each([
+    new DOMException("The operation was aborted", "AbortError"),
+    new DOMException("The operation timed out", "TimeoutError"),
+    new TypeError("fetch failed", { cause: Object.assign(new Error("headers timeout"), { code: "UND_ERR_HEADERS_TIMEOUT" }) }),
+  ])("distinguishes request deadlines from an unreachable API", (error) => {
+    expect(isApiTimeoutError(error)).toBe(true);
+    expect(isApiUnreachableError(error)).toBe(false);
+  });
+
+  it("does not replay a write after its response deadline expires", async () => {
+    const error = new DOMException("The operation was aborted", "AbortError");
+    const fetchMock = vi.fn().mockRejectedValue(error);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchWithTimeout("http://localhost:18009/memories", {
+      method: "POST", body: "{}", timeoutMs: 1,
+    })).rejects.toBe(error);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("adds the IPv4 alias while preserving the request path and query", () => {

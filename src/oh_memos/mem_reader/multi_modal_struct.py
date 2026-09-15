@@ -316,6 +316,8 @@ class MultiModalStructMemReader(SimpleStructMemReader):
         custom_tags: list[str] | None = None,
         sources: list | None = None,
         prompt_type: str = "chat",
+        *,
+        strict: bool = False,
     ) -> dict:
         """
         Override parent method to improve language detection by using actual text content
@@ -326,6 +328,7 @@ class MultiModalStructMemReader(SimpleStructMemReader):
             custom_tags: Optional custom tags
             sources: Optional list of SourceMessage objects to extract text content from
             prompt_type: Type of prompt to use ("chat" or "doc")
+            strict: Propagate extraction failures instead of falling back to the input text.
 
         Returns:
             LLM response dictionary
@@ -380,7 +383,11 @@ class MultiModalStructMemReader(SimpleStructMemReader):
         try:
             response_text = self.llm.generate(messages)
             response_json = parse_json_result(response_text)
+            if strict and not response_json:
+                raise ValueError("Memory metadata extraction returned invalid JSON")
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"[LLM] Exception during chat generation: {e}")
             response_json = {
                 "memory list": [

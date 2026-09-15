@@ -116,11 +116,20 @@ function replaceUrlHost(url: string, host: string): string | undefined {
   }
 }
 
+/** A response deadline does not prove the API is offline or a write failed. */
+export function isApiTimeoutError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const details = error as { code?: unknown; name?: unknown; cause?: unknown };
+  if (details.name === "AbortError" || details.name === "TimeoutError") return true;
+  if (details.code === "UND_ERR_HEADERS_TIMEOUT" || details.code === "UND_ERR_BODY_TIMEOUT") return true;
+  return details.cause !== undefined && details.cause !== error && isApiTimeoutError(details.cause);
+}
+
 /** Return true when an exception means the HTTP peer could not be reached. */
 export function isApiUnreachableError(error: unknown): boolean {
+  if (isApiTimeoutError(error)) return false;
   if (typeof error === "object" && error !== null) {
     const details = error as { code?: unknown; name?: unknown; cause?: unknown };
-    if (details.name === "AbortError") return true;
     if (
       typeof details.code === "string" &&
       API_NETWORK_ERROR_CODES.includes(details.code as (typeof API_NETWORK_ERROR_CODES)[number])
@@ -419,7 +428,10 @@ async function doFetch(
   try {
     const data = (await response.json()) as Record<string, unknown>;
     return { status: response.status, data };
-  } catch {
+  } catch (error) {
+    // Body reads can fail after response headers arrive. Preserve deadlines
+    // as exceptions so an ambiguous POST is not replayed or reported offline.
+    if (isApiTimeoutError(error)) throw error;
     return { status: response.status, data: null };
   }
 }

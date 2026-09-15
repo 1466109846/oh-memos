@@ -33,7 +33,7 @@ RUN mkdir -p /data/cubes /data/runtime \
     && chown -R memos:memos /data \
     && pip install --no-deps . \
     && python -m pip check \
-    && python -c "import torch; assert torch.version.cuda is None, torch.version.cuda; from oh_memos.api.start_api import app" \
+    && python -c "import torch; assert torch.version.cuda is None, torch.version.cuda; from oh_memos.api.start_api import app; from oh_memos.configs import llm_defaults; assert llm_defaults.chat_model() == '', 'build image must not carry a baked-in model name'" \
     && ! python -m pip list --format=freeze | grep -E '^(nvidia-|triton==)' \
     && rm -rf /data/runtime/* /data/runtime/.[!.]*
 

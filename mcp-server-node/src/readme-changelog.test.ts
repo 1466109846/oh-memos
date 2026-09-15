@@ -112,18 +112,18 @@ describe("README changelog block", () => {
     }
   });
 
-  it("preserves CRLF line endings, which the byte-exact diagram test depends on", () => {
-    for (const { relative, lang, source } of readmes) {
-      const block = renderBlock(recent, lang);
-      expect(source.includes("\r\n"), `${relative} is CRLF in this repo`).toBe(
-        true,
-      );
-      const next = replaceMarkedBlock(source, block) as string;
-      // Every LF is part of a CRLF pair: no bare LF was introduced.
-      expect(next.split("\n").length - 1, relative).toBe(
-        next.split("\r\n").length - 1,
-      );
-    }
+  it.each([
+    ["LF", "\n"],
+    ["CRLF", "\r\n"],
+  ])("preserves %s line endings and surrounding content", (_name, eol) => {
+    // Git checkouts may use either style. Explicit fixtures exercise both on
+    // every platform instead of assuming the developer's checkout settings.
+    const source = ["# Before", START, "- outdated", END, "## After", ""].join(eol);
+    const expected = [
+      "# Before", START, "- first", "- second", END, "## After", "",
+    ].join(eol);
+
+    expect(replaceMarkedBlock(source, "- first\n- second")).toBe(expected);
   });
 });
 

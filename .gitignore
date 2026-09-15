@@ -25,6 +25,8 @@ docker/.env.migration
 *.bak
 
 # ========== Temporary files ==========
+# Accidental Windows null-device redirection artifact; invalid in Windows Git.
+/NUL
 tmp/
 **/tmp_data/
 

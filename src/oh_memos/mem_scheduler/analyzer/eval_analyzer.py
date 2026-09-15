@@ -14,6 +14,7 @@ from typing import Any
 
 from openai import OpenAI
 
+from oh_memos.configs import llm_defaults
 from oh_memos.log import get_logger
 
 
@@ -36,7 +37,7 @@ class EvalAnalyzer:
         self,
         openai_api_key: str | None = None,
         openai_base_url: str | None = None,
-        openai_model: str = "LongCat-Flash-Lite",
+        openai_model: str | None = None,
         output_dir: str = "./tmp/eval_analyzer",
     ):
         """
@@ -45,7 +46,8 @@ class EvalAnalyzer:
         Args:
             openai_api_key: OpenAI API key
             openai_base_url: OpenAI base URL
-            openai_model: OpenAI model to use
+            openai_model: Model to use; ``None`` falls back to
+                ``MEMSCHEDULER_OPENAI_DEFAULT_MODEL``, then ``MOS_CHAT_MODEL``
             output_dir: Output directory for results
         """
         self.output_dir = Path(output_dir)
@@ -56,8 +58,10 @@ class EvalAnalyzer:
             api_key=openai_api_key or os.getenv("MEMSCHEDULER_OPENAI_API_KEY"),
             base_url=openai_base_url or os.getenv("MEMSCHEDULER_OPENAI_BASE_URL"),
         )
+        # A literal default here would shadow the env var entirely: the previous
+        # signature default was truthy, so `or os.getenv(...)` never ran.
         self.openai_model = openai_model or os.getenv(
-            "MEMSCHEDULER_OPENAI_DEFAULT_MODEL", "LongCat-Flash-Lite"
+            "MEMSCHEDULER_OPENAI_DEFAULT_MODEL", llm_defaults.chat_model()
         )
 
         logger.info(f"EvalAnalyzer initialized with model: {self.openai_model}")
