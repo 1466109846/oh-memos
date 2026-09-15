@@ -274,31 +274,59 @@ async function runSignalContract() {
     const child = spawn(process.execPath, [DIST_ENTRY], {
       cwd: PACKAGE_ROOT,
       env: baseEnv(root, `protocol_${signalName.toLowerCase()}_cube`, { MEMOS_LOG_LEVEL: "DEBUG" }),
-      stdio: ["ignore", "pipe", "pipe"],
+      // Keep stdin open: EOF can stop the server before a signal is sent.
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    // Listen immediately, including during startup, and drain stderr before
+    // checking shutdown diagnostics.
+    const exited = once(child, "close");
+    let markStarted;
+    const started = new Promise((resolve) => {
+      markStarted = resolve;
     });
     let stderr = "";
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
+      if (stderr.includes("MemOS MCP Server (Node.js) started")) markStarted();
     });
     try {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      try {
-        child.kill(signalName);
-      } catch (error) {
-        check(`${signalName} can be delivered`, false, String(error));
-        continue;
-      }
-      const [code, signal] = await Promise.race([
-        once(child, "exit"),
-        new Promise((resolve) => setTimeout(() => resolve([null, "timeout"]), 2500)),
-      ]);
-      check(`${signalName} closes the server`, code !== null || signal !== "timeout", `${code}/${signal}`);
+      // The startup log follows signal-handler registration. A fixed sleep
+      // can either miss an early exit or kill a server before its handlers run.
+      await withTimeout(Promise.race([
+        started,
+        exited.then(([code, signal]) => {
+          throw new Error(`Server exited before readiness: ${code}/${signal}`);
+        }),
+      ]), 5000, "Server did not become ready");
+      if (!child.kill(signalName)) throw new Error(`${signalName} was not delivered`);
+      const [code, signal] = await withTimeout(exited, 2500, `${signalName} close timed out`);
+      // Windows terminates a process for these signals instead of invoking
+      // POSIX signal handlers. On POSIX, require the graceful zero-code exit.
+      const cleanExit = code === 0 || (process.platform === "win32" && signal === signalName);
+      check(`${signalName} closes the server`, cleanExit, `${code}/${signal}`);
       check(`${signalName} close has no unhandled rejection`, !/unhandled promise rejection|unhandledpromiserejection/i.test(stderr), stderr.slice(0, 600));
+    } catch (error) {
+      check(`${signalName} close contract`, false, `${String(error)}\nstderr:\n${stderr.slice(0, 1200)}`);
     } finally {
-      if (child.exitCode === null) child.kill();
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await exited.catch(() => {});
       rmSync(root, { recursive: true, force: true });
     }
+  }
+}
+
+async function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

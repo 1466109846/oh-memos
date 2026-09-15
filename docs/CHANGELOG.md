@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 README 生成器测试显式覆盖 LF、CRLF 两种换行，避免 Linux checkout 被本机换行假设误判。
 Python CI 安装确认向量写入测试所需的 `qdrant-client`，CPU torch 与发布镜像对齐。
+协议信号测试保持 stdin 打开并等待处理器就绪，提前监听关闭事件，修复 Node 22
+中进程已退出却误报超时的竞态；POSIX 验证正常退出，Windows 验证对应终止信号。
 当前仓库、徽章、问题反馈及架构页链接统一为 `1466109846/oh-memos`；README 修改也会
 触发架构页部署，页面位于 `https://1466109846.github.io/oh-memos/architecture/`。
 忽略意外生成的根目录 `NUL` 文件，避免 Windows runner 检出失败。
